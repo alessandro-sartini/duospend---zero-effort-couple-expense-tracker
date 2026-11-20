@@ -1,62 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Camera, Check, RefreshCw, Sparkles, Upload } from 'lucide-react';
-import { formatCurrency, getActiveCategories } from '../constants/categories';
+import { getActiveCategories } from '../constants/categories';
 import { loadOcrDraft, saveOcrDraft } from '../services/storage';
 import { CoupleProfile, Expense, ExpenseCategory, Payer, SavingGoal, SplitType } from '../types';
-import { CategoryBadge } from './ui/CategoryBadge';
 import { ModalShell } from './ui/ModalShell';
-import { PayerSelector } from './ui/PayerSelector';
-
-const MAX_RECEIPT_IMAGE_DIMENSION = 1280;
-const RECEIPT_JPEG_QUALITY = 0.78;
-
-const compressReceiptImage = (
-  dataUrl: string,
-  fallbackMimeType: string,
-): Promise<{ dataUrl: string; mimeType: string }> => {
-  if (typeof Image === 'undefined' || typeof document === 'undefined') {
-    return Promise.resolve({ dataUrl, mimeType: fallbackMimeType });
-  }
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const width = img.naturalWidth || img.width;
-        const height = img.naturalHeight || img.height;
-        if (!width || !height) {
-          resolve({ dataUrl, mimeType: fallbackMimeType });
-          return;
-        }
-
-        const scale = Math.min(1, MAX_RECEIPT_IMAGE_DIMENSION / Math.max(width, height));
-        const targetWidth = Math.max(1, Math.round(width * scale));
-        const targetHeight = Math.max(1, Math.round(height * scale));
-
-        const canvas = document.createElement('canvas');
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve({ dataUrl, mimeType: fallbackMimeType });
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-        const compressed = canvas.toDataURL('image/jpeg', RECEIPT_JPEG_QUALITY);
-        if (compressed.startsWith('data:image/jpeg') && compressed.length < dataUrl.length) {
-          resolve({ dataUrl: compressed, mimeType: 'image/jpeg' });
-        } else {
-          resolve({ dataUrl, mimeType: fallbackMimeType });
-        }
-      } catch {
-        resolve({ dataUrl, mimeType: fallbackMimeType });
-      }
-    };
-    img.onerror = () => resolve({ dataUrl, mimeType: fallbackMimeType });
-    img.src = dataUrl;
-  });
-};
+import { ReceiptDraftForm } from './camera/ReceiptDraftForm';
+import {
+  buildEditableFallbackDraft,
+  compressReceiptImage,
+  type ExtractedReceiptDraft,
+} from './camera/receiptOcrUtils';
 
 interface CameraReceiptModalProps {
   isOpen: boolean;
@@ -69,18 +22,6 @@ interface CameraReceiptModalProps {
     hasDraft: boolean;
     fallbackUsed: boolean;
   }) => void;
-}
-
-interface ExtractedReceiptDraft {
-  merchant: string;
-  total: number;
-  currency: string;
-  date: string;
-  category: ExpenseCategory;
-  notes?: string;
-  items?: { name: string; price: number }[];
-  tax?: number;
-  fallbackUsed?: boolean;
 }
 
 export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
@@ -196,18 +137,6 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const buildEditableFallbackDraft = (): ExtractedReceiptDraft => ({
-    merchant: 'Scontrino da completare',
-    total: 0,
-    currency: profile.currency,
-    date: new Date().toISOString().slice(0, 10),
-    category: 'Spesa',
-    notes: 'Inserimento manuale con foto scontrino allegata',
-    items: [],
-    tax: 0,
-    fallbackUsed: true,
-  });
-
   const analyzeReceipt = async (base64Data: string, mimeType: string) => {
     const requestId = ++analysisRequestIdRef.current;
     setIsAnalyzing(true);
@@ -256,7 +185,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
         (err?.message ? `${err.message} ` : '') +
           'Puoi comunque compilare esercente e totale qui sotto e salvare lo scontrino.'
       );
-      setExtractedData(buildEditableFallbackDraft());
+      setExtractedData(buildEditableFallbackDraft(profile.currency));
     } finally {
       if (analysisRequestIdRef.current === requestId) {
         setIsAnalyzing(false);
@@ -433,191 +362,21 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
             )}
 
             {extractedData && (
-              <div className="p-4 rounded-xl bg-orange-50/40 border border-orange-200/60 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-orange-200/50">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-orange-900">
-                    <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-                    <span>
-                      {extractedData.fallbackUsed
-                        ? 'Bozza Modificabile (Verifica Dati)'
-                        : 'Dati Estratti (Modificabili)'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImagePreview(null);
-                      setExtractedData(null);
-                      setError(null);
-                    }}
-                    className="text-[11px] text-stone-500 hover:text-stone-800 underline cursor-pointer"
-                  >
-                    Rifai Foto
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <label
-                      htmlFor="camera-receipt-merchant"
-                      className="text-stone-600 font-semibold block text-[11px] mb-1"
-                    >
-                      Esercente
-                    </label>
-                    <input
-                      id="camera-receipt-merchant"
-                      type="text"
-                      value={extractedData.merchant}
-                      onChange={(e) =>
-                        setExtractedData((prev) =>
-                          prev ? { ...prev, merchant: e.target.value } : prev
-                        )
-                      }
-                      placeholder="Nome negozio o ristorante"
-                      className="ds-input min-h-9 w-full px-2.5 text-xs font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="camera-receipt-total"
-                      className="text-stone-600 font-semibold block text-[11px] mb-1"
-                    >
-                      Importo Totale ({extractedData.currency || profile.currency})
-                    </label>
-                    <input
-                      id="camera-receipt-total"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={Number.isFinite(extractedData.total) ? extractedData.total : 0}
-                      onChange={(e) => {
-                        const parsed = Number(e.target.value);
-                        setExtractedData((prev) =>
-                          prev
-                            ? { ...prev, total: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0 }
-                            : prev
-                        );
-                      }}
-                      className="ds-input min-h-9 w-full px-2.5 text-xs font-mono font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="camera-receipt-date"
-                      className="text-stone-600 font-semibold block text-[11px] mb-1"
-                    >
-                      Data
-                    </label>
-                    <input
-                      id="camera-receipt-date"
-                      type="date"
-                      value={extractedData.date}
-                      onChange={(e) =>
-                        setExtractedData((prev) =>
-                          prev ? { ...prev, date: e.target.value } : prev
-                        )
-                      }
-                      className="ds-input min-h-9 w-full px-2.5 text-xs font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="camera-receipt-category"
-                      className="text-stone-600 font-semibold block text-[11px] mb-1"
-                    >
-                      Categoria
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <CategoryBadge category={extractedData.category} size="sm" />
-                      <select
-                        id="camera-receipt-category"
-                        value={extractedData.category}
-                        onChange={(e) =>
-                          setExtractedData((prev) =>
-                            prev
-                              ? { ...prev, category: e.target.value as ExpenseCategory }
-                              : prev
-                          )
-                        }
-                        className="ds-input min-h-9 flex-1 px-2 text-xs font-medium"
-                      >
-                        {categoryOptions.map((categoryOption) => (
-                          <option key={categoryOption} value={categoryOption}>
-                            {categoryOption}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {extractedData.items && extractedData.items.length > 0 && (
-                  <div className="pt-2 border-t border-orange-200/40">
-                    <span className="text-[11px] text-stone-500 font-semibold block mb-1">
-                      Singoli Articoli Rilevati ({extractedData.items.length})
-                    </span>
-                    <div className="max-h-24 overflow-y-auto space-y-1 text-[11px]">
-                      {extractedData.items.map((it: any, idx: number) => (
-                        <div key={idx} className="flex justify-between text-stone-700">
-                          <span className="truncate pr-2">{it.name}</span>
-                          <span className="font-mono font-medium shrink-0">
-                            {formatCurrency(
-                              Number(it.price || 0),
-                              extractedData.currency || profile.currency
-                            )}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="pt-3 border-t border-orange-200/40 space-y-2.5">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                      Chi ha pagato questo scontrino?
-                    </label>
-                    <PayerSelector
-                      value={payer}
-                      onChange={setPayer}
-                      profile={profile}
-                      size="sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                      Ripartizione
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSplitType('50_50')}
-                        className={`py-1.5 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
-                          splitType === '50_50'
-                            ? 'border-orange-500 bg-orange-100/60 text-orange-950 font-semibold'
-                            : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-medium'
-                        }`}
-                      >
-                        Diviso 50 / 50
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSplitType(payer === 'user' ? '100_user' : '100_partner')
-                        }
-                        className={`py-1.5 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
-                          splitType === '100_user' || splitType === '100_partner'
-                            ? 'border-orange-500 bg-orange-100/60 text-orange-950 font-semibold'
-                            : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-medium'
-                        }`}
-                      >
-                        100% Personale
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <ReceiptDraftForm
+                draft={extractedData}
+                categoryOptions={categoryOptions}
+                profile={profile}
+                payer={payer}
+                splitType={splitType}
+                onChangeDraft={setExtractedData}
+                onChangePayer={setPayer}
+                onChangeSplitType={setSplitType}
+                onRetakePhoto={() => {
+                  setImagePreview(null);
+                  setExtractedData(null);
+                  setError(null);
+                }}
+              />
             )}
           </div>
         )}

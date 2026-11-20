@@ -2,17 +2,11 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
-  Calculator,
-  CalendarClock,
-  Check,
   CheckCircle2,
-  ChevronRight,
-  Flame,
   Plus,
   RotateCcw,
   SlidersHorizontal,
   Target,
-  Wallet,
   X,
 } from 'lucide-react';
 import {
@@ -41,11 +35,17 @@ import {
   type WeekdayStat,
 } from '../services/analytics-math';
 import { CoupleProfile, Expense, ExpenseCategory, SavingGoal } from '../types';
+import {
+  AnalyticsFilterBar,
+  type AnalyticsTimeframeOption,
+} from './analytics/AnalyticsFilterBar';
+import { AnalyticsKpiGrid } from './analytics/AnalyticsKpiGrid';
 import { BulkCategoryBudgetPanel } from './analytics/BulkCategoryBudgetPanel';
 import {
   CategoryBreakdownRow,
   CategoryStatSummary,
 } from './analytics/CategoryBreakdownRow';
+import { NewCategoryForm } from './analytics/NewCategoryForm';
 import {
   ExpenseDrilldownModal,
   type ExpenseDrilldownPayload,
@@ -73,12 +73,6 @@ const PERIOD_MULTIPLIERS: Record<AnalyticsTimeframe, number | null> = {
   year: 12,
   all: null,
 };
-
-const SPLIT_FILTERS: Array<{ id: SplitFilter; label: string }> = [
-  { id: 'all', label: 'Tutte' },
-  { id: 'shared', label: 'Condivise' },
-  { id: 'personal', label: 'Personali' },
-];
 
 export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
   expenses,
@@ -126,11 +120,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
 
   const currentYear = new Date().getFullYear();
 
-  const timeframes: Array<{
-    id: AnalyticsTimeframe;
-    shortLabel: string;
-    fullLabel: string;
-  }> = useMemo(
+  const timeframes: AnalyticsTimeframeOption[] = useMemo(
     () => [
       { id: 'month', shortLabel: 'Mese', fullLabel: 'Questo Mese' },
       { id: 'quarter', shortLabel: '3M', fullLabel: 'Ultimi 3 Mesi' },
@@ -564,130 +554,20 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
   return (
     <div className="space-y-5 sm:space-y-6">
       {/* Intestazione & Filtri Allineati Full-Width */}
-      <div className="ds-card p-4 sm:p-6 space-y-4">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-stone-900 font-display">
-            Statistiche e Trend per Categoria
-          </h2>
-          <p className="text-xs text-stone-500 mt-0.5">
-            Analisi delle uscite di coppia, categorie personalizzate, obiettivi collegati e soglie mensili
-          </p>
-        </div>
-
-        <div className="space-y-3 pt-2 border-t border-stone-100">
-          {/* Riga 1: Periodo allineato a tutta larghezza */}
-          <div className="space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 block">
-              Periodo
-            </span>
-            <div
-              role="group"
-              aria-label="Filtra per periodo"
-              className="ds-nav-track grid grid-cols-4 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold"
-            >
-              {timeframes.map((tf) => {
-                const isActive = timeframe === tf.id;
-                return (
-                  <button
-                    key={tf.id}
-                    type="button"
-                    onClick={() => handleSelectTimeframe(tf.id)}
-                    className={`min-h-10 px-2 sm:px-3 py-1.5 rounded-lg transition-all text-center cursor-pointer truncate ${
-                      isActive
-                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
-                        : 'text-stone-600 hover:text-stone-900'
-                    }`}
-                  >
-                    <span className="sm:hidden">{tf.shortLabel}</span>
-                    <span className="hidden sm:inline">{tf.fullLabel}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Riga 2: Natura Spesa + Pagato da allineati su 2 colonne */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 block">
-                Natura Spesa
-              </span>
-              <div
-                role="group"
-                aria-label="Filtra per natura della spesa"
-                className="ds-nav-track grid grid-cols-3 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold"
-              >
-                {SPLIT_FILTERS.map((sf) => {
-                  const isActive = splitFilter === sf.id;
-                  return (
-                    <button
-                      key={sf.id}
-                      type="button"
-                      onClick={() => handleSelectSplitFilter(sf.id)}
-                      className={`min-h-10 px-2 py-1.5 rounded-lg transition-all text-center cursor-pointer truncate ${
-                        isActive
-                          ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
-                          : 'text-stone-600 hover:text-stone-900'
-                      }`}
-                    >
-                      {sf.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 block">
-                Pagato da
-              </span>
-              <div
-                role="group"
-                aria-label="Filtra per chi ha pagato"
-                className="ds-nav-track grid grid-cols-3 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold"
-              >
-                {payerFilters.map((pf) => {
-                  const isActive = payerFilter === pf.id;
-                  return (
-                    <button
-                      key={pf.id}
-                      type="button"
-                      onClick={() => handleSelectPayerFilter(pf.id)}
-                      className={`min-h-10 px-2 py-1.5 rounded-lg transition-all text-center cursor-pointer truncate ${
-                        isActive
-                          ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
-                          : 'text-stone-600 hover:text-stone-900'
-                      }`}
-                    >
-                      {pf.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {hasSecondaryFilters && (
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-              <span className="text-stone-500">
-                Filtri attivi:{' '}
-                <strong className="text-stone-800">
-                  {filtered.length} spese corrispondenti
-                </strong>
-                {selectedCategory ? ` · ${selectedCategory}` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={handleResetAllFilters}
-                className="ds-btn-secondary min-h-8 px-2.5 py-1 text-xs"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Azzera filtri</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <AnalyticsFilterBar
+        timeframes={timeframes}
+        timeframe={timeframe}
+        onSelectTimeframe={handleSelectTimeframe}
+        splitFilter={splitFilter}
+        onSelectSplitFilter={handleSelectSplitFilter}
+        payerFilters={payerFilters}
+        payerFilter={payerFilter}
+        onSelectPayerFilter={handleSelectPayerFilter}
+        hasSecondaryFilters={hasSecondaryFilters}
+        filteredCount={filtered.length}
+        selectedCategory={selectedCategory}
+        onResetAllFilters={handleResetAllFilters}
+      />
 
       {savedBanner && (
         <div
@@ -700,182 +580,32 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
       )}
 
       {/* 4 Schede KPI Aggregate in Matrice Unificata */}
-      <div className="ds-card overflow-hidden">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--theme-border-subtle)]">
-          {/* Cella 1: Totale Spese */}
-          {(() => {
-            const cellBody = (
-              <>
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-                    <Wallet
-                      className="w-3.5 h-3.5 text-orange-600 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">Totale Spese</span>
-                  </span>
-                  {filtered.length > 0 && (
-                    <ChevronRight
-                      className="w-3.5 h-3.5 text-stone-400 shrink-0"
-                      aria-hidden="true"
-                    />
-                  )}
-                </div>
-
-                <div className="text-lg sm:text-xl font-bold font-mono tabular-nums text-stone-900 leading-tight truncate">
-                  {formatCurrency(totalSpent, profile.currency)}
-                </div>
-
-                <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-stone-500">
-                  {comparison.deltaPercent !== null ? (
-                    <>
-                      <span
-                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-mono font-semibold tabular-nums shrink-0 ${
-                          comparison.deltaPercent > 0
-                            ? 'bg-rose-500/12 text-rose-700 border-rose-500/25'
-                            : 'bg-emerald-500/12 text-emerald-700 border-emerald-500/25'
-                        }`}
-                      >
-                        {comparison.deltaPercent >= 0 ? '+' : ''}
-                        {comparison.deltaPercent}%
-                      </span>
-                      <span className="truncate">
-                        {comparison.comparisonLabel}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="truncate">
-                      {filtered.length} transazioni
-                    </span>
-                  )}
-                </div>
-              </>
-            );
-
-            return filtered.length > 0 ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setDrilldown({
-                    title: 'Tutte le Spese',
-                    subtitle: `${activePeriodLabel} · ${filtered.length} ${
-                      filtered.length === 1 ? 'spesa' : 'spese'
-                    }`,
-                    expenses: filtered,
-                  })
-                }
-                className="bg-[var(--theme-surface)] hover:bg-stone-50/70 p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left transition-colors cursor-pointer"
-              >
-                {cellBody}
-              </button>
-            ) : (
-              <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
-                {cellBody}
-              </div>
-            );
-          })()}
-
-          {/* Cella 2: Categoria Top */}
-          {(() => {
-            const hasTopCategory = Boolean(sortedCategories[0]);
-            const topMeta = getCategoryMeta(topCategoryName, goals);
-            const cellBody = (
-              <>
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-                    <Flame
-                      className="w-3.5 h-3.5 text-rose-500 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">Categoria Top</span>
-                  </span>
-                  {hasTopCategory && (
-                    <ChevronRight
-                      className="w-3.5 h-3.5 text-stone-400 shrink-0"
-                      aria-hidden="true"
-                    />
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: topMeta.chartColor }}
-                    aria-hidden="true"
-                  />
-                  <span className="font-display font-bold text-lg sm:text-xl text-stone-900 leading-tight truncate">
-                    {topCategoryName}
-                  </span>
-                </div>
-
-                <div className="text-[11px] text-stone-500 font-mono tabular-nums truncate">
-                  {formatCompactCurrency(topCategoryTotal, profile.currency)} ·{' '}
-                  {topCategoryPercent}%
-                </div>
-              </>
-            );
-
-            return hasTopCategory ? (
-              <button
-                type="button"
-                onClick={() => openCategoryDrilldown(topCategoryName)}
-                className="bg-[var(--theme-surface)] hover:bg-stone-50/70 p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left transition-colors cursor-pointer"
-              >
-                {cellBody}
-              </button>
-            ) : (
-              <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
-                {cellBody}
-              </div>
-            );
-          })()}
-
-          {/* Cella 3: Media / Spesa */}
-          <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-                <Calculator
-                  className="w-3.5 h-3.5 text-emerald-600 shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="truncate">Media / Spesa</span>
-              </span>
-            </div>
-
-            <div className="text-lg sm:text-xl font-bold font-mono tabular-nums text-stone-900 leading-tight truncate">
-              {formatCurrency(
-                filtered.length > 0 ? totalSpent / filtered.length : 0,
-                profile.currency
-              )}
-            </div>
-
-            <div className="text-[11px] text-stone-500 truncate">
-              Su {filtered.length} voci
-            </div>
-          </div>
-
-          {/* Cella 4: Media / Giorno */}
-          <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-                <CalendarClock
-                  className="w-3.5 h-3.5 text-blue-500 shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="truncate">Media / Giorno</span>
-              </span>
-            </div>
-
-            <div className="text-lg sm:text-xl font-bold font-mono tabular-nums text-stone-900 leading-tight truncate">
-              {formatCurrency(totalSpent / activeDays, profile.currency)}
-            </div>
-
-            <div className="text-[11px] text-stone-500 truncate">
-              Su {activeDays} giorni
-            </div>
-          </div>
-        </div>
-      </div>
+      <AnalyticsKpiGrid
+        currency={profile.currency}
+        totalSpent={totalSpent}
+        filteredCount={filtered.length}
+        activeDays={activeDays}
+        comparison={comparison}
+        topCategoryName={topCategoryName}
+        topCategoryTotal={topCategoryTotal}
+        topCategoryPercent={topCategoryPercent}
+        topCategoryColor={getCategoryMeta(topCategoryName, goals).chartColor}
+        onInspectAllExpenses={
+          filtered.length > 0
+            ? () =>
+                setDrilldown({
+                  title: 'Tutte le Spese',
+                  subtitle: `${activePeriodLabel} · ${filtered.length} ${
+                    filtered.length === 1 ? 'spesa' : 'spese'
+                  }`,
+                  expenses: filtered,
+                })
+            : undefined
+        }
+        onInspectTopCategory={
+          sortedCategories[0] ? () => openCategoryDrilldown(topCategoryName) : undefined
+        }
+      />
 
       {/* Sub-Navigazione Pulita tra Grafici e Budget/Soglie */}
       <div
@@ -1043,94 +773,19 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
           )}
 
           {isAddingCategory && (
-            <form
+            <NewCategoryForm
+              name={newCategoryName}
+              budget={newCategoryBudget}
+              error={newCategoryError}
+              currency={profile.currency}
+              onChangeName={setNewCategoryName}
+              onChangeBudget={setNewCategoryBudget}
               onSubmit={handleCreateCustomCategory}
-              className="ds-card p-4 sm:p-5 space-y-3 border border-orange-500/30"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-bold text-stone-900">
-                    Nuova Categoria Personalizzata
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    Sarà subito disponibile quando registri o filtri una spesa
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingCategory(false);
-                    setNewCategoryError(null);
-                  }}
-                  className="ds-btn-secondary min-h-8 px-2.5 text-xs"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_11rem] gap-3 text-xs">
-                <div>
-                  <label
-                    htmlFor="new-category-name"
-                    className="block font-semibold text-stone-700 mb-1"
-                  >
-                    Nome Categoria
-                  </label>
-                  <input
-                    id="new-category-name"
-                    type="text"
-                    maxLength={40}
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    placeholder="Es. Animali, Regali, Formazione"
-                    className="ds-input w-full px-3 py-2 text-xs min-h-10"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="new-category-budget"
-                    className="block font-semibold text-stone-700 mb-1"
-                  >
-                    Soglia Mensile ({profile.currency})
-                  </label>
-                  <input
-                    id="new-category-budget"
-                    type="number"
-                    min="1"
-                    step="any"
-                    value={newCategoryBudget}
-                    onChange={(e) => setNewCategoryBudget(e.target.value)}
-                    className="ds-input w-full px-3 py-2 text-xs font-mono font-bold min-h-10"
-                  />
-                </div>
-              </div>
-
-              {newCategoryError && (
-                <p className="text-xs font-semibold text-rose-600">
-                  {newCategoryError}
-                </p>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingCategory(false);
-                    setNewCategoryError(null);
-                  }}
-                  className="ds-btn-secondary min-h-9 px-3 text-xs"
-                >
-                  Annulla
-                </button>
-                <button
-                  type="submit"
-                  className="ds-btn-primary min-h-9 px-4 text-xs"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Crea Categoria</span>
-                </button>
-              </div>
-            </form>
+              onCancel={() => {
+                setIsAddingCategory(false);
+                setNewCategoryError(null);
+              }}
+            />
           )}
 
           <div className="ds-card overflow-hidden">
