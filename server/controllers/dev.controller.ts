@@ -5,7 +5,7 @@ import {
   resetDatabaseWithMode,
   syncDatabaseToUbuntuServer,
 } from '../services/dev.service';
-import { HttpError, sendControllerError } from '../utils/http-error';
+import { sendControllerError } from '../utils/http-error';
 
 export function postDevLoginController(req: Request, res: Response) {
   if (!issueDeveloperSession(req.body?.password, res, req)) {
@@ -17,12 +17,12 @@ export function postDevLoginController(req: Request, res: Response) {
 export function getDevStatusController(_req: Request, res: Response) {
   try {
     return res.json(getDeveloperStatus());
-  } catch (error: any) {
+  } catch (error: unknown) {
     return sendControllerError(
       res,
       error,
       500,
-      error?.message || 'Errore stato database dev.',
+      'Errore stato database dev.',
       'Dev status error'
     );
   }
@@ -39,12 +39,12 @@ export function postResetDatabaseController(req: Request, res: Response) {
     }
     const mode = req.body?.mode === 'empty' ? 'empty' : 'demo';
     return res.json(resetDatabaseWithMode(mode));
-  } catch (error: any) {
+  } catch (error: unknown) {
     return sendControllerError(
       res,
       error,
       500,
-      error?.message || 'Errore ripristino database.',
+      'Errore ripristino database.',
       'Reset database error'
     );
   }
@@ -54,13 +54,13 @@ export async function postUbuntuSyncController(_req: Request, res: Response) {
   try {
     const result = await syncDatabaseToUbuntuServer();
     return res.json(result);
-  } catch (error: any) {
-    if (error instanceof HttpError) {
-      return res.status(error.status).json({ error: error.message });
-    }
-    console.error('Ubuntu sync error:', error);
-    return res.status(500).json({
-      error: `Impossibile raggiungere il server Ubuntu: ${error?.message || 'errore sconosciuto'}`,
-    });
+  } catch (error: unknown) {
+    return sendControllerError(
+      res,
+      error,
+      502,
+      'Impossibile raggiungere il server Ubuntu configurato.',
+      'Ubuntu sync error'
+    );
   }
 }

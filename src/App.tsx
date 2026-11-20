@@ -415,6 +415,7 @@ export default function App() {
             <ExpenseList
               expenses={expenses}
               profile={profile}
+              goals={goals}
               onEditExpense={handleEditExpense}
               onDeleteExpense={handleDeleteExpense}
               onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
@@ -427,7 +428,10 @@ export default function App() {
             <CategoryAnalytics
               expenses={expenses}
               profile={profile}
+              goals={goals}
               onUpdateProfile={handleUpdateProfile}
+              onSelectExpense={handleEditExpense}
+              onNavigateTab={navigateToTab}
             />
           )}
 
@@ -442,6 +446,7 @@ export default function App() {
               partnerTotalPaid={balanceSummary.partnerTotalPaid}
               onOpenSettlement={() => setIsSettlementOpen(true)}
               onDeleteSettlement={handleDeleteSettlement}
+              onSelectExpense={handleEditExpense}
             />
           )}
 
@@ -476,7 +481,18 @@ export default function App() {
               setEditingExpense(null);
             }}
             onSave={(data) => handleSaveExpense(data, editingExpense?.id)}
+            onDelete={editingExpense ? handleDeleteExpense : undefined}
+            onCreditGoal={(goalId, delta) => {
+              const target = goals.find((g) => g.id === goalId);
+              if (target) {
+                handleUpdateGoal({
+                  ...target,
+                  currentAmount: Math.round((target.currentAmount + delta) * 100) / 100,
+                });
+              }
+            }}
             profile={profile}
+            goals={goals}
             initialData={editingExpense || undefined}
           />
         )}
@@ -488,6 +504,7 @@ export default function App() {
             onClose={() => setIsScanReceiptOpen(false)}
             onExpenseExtracted={(data) => handleSaveExpense(data)}
             profile={profile}
+            goals={goals}
             onBackgroundStateChange={setReceiptBgState}
           />
         )}
@@ -509,6 +526,7 @@ export default function App() {
             gmailRecurringRules={gmailRecurringRules}
             onSaveRecurringRule={handleSaveGmailRecurringRule}
             profile={profile}
+            goals={goals}
             isSignedIn={isSignedIn}
             userEmail={userEmail}
             onAuthChanged={handleAuthChanged}

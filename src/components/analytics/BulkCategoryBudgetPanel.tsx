@@ -1,14 +1,16 @@
 import React from 'react';
-import { Check, RotateCcw } from 'lucide-react';
+import { Check, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import {
-  EXPENSE_CATEGORIES,
   formatCurrency,
   getCategoryMeta,
 } from '../../constants/categories';
-import { ExpenseCategory } from '../../types';
+import type { ExpenseCategory, SavingGoal } from '../../types';
 import { CategoryBadge } from '../ui/CategoryBadge';
 
 interface BulkCategoryBudgetPanelProps {
+  categories: ExpenseCategory[];
+  goals?: SavingGoal[];
+  customCategories?: string[];
   currency: string;
   monthlyBudget: number;
   drafts: Record<ExpenseCategory, string>;
@@ -17,9 +19,14 @@ interface BulkCategoryBudgetPanelProps {
   onSaveAll: (e: React.FormEvent) => void;
   onResetAll: () => void;
   onCancel: () => void;
+  onRemoveCategory?: (cat: string) => void;
+  onOpenNewCategory?: () => void;
 }
 
 export const BulkCategoryBudgetPanel: React.FC<BulkCategoryBudgetPanelProps> = ({
+  categories,
+  goals,
+  customCategories = [],
   currency,
   monthlyBudget,
   drafts,
@@ -28,7 +35,12 @@ export const BulkCategoryBudgetPanel: React.FC<BulkCategoryBudgetPanelProps> = (
   onSaveAll,
   onResetAll,
   onCancel,
+  onRemoveCategory,
+  onOpenNewCategory,
 }) => {
+  const customSet = new Set(customCategories);
+  const goalSet = new Set((goals ?? []).map((g) => g.title.trim()));
+
   return (
     <form onSubmit={onSaveAll} className="ds-card p-5 sm:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-stone-200/70">
@@ -40,24 +52,41 @@ export const BulkCategoryBudgetPanel: React.FC<BulkCategoryBudgetPanelProps> = (
             Imposta obiettivi realistici: verranno usati in Mese (1x), 3 mesi (3x) e Anno (12x)
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onResetAll}
-          className="ds-btn-secondary min-h-9 px-3 text-xs self-start sm:self-auto"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Ripristina Predefiniti</span>
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {onOpenNewCategory && (
+            <button
+              type="button"
+              onClick={onOpenNewCategory}
+              className="ds-btn-secondary min-h-9 px-3 text-xs"
+            >
+              <Plus className="w-3.5 h-3.5 text-orange-600" />
+              <span>Nuova Categoria</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onResetAll}
+            className="ds-btn-secondary min-h-9 px-3 text-xs"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Ripristina Predefiniti</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-        {EXPENSE_CATEGORIES.map((cat) => {
-          const meta = getCategoryMeta(cat);
+        {categories.map((cat) => {
+          const meta = getCategoryMeta(cat, goals);
+          const isGoal = goalSet.has(cat.trim());
+          const isCustom = customSet.has(cat);
+          const canRemove = Boolean(onRemoveCategory && cat !== 'Altro' && !isGoal);
+
           return (
             <div key={cat} className="ds-subcard p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <CategoryBadge category={cat} size="sm" />
+                  <CategoryBadge category={cat} goals={goals} size="sm" />
                   <label
                     htmlFor={`bulk-budget-${cat}`}
                     className="font-semibold text-stone-900 truncate"
@@ -65,9 +94,23 @@ export const BulkCategoryBudgetPanel: React.FC<BulkCategoryBudgetPanelProps> = (
                     {cat}
                   </label>
                 </div>
-                <span className="text-[10px] text-stone-500 font-mono shrink-0">
-                  Default: {formatCurrency(meta.defaultBudget, currency)}
-                </span>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] text-stone-500 font-mono">
+                    Default: {formatCurrency(meta.defaultBudget, currency)}
+                  </span>
+                  {canRemove && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveCategory?.(cat)}
+                      className="h-6 w-6 rounded-md text-stone-400 hover:text-rose-600 hover:bg-rose-500/10 flex items-center justify-center transition-colors cursor-pointer"
+                      title={isCustom ? 'Elimina categoria' : 'Nascondi categoria'}
+                      aria-label={isCustom ? `Elimina ${cat}` : `Nascondi ${cat}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
               <input
                 id={`bulk-budget-${cat}`}

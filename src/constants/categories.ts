@@ -10,13 +10,15 @@ import {
   Plane,
   ShoppingBag,
   ShoppingCart,
+  Tag,
+  Target,
   Ticket,
   TrainFront,
   Utensils,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import type { CoupleProfile, Expense, ExpenseCategory } from '../types';
+import type { CoupleProfile, Expense, ExpenseCategory, SavingGoal } from '../types';
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Spesa',
@@ -28,7 +30,6 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Svago e Intrattenimento',
   'Salute e Benessere',
   'Viaggi',
-  'Matrimonio e Obiettivi',
   'Altro',
 ];
 
@@ -132,14 +133,14 @@ const VIAGGI_META: CategoryMeta = {
   defaultBudget: 300,
 };
 
-const MATRIMONIO_META: CategoryMeta = {
+const LEGACY_GOALS_META: CategoryMeta = {
   label: 'Matrimonio e Obiettivi',
   icon: Gem,
   chartColor: 'var(--chart-color-5)',
   bgClass: 'bg-rose-500/12',
   textClass: 'text-rose-700',
   borderClass: 'border-rose-500/25',
-  defaultBudget: 500,
+  defaultBudget: 300,
 };
 
 const ALTRO_META: CategoryMeta = {
@@ -170,25 +171,135 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
   'Health & Wellness': { ...SALUTE_META, label: 'Health & Wellness' },
   Viaggi: VIAGGI_META,
   Travel: { ...VIAGGI_META, label: 'Travel' },
-  'Matrimonio e Obiettivi': MATRIMONIO_META,
-  'Wedding & Goals': { ...MATRIMONIO_META, label: 'Wedding & Goals' },
+  'Matrimonio e Obiettivi': LEGACY_GOALS_META,
+  'Wedding & Goals': { ...LEGACY_GOALS_META, label: 'Wedding & Goals' },
   Altro: ALTRO_META,
   Other: { ...ALTRO_META, label: 'Other' },
 };
 
-export function getCategoryMeta(category: string): CategoryMeta {
-  return CATEGORY_META[category] || ALTRO_META;
+const DYNAMIC_CHART_COLORS = [
+  'var(--chart-color-5)',
+  'var(--chart-color-7)',
+  'var(--chart-color-9)',
+  'var(--chart-color-4)',
+  'var(--chart-color-6)',
+  'var(--chart-color-8)',
+  'var(--chart-color-10)',
+];
+
+function hashString(input: string): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (h * 31 + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+export function isBuiltinCategory(category: string): boolean {
+  return EXPENSE_CATEGORIES.includes(category);
+}
+
+export function getSelectableCategoryGroups(
+  profile?: Pick<CoupleProfile, 'customCategories' | 'hiddenCategories'>,
+  goals?: SavingGoal[]
+): {
+  base: string[];
+  custom: string[];
+  goals: string[];
+} {
+  const hiddenSet = new Set(
+    (profile?.hiddenCategories ?? []).filter((cat) => cat !== 'Altro' && cat !== 'Other')
+  );
+  const base = EXPENSE_CATEGORIES.filter((cat) => !hiddenSet.has(cat));
+  const usedLower = new Set(base.map((cat) => cat.toLowerCase()));
+
+  const custom: string[] = [];
+  for (const raw of profile?.customCategories ?? []) {
+    const clean = raw.trim();
+    if (clean.length < 2) continue;
+    const lower = clean.toLowerCase();
+    if (usedLower.has(lower)) continue;
+    usedLower.add(lower);
+    custom.push(clean);
+  }
+
+  const goalCategories: string[] = [];
+  for (const goal of goals ?? []) {
+    const clean = goal.title.trim();
+    if (!clean) continue;
+    const lower = clean.toLowerCase();
+    if (usedLower.has(lower)) continue;
+    usedLower.add(lower);
+    goalCategories.push(clean);
+  }
+
+  return { base, custom, goals: goalCategories };
+}
+
+export function getActiveCategories(
+  profile?: Pick<CoupleProfile, 'customCategories' | 'hiddenCategories'>,
+  goals?: SavingGoal[]
+): string[] {
+  const { base, custom, goals: goalCats } = getSelectableCategoryGroups(profile, goals);
+  return [...base, ...custom, ...goalCats];
+}
+
+function estimateGoalMonthlyBudget(goal: SavingGoal): number {
+  const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
+  if (remaining <= 0) return 100;
+  if (!goal.targetDate) {
+    return Math.max(50, Math.min(2000, Math.round(remaining / 12)));
+  }
+  const targetMs = Date.parse(`${goal.targetDate}T00:00:00`);
+  if (!Number.isFinite(targetMs)) return 200;
+  const monthsLeft = Math.max(1, (targetMs - Date.now()) / (1000 * 60 * 60 * 24 * 30.4375));
+  return Math.max(25, Math.min(50_000, Math.round(remaining / monthsLeft)));
+}
+
+export function getCategoryMeta(category: string, goals?: SavingGoal[]): CategoryMeta {
+  if (CATEGORY_META[category]) {
+    return CATEGORY_META[category];
+  }
+
+  const matchedGoal = goals?.find(
+    (g) => g.title.trim().toLowerCase() === category.trim().toLowerCase()
+  );
+  const colorIdx = hashString(category) % DYNAMIC_CHART_COLORS.length;
+  const chartColor = DYNAMIC_CHART_COLORS[colorIdx];
+
+  if (matchedGoal) {
+    return {
+      label: category,
+      icon: Target,
+      chartColor,
+      bgClass: 'bg-rose-500/12',
+      textClass: 'text-rose-700',
+      borderClass: 'border-rose-500/25',
+      defaultBudget: estimateGoalMonthlyBudget(matchedGoal),
+    };
+  }
+
+  return {
+    label: category || 'Altro',
+    icon: Tag,
+    chartColor,
+    bgClass: 'bg-orange-500/12',
+    textClass: 'text-orange-700',
+    borderClass: 'border-orange-500/25',
+    defaultBudget: 150,
+  };
 }
 
 export function getCategoryBudget(
   category: string,
-  profile?: Pick<CoupleProfile, 'categoryBudgets'>
+  profile?: Pick<CoupleProfile, 'categoryBudgets'>,
+  goals?: SavingGoal[]
 ): number {
   const custom = profile?.categoryBudgets?.[category as ExpenseCategory];
   if (typeof custom === 'number' && Number.isFinite(custom) && custom > 0) {
     return custom;
   }
-  return getCategoryMeta(category).defaultBudget;
+  return getCategoryMeta(category, goals).defaultBudget;
 }
 
 export interface SourceMeta {

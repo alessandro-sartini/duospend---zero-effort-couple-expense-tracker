@@ -54,7 +54,13 @@ export async function requireCoupleAuth(
     return next();
   }
 
-  if (req.method === 'POST' && hasValidWebhookSecret(req.get('x-duospend-secret'))) {
+  const routePath =
+    `${req.baseUrl || ''}${req.path || ''}` || req.originalUrl?.split('?')[0] || '';
+  if (
+    req.method === 'POST' &&
+    routePath === '/api/data' &&
+    hasValidWebhookSecret(req.get('x-duospend-secret'))
+  ) {
     return next();
   }
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Camera, Check, RefreshCw, Sparkles, Upload } from 'lucide-react';
-import { EXPENSE_CATEGORIES, formatCurrency } from '../constants/categories';
+import { formatCurrency, getActiveCategories } from '../constants/categories';
 import { loadOcrDraft, saveOcrDraft } from '../services/storage';
-import { CoupleProfile, Expense, ExpenseCategory, Payer, SplitType } from '../types';
+import { CoupleProfile, Expense, ExpenseCategory, Payer, SavingGoal, SplitType } from '../types';
 import { CategoryBadge } from './ui/CategoryBadge';
 import { ModalShell } from './ui/ModalShell';
 import { PayerSelector } from './ui/PayerSelector';
@@ -63,6 +63,7 @@ interface CameraReceiptModalProps {
   onClose: () => void;
   onExpenseExtracted: (expense: Omit<Expense, 'id'>) => void;
   profile: CoupleProfile;
+  goals?: SavingGoal[];
   onBackgroundStateChange?: (state: {
     isAnalyzing: boolean;
     hasDraft: boolean;
@@ -87,8 +88,13 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
   onClose,
   onExpenseExtracted,
   profile,
+  goals = [],
   onBackgroundStateChange,
 }) => {
+  const categoryOptions = React.useMemo(
+    () => getActiveCategories(profile, goals),
+    [profile, goals]
+  );
   const initialOcrDraft = useRef(loadOcrDraft<ExtractedReceiptDraft>()).current;
   const [imagePreview, setImagePreview] = useState<string | null>(
     () => initialOcrDraft?.imagePreview ?? null,
@@ -232,7 +238,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
         total: Number.isFinite(Number(data.total)) ? Number(data.total) : 0,
         currency: String(data.currency || profile.currency),
         date: String(data.date || new Date().toISOString().slice(0, 10)),
-        category: EXPENSE_CATEGORIES.includes(data.category) ? data.category : 'Spesa',
+        category: categoryOptions.includes(data.category) ? data.category : 'Spesa',
         notes: typeof data.notes === 'string' ? data.notes : undefined,
         items: Array.isArray(data.items) ? data.items : [],
         tax: Number.isFinite(Number(data.tax)) ? Number(data.tax) : 0,
@@ -535,7 +541,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
                         }
                         className="ds-input min-h-9 flex-1 px-2 text-xs font-medium"
                       >
-                        {EXPENSE_CATEGORIES.map((categoryOption) => (
+                        {categoryOptions.map((categoryOption) => (
                           <option key={categoryOption} value={categoryOption}>
                             {categoryOption}
                           </option>

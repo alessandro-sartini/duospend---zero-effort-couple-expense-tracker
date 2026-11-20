@@ -1,8 +1,10 @@
 import React from 'react';
 import { getCategoryMeta } from '../../constants/categories';
+import type { SavingGoal } from '../../types';
 
 interface CategoryBadgeProps {
   category: string;
+  goals?: SavingGoal[];
   size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
   className?: string;
@@ -22,11 +24,12 @@ const ICON_SIZES = {
 
 export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
   category,
+  goals,
   size = 'md',
   showLabel = false,
   className = '',
 }) => {
-  const meta = getCategoryMeta(category);
+  const meta = getCategoryMeta(category, goals);
   const Icon = meta.icon;
 
   if (showLabel) {

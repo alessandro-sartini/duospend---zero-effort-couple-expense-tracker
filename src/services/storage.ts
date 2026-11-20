@@ -209,13 +209,6 @@ export const loadGmailRecurringRules = (): GmailRecurringRule[] => {
     const raw = localStorage.getItem(STORAGE_KEYS.GMAIL_RECURRING_RULES);
     const rules: unknown = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(rules)) return [];
-    const categories: ExpenseCategory[] = [
-      'Spesa', 'Ristoranti e Bar', 'Casa e Affitto', 'Bollette e Utenze', 'Trasporti',
-      'Shopping', 'Svago e Intrattenimento', 'Salute e Benessere', 'Viaggi',
-      'Matrimonio e Obiettivi', 'Altro', 'Groceries', 'Dining Out', 'Housing',
-      'Utilities', 'Transportation', 'Entertainment', 'Health & Wellness', 'Travel',
-      'Wedding & Goals', 'Other',
-    ];
     return rules.filter((value): value is GmailRecurringRule => {
       if (typeof value !== 'object' || value === null) return false;
       const rule = value as Record<string, unknown>;
@@ -227,7 +220,8 @@ export const loadGmailRecurringRules = (): GmailRecurringRule[] => {
         rule.amount > 0 &&
         typeof rule.currency === 'string' &&
         typeof rule.category === 'string' &&
-        categories.includes(rule.category as ExpenseCategory);
+        rule.category.trim().length > 0 &&
+        rule.category.trim().length <= 100;
     });
   } catch (error) {
     console.error('Failed to load Gmail recurring rules:', error);

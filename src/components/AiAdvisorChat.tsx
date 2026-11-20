@@ -22,7 +22,7 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
     {
       id: 'msg-1',
       role: 'model',
-      content: `Ciao ${profile.userName} e ${profile.partnerName}! Sono il vostro Consulente Finanziario DuoSpend basato su Gemini. Ho visibilità completa su tutte le vostre spese condivise (€${totalSharedSpend.toFixed(2)} totali nel fondo comune). Chiedetemi qualsiasi cosa sul budget mensile, dove tagliare gli sprechi, le proiezioni per il matrimonio o il saldo di pareggio!`,
+      content: `Ciao ${profile.userName} e ${profile.partnerName}! Sono il vostro Consulente Finanziario DuoSpend basato su Gemini. Ho visibilità completa su tutte le vostre spese condivise (€${totalSharedSpend.toFixed(2)} totali nel fondo comune). Chiedetemi qualsiasi cosa sul budget mensile, dove tagliare gli sprechi, i vostri obiettivi di risparmio o il saldo di pareggio!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       modelUsed: 'gemini-3.8-flash',
     },
@@ -54,8 +54,8 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
     {
       id: 'gemini-4-argon',
       label: 'Argon (Pianificazione Complessa)',
-      role: 'Stratega Nozze e Grandi Obiettivi',
-      desc: 'Simulazione scenari futuri, matrimonio e fondi vacanze',
+      role: 'Stratega Progetti e Grandi Obiettivi',
+      desc: 'Simulazione scenari futuri, casa, viaggi e fondi risparmio',
       icon: Sparkles,
       badge: 'Attività Complesse',
     },
@@ -180,7 +180,7 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
   const quickPrompts = [
     'Fai un audit completo delle nostre spese del mese',
     'Come possiamo ridurre le spese per alimentari e cene fuori?',
-    'Simula il piano di risparmio per il matrimonio',
+    'Simula un piano di risparmio per i nostri obiettivi di coppia',
     'Spiegami esattamente come è calcolato il nostro saldo attuale',
   ];
 

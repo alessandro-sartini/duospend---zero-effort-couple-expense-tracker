@@ -10,7 +10,6 @@ const CATEGORY_KEYWORD_RULES: Array<[ExpenseCategory, RegExp]> = [
   ['Viaggi', /\b(airbnb|booking|ryanair|easyjet|ita\s*airways|wizz|hotel|volo|albergo|traghetto|soggiorno)\b/i],
   ['Salute e Benessere', /\b(farmacia|parafarmacia|medico|ospedale|dentista|decathlon|palestra|visita)\b/i],
   ['Svago e Intrattenimento', /\b(netflix|spotify|disney|prime\s*video|cinema|teatro|concerto|playstation|nintendo|steam)\b/i],
-  ['Matrimonio e Obiettivi', /\b(matrimonio|nozze|fiorista|atelier|fotografo|ricevimento)\b/i],
   ['Shopping', /\b(amazon|zalando|zara|ebay|apple|mediaworld|unieuro|acquisto|ordine)\b/i],
 ];
 

@@ -379,20 +379,99 @@ function sanitizeCurrency(value: unknown, fallback = 'EUR'): string {
   return /^[A-Z]{3}$/.test(code) ? code : fallback;
 }
 
+const BUILTIN_CATEGORY_LOWER_SET = new Set(
+  ALLOWED_EXPENSE_CATEGORIES.map((category) => category.toLowerCase())
+);
+const NON_HIDEABLE_CATEGORIES = new Set(['Altro', 'Other']);
+
+export function sanitizeCustomCategories(
+  raw: unknown,
+  fallback?: string[]
+): string[] | undefined {
+  if (raw === undefined) return fallback;
+  if (!Array.isArray(raw)) return undefined;
+
+  const cleaned: string[] = [];
+  const seenLower = new Set<string>();
+  for (const entry of raw) {
+    const label = sanitizePlainText(entry, 40);
+    if (label.length < 2) continue;
+    const lower = label.toLowerCase();
+    if (BUILTIN_CATEGORY_LOWER_SET.has(lower) || seenLower.has(lower)) continue;
+    seenLower.add(lower);
+    cleaned.push(label);
+    if (cleaned.length >= 40) break;
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+export function sanitizeHiddenCategories(
+  raw: unknown,
+  fallback?: string[]
+): string[] | undefined {
+  if (raw === undefined) return fallback;
+  if (!Array.isArray(raw)) return undefined;
+
+  const cleaned: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (
+      NON_HIDEABLE_CATEGORIES.has(trimmed) ||
+      !ALLOWED_EXPENSE_CATEGORIES.includes(trimmed as ExpenseCategory) ||
+      seen.has(trimmed)
+    ) {
+      continue;
+    }
+    seen.add(trimmed);
+    cleaned.push(trimmed);
+    if (cleaned.length >= 30) break;
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+export function buildAllowedCategorySet(
+  profile?: Pick<CoupleProfile, 'customCategories'>,
+  goals?: Array<Pick<SavingGoal, 'title'>>
+): Set<string> {
+  const allowed = new Set<string>(ALLOWED_EXPENSE_CATEGORIES);
+  if (Array.isArray(profile?.customCategories)) {
+    for (const cat of profile.customCategories) {
+      const clean = sanitizePlainText(cat, 40);
+      if (clean.length >= 2) allowed.add(clean);
+    }
+  }
+  if (Array.isArray(goals)) {
+    for (const goal of goals) {
+      const clean = sanitizePlainText(goal?.title, 100);
+      if (clean.length >= 1) allowed.add(clean);
+    }
+  }
+  return allowed;
+}
+
 export function sanitizeExpenseCategory(
   value: unknown,
-  fallback: ExpenseCategory = 'Altro'
+  fallback: ExpenseCategory = 'Altro',
+  allowedCategories?: Set<string>
 ): ExpenseCategory {
-  if (
-    typeof value === 'string' &&
-    ALLOWED_EXPENSE_CATEGORIES.includes(value as ExpenseCategory)
-  ) {
-    return value as ExpenseCategory;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (
+      ALLOWED_EXPENSE_CATEGORIES.includes(trimmed as ExpenseCategory) ||
+      (allowedCategories && allowedCategories.has(trimmed))
+    ) {
+      return trimmed as ExpenseCategory;
+    }
   }
   return fallback;
 }
 
-export function sanitizeExpenseRecord(raw: unknown): Expense | null {
+export function sanitizeExpenseRecord(
+  raw: unknown,
+  allowedCategories?: Set<string>
+): Expense | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
   const amount = Number(record.amount);
@@ -440,7 +519,7 @@ export function sanitizeExpenseRecord(raw: unknown): Expense | null {
     amount: Math.round(amount * 100) / 100,
     currency: sanitizeCurrency(record.currency),
     date: sanitizeIsoDate(record.date),
-    category: sanitizeExpenseCategory(record.category),
+    category: sanitizeExpenseCategory(record.category, 'Altro', allowedCategories),
     payer: ALLOWED_PAYERS.has(record.payer as Payer) ? (record.payer as Payer) : 'user',
     splitType,
     ...(customSplitRatio !== undefined ? { customSplitRatio } : {}),
@@ -464,11 +543,12 @@ export function sanitizeSettlementRecord(raw: unknown): Settlement | null {
   const from: Payer = ALLOWED_PAYERS.has(record.from as Payer)
     ? (record.from as Payer)
     : 'partner';
-  const to: Payer = ALLOWED_PAYERS.has(record.to as Payer)
-    ? (record.to as Payer)
-    : from === 'user'
-      ? 'partner'
-      : 'user';
+  const to: Payer =
+    ALLOWED_PAYERS.has(record.to as Payer) && record.to !== from
+      ? (record.to as Payer)
+      : from === 'user'
+        ? 'partner'
+        : 'user';
 
   return {
     id: sanitizePlainText(
@@ -524,13 +604,15 @@ export function sanitizeGoalRecord(raw: unknown): SavingGoal | null {
 
 export function sanitizeCategoryBudgets(
   raw: unknown,
-  fallback?: Partial<Record<ExpenseCategory, number>>
+  fallback?: Partial<Record<ExpenseCategory, number>>,
+  allowedCategories?: Set<string>
 ): Partial<Record<ExpenseCategory, number>> | undefined {
   if (raw === undefined) return fallback;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const record = raw as Record<string, unknown>;
   const cleaned: Partial<Record<ExpenseCategory, number>> = {};
-  for (const category of ALLOWED_EXPENSE_CATEGORIES) {
+  const validKeys = allowedCategories ?? new Set<string>(ALLOWED_EXPENSE_CATEGORIES);
+  for (const category of validKeys) {
     const rawValue = record[category];
     if (rawValue === undefined || rawValue === null || rawValue === '') continue;
     const numeric = Number(rawValue);
@@ -544,7 +626,8 @@ export function sanitizeCategoryBudgets(
 export function sanitizeProfileRecord(
   raw: Record<string, unknown>,
   currentProfile: CoupleProfile,
-  partnerEmail: string
+  partnerEmail: string,
+  extraAllowedCategories?: Set<string>
 ): CoupleProfile {
   const rawUserName = sanitizePlainText(raw.userName, 100);
   const rawPartnerName = sanitizePlainText(raw.partnerName, 100);
@@ -574,7 +657,29 @@ export function sanitizeProfileRecord(
       ? Math.round(rawWeddingGoal * 100) / 100
       : currentProfile.weddingBudgetGoal;
 
-  return {
+  const customCategories = sanitizeCustomCategories(
+    raw.customCategories,
+    currentProfile.customCategories
+  );
+  const hiddenCategories = sanitizeHiddenCategories(
+    raw.hiddenCategories,
+    currentProfile.hiddenCategories
+  );
+
+  const mergedAllowed = buildAllowedCategorySet({ customCategories });
+  if (extraAllowedCategories) {
+    for (const entry of extraAllowedCategories) {
+      mergedAllowed.add(entry);
+    }
+  }
+
+  const categoryBudgets = sanitizeCategoryBudgets(
+    raw.categoryBudgets,
+    currentProfile.categoryBudgets,
+    mergedAllowed
+  );
+
+  const result: CoupleProfile = {
     ...currentProfile,
     userName,
     partnerName,
@@ -583,6 +688,20 @@ export function sanitizeProfileRecord(
     weddingBudgetGoal,
     userEmail: currentProfile.userEmail,
     partnerEmail,
-    categoryBudgets: sanitizeCategoryBudgets(raw.categoryBudgets, currentProfile.categoryBudgets),
+    categoryBudgets,
   };
+
+  if (customCategories && customCategories.length > 0) {
+    result.customCategories = customCategories;
+  } else {
+    delete result.customCategories;
+  }
+
+  if (hiddenCategories && hiddenCategories.length > 0) {
+    result.hiddenCategories = hiddenCategories;
+  } else {
+    delete result.hiddenCategories;
+  }
+
+  return result;
 }

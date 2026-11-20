@@ -1,6 +1,8 @@
 import { readDatabase, ServerDatabase, writeDatabase } from '../database';
 import { HttpError } from '../utils/http-error';
 import {
+  buildAllowedCategorySet,
+  sanitizeCustomCategories,
   sanitizeExpenseRecord,
   sanitizeGoalRecord,
   sanitizeProfileRecord,
@@ -42,13 +44,71 @@ export function saveSynchronizedData(
 ) {
   const { expenses, settlements, goals, profile } = payload ?? {};
   const patch: Partial<ServerDatabase> = {};
+  const currentDb = readDatabase();
+
+  if (goals !== undefined) {
+    if (!Array.isArray(goals) || goals.length > 1_000) {
+      throw new HttpError(400, 'Elenco obiettivi non valido.');
+    }
+    const sanitizedGoals = goals
+      .map(sanitizeGoalRecord)
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    if (goals.length > 0 && sanitizedGoals.length === 0) {
+      throw new HttpError(400, 'Formato degli obiettivi non valido.');
+    }
+    patch.goals = deduplicateById(sanitizedGoals);
+  }
+
+  const effectiveGoals = patch.goals ?? currentDb.goals ?? [];
+  const profileRecord =
+    profile !== undefined &&
+    profile &&
+    typeof profile === 'object' &&
+    !Array.isArray(profile)
+      ? (profile as Record<string, unknown>)
+      : null;
+
+  const effectiveCustomCategories = profileRecord
+    ? sanitizeCustomCategories(
+        profileRecord.customCategories,
+        currentDb.profile.customCategories
+      )
+    : currentDb.profile.customCategories;
+
+  const allowedCategories = buildAllowedCategorySet(
+    { customCategories: effectiveCustomCategories },
+    effectiveGoals
+  );
+
+  if (profile !== undefined) {
+    if (!profileRecord) {
+      throw new HttpError(400, 'Profilo non valido.');
+    }
+    const currentProfile = currentDb.profile;
+    const partnerEmail =
+      typeof profileRecord.partnerEmail === 'string'
+        ? profileRecord.partnerEmail.slice(0, 254).toLowerCase().trim()
+        : currentProfile.partnerEmail || '';
+    if (partnerEmail && !EMAIL_PATTERN.test(partnerEmail)) {
+      throw new HttpError(400, 'Formato email del partner non valido.');
+    }
+    if (!options.isOwner && partnerEmail !== (currentProfile.partnerEmail || '').toLowerCase().trim()) {
+      throw new HttpError(403, 'Solo il titolare può modificare l’account partner autorizzato.');
+    }
+    patch.profile = sanitizeProfileRecord(
+      profileRecord,
+      currentProfile,
+      partnerEmail,
+      allowedCategories
+    );
+  }
 
   if (expenses !== undefined) {
     if (!Array.isArray(expenses) || expenses.length > 10_000) {
       throw new HttpError(400, 'Elenco spese non valido.');
     }
     const sanitizedExpenses = expenses
-      .map(sanitizeExpenseRecord)
+      .map((item) => sanitizeExpenseRecord(item, allowedCategories))
       .filter((item): item is NonNullable<typeof item> => item !== null);
     if (expenses.length > 0 && sanitizedExpenses.length === 0) {
       throw new HttpError(400, 'Formato delle spese non valido.');
@@ -67,38 +127,6 @@ export function saveSynchronizedData(
       throw new HttpError(400, 'Formato dei pareggi non valido.');
     }
     patch.settlements = deduplicateById(sanitizedSettlements);
-  }
-
-  if (goals !== undefined) {
-    if (!Array.isArray(goals) || goals.length > 1_000) {
-      throw new HttpError(400, 'Elenco obiettivi non valido.');
-    }
-    const sanitizedGoals = goals
-      .map(sanitizeGoalRecord)
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-    if (goals.length > 0 && sanitizedGoals.length === 0) {
-      throw new HttpError(400, 'Formato degli obiettivi non valido.');
-    }
-    patch.goals = deduplicateById(sanitizedGoals);
-  }
-
-  if (profile !== undefined) {
-    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
-      throw new HttpError(400, 'Profilo non valido.');
-    }
-    const profileRecord = profile as Record<string, unknown>;
-    const currentProfile = readDatabase().profile;
-    const partnerEmail =
-      typeof profileRecord.partnerEmail === 'string'
-        ? profileRecord.partnerEmail.slice(0, 254).toLowerCase().trim()
-        : currentProfile.partnerEmail || '';
-    if (partnerEmail && !EMAIL_PATTERN.test(partnerEmail)) {
-      throw new HttpError(400, 'Formato email del partner non valido.');
-    }
-    if (!options.isOwner && partnerEmail !== (currentProfile.partnerEmail || '').toLowerCase().trim()) {
-      throw new HttpError(403, 'Solo il titolare può modificare l’account partner autorizzato.');
-    }
-    patch.profile = sanitizeProfileRecord(profileRecord, currentProfile, partnerEmail);
   }
 
   const updated = writeDatabase(patch);

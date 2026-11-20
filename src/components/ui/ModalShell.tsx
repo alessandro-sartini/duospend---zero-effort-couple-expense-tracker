@@ -13,6 +13,8 @@ interface ModalShellProps {
   closeLabel?: string;
   headerExtra?: React.ReactNode;
   footer?: React.ReactNode;
+  mobileBottomSheet?: boolean;
+  closeOnBackdrop?: boolean;
   children: React.ReactNode;
 }
 
@@ -34,6 +36,8 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   closeLabel = 'Chiudi finestra',
   headerExtra,
   footer,
+  mobileBottomSheet = false,
+  closeOnBackdrop = false,
   children,
 }) => {
   useScrollLock(isOpen);
@@ -53,13 +57,36 @@ export const ModalShell: React.FC<ModalShellProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain p-3 sm:p-4 bg-black/55 backdrop-blur-xs"
+      className={`fixed inset-0 z-50 flex justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs ${
+        mobileBottomSheet ? 'items-end sm:items-center p-0 sm:p-4' : 'items-center p-3 sm:p-4'
+      }`}
       role="dialog"
       aria-modal="true"
+      onClick={
+        closeOnBackdrop
+          ? (event) => {
+              if (event.target === event.currentTarget) {
+                onClose();
+              }
+            }
+          : undefined
+      }
     >
       <div
-        className={`ds-card shadow-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col`}
+        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col ${
+          mobileBottomSheet
+            ? 'rounded-t-3xl rounded-b-none sm:rounded-2xl max-h-[88dvh] sm:max-h-[calc(100dvh-2rem)]'
+            : 'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
+        }`}
       >
+        {mobileBottomSheet && (
+          <div
+            className="pt-2.5 pb-0.5 flex justify-center bg-stone-50/60 shrink-0 sm:hidden"
+            aria-hidden="true"
+          >
+            <span className="h-1 w-10 rounded-full bg-stone-300/80" />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-stone-100 bg-stone-50/60 shrink-0">
           <div className="flex min-w-0 items-center gap-3">
             {Icon && (

@@ -38,6 +38,7 @@ import {
   hasPathTraversalOrForbiddenRoute,
   resolveSafeChildPath,
   sanitizeSafeImageUrl,
+  sanitizeSettlementRecord,
   stripDangerousKeys,
   validateUploadedImagePayload,
   validateUbuntuSyncTarget,
@@ -198,6 +199,102 @@ describe('Sicurezza server, anti-traversal e sanitizzazione POST /api/data', () 
       expect(inMemoryDb.goals).toHaveLength(1);
       expect(inMemoryDb.goals[0]?.title).toBe('Finale');
     });
+
+    it('accetta categorie personalizzate e obiettivi attivi, protegge Altro da hiddenCategories e rifiuta ancora categorie sconosciute', () => {
+      inMemoryDb.goals = [
+        {
+          id: 'goal-1',
+          title: 'Fondo Casa',
+          targetAmount: 10000,
+          currentAmount: 2500,
+        },
+      ];
+
+      saveSynchronizedData(
+        {
+          profile: {
+            customCategories: ['  <script>alert(1)</script>Animali Domestici  '],
+            hiddenCategories: ['Shopping', 'Altro'],
+            categoryBudgets: {
+              'Animali Domestici': 120,
+              'Fondo Casa': 500,
+              NonEsistente: 999,
+            },
+          },
+          expenses: [
+            {
+              id: 'exp-custom',
+              title: 'Crocchette',
+              amount: 45,
+              currency: 'EUR',
+              date: '2026-04-12',
+              category: 'Animali Domestici',
+              payer: 'user',
+              splitType: '50_50',
+              source: 'manual',
+            },
+            {
+              id: 'exp-goal',
+              title: 'Acconto notaio',
+              amount: 300,
+              currency: 'EUR',
+              date: '2026-04-12',
+              category: 'Fondo Casa',
+              payer: 'partner',
+              splitType: '50_50',
+              source: 'manual',
+            },
+            {
+              id: 'exp-unknown',
+              title: 'Categoria inventata',
+              amount: 20,
+              currency: 'EUR',
+              date: '2026-04-12',
+              category: 'NonEsistente',
+              payer: 'user',
+              splitType: '50_50',
+              source: 'manual',
+            },
+          ],
+        },
+        { isOwner: true }
+      );
+
+      expect(inMemoryDb.profile.customCategories).toEqual(['Animali Domestici']);
+      expect(inMemoryDb.profile.hiddenCategories).toEqual(['Shopping']);
+      expect(inMemoryDb.profile.categoryBudgets).toEqual({
+        'Animali Domestici': 120,
+        'Fondo Casa': 500,
+      });
+      expect(inMemoryDb.expenses.map((expense) => ({ id: expense.id, category: expense.category }))).toEqual([
+        { id: 'exp-custom', category: 'Animali Domestici' },
+        { id: 'exp-goal', category: 'Fondo Casa' },
+        { id: 'exp-unknown', category: 'Altro' },
+      ]);
+    });
+
+    it('impedisce pareggi verso se stessi in sanitizeSettlementRecord', () => {
+      const normalized = sanitizeSettlementRecord({
+        id: 'set-self',
+        amount: 50,
+        from: 'user',
+        to: 'user',
+        date: '2026-04-12T10:00:00.000Z',
+      });
+      expect(normalized).not.toBeNull();
+      expect(normalized?.from).toBe('user');
+      expect(normalized?.to).toBe('partner');
+
+      const fromPartner = sanitizeSettlementRecord({
+        id: 'set-self-2',
+        amount: 75,
+        from: 'partner',
+        to: 'partner',
+        date: '2026-04-12T10:00:00.000Z',
+      });
+      expect(fromPartner?.from).toBe('partner');
+      expect(fromPartner?.to).toBe('user');
+    });
   });
 
   describe('Protezione prototype pollution, path traversal, file upload e SSRF Ubuntu', () => {
@@ -280,6 +377,56 @@ describe('Sicurezza server, anti-traversal e sanitizzazione POST /api/data', () 
         valid: true,
         targetUrl: 'http://192.168.1.50:3001/api/data',
       });
+    });
+
+    it('limita x-duospend-secret esclusivamente a POST /api/data e lo rifiuta con 401 su altre rotte POST o GET', async () => {
+      vi.resetModules();
+      vi.doMock('../server/config', () => ({
+        WEBHOOK_SECRET: 'webhook-secret-test-value',
+        getDeveloperPassword: () => '',
+        isDeveloperConsoleEnabled: () => false,
+      }));
+
+      try {
+        const { requireCoupleAuth, hasValidWebhookSecret } = await import('../server/middleware/auth');
+        expect(hasValidWebhookSecret('webhook-secret-test-value')).toBe(true);
+
+        const makeReq = (method: string, routePath: string) =>
+          ({
+            method,
+            baseUrl: '',
+            path: routePath,
+            originalUrl: routePath,
+            headers: {},
+            get: (name: string) =>
+              name.toLowerCase() === 'x-duospend-secret' ? 'webhook-secret-test-value' : undefined,
+          }) as any;
+
+        const makeRes = () =>
+          ({
+            status: vi.fn().mockReturnThis(),
+            json: vi.fn(),
+          }) as any;
+
+        const nextData = vi.fn();
+        requireCoupleAuth(makeReq('POST', '/api/data'), makeRes(), nextData);
+        expect(nextData).toHaveBeenCalledTimes(1);
+
+        for (const [method, forbiddenPath] of [
+          ['GET', '/api/data'],
+          ['POST', '/api/gemini/chat'],
+          ['POST', '/api/gmail/sync'],
+        ] as const) {
+          const res = makeRes();
+          const next = vi.fn();
+          requireCoupleAuth(makeReq(method, forbiddenPath), res, next);
+          expect(next).not.toHaveBeenCalled();
+          expect(res.status).toHaveBeenCalledWith(401);
+        }
+      } finally {
+        vi.doUnmock('../server/config');
+        vi.resetModules();
+      }
     });
   });
 });

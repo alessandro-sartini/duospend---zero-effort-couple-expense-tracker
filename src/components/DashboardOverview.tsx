@@ -1,9 +1,30 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { formatCurrency, formatSplitLabel } from '../constants/categories';
+import {
+  formatCurrency,
+  formatSplitLabel,
+  getCategoryMeta,
+} from '../constants/categories';
+import {
+  computeMonthlyBurnRate,
+  filterExpensesByDay,
+  filterExpensesByMonth,
+  formatCompactCurrency,
+  isSharedExpense,
+  parseIsoDateParts,
+  type SplitFilter,
+} from '../services/analytics-math';
 import { CoupleProfile, Expense } from '../types';
+import { BurnRateAreaChart } from './charts/BurnRateAreaChart';
+import {
+  ExpenseDrilldownModal,
+  type ExpenseDrilldownPayload,
+} from './charts/ExpenseDrilldownModal';
+import {
+  InteractiveDonutChart,
+  type DonutSlice,
+} from './charts/InteractiveDonutChart';
 import { BalanceHeroCard } from './dashboard/BalanceHeroCard';
-import { ProgressBar } from './ProgressBar';
 import { CategoryBadge } from './ui/CategoryBadge';
 import { SourceBadge } from './ui/SourceBadge';
 
@@ -32,36 +53,157 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onNavigateTab,
   onSelectExpense,
 }) => {
-  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
-  const currentMonthExpenses = expenses.filter((e) =>
-    e.date.startsWith(currentMonthPrefix)
+  const [splitFilter, setSplitFilter] = useState<SplitFilter>('all');
+  const [selectedMonthCategory, setSelectedMonthCategory] = useState<
+    string | null
+  >(null);
+  const [drilldown, setDrilldown] = useState<ExpenseDrilldownPayload | null>(
+    null
   );
-  const currentMonthTotal = currentMonthExpenses.reduce(
-    (acc, curr) => acc + curr.amount,
-    0
-  );
-
   const budgetGoal = profile.monthlyBudget || 2800;
-  const budgetPercentage = Math.min(
-    Math.round((currentMonthTotal / budgetGoal) * 100),
-    100
+
+  const burnRate = useMemo(
+    () => computeMonthlyBurnRate(expenses, budgetGoal, splitFilter),
+    [expenses, budgetGoal, splitFilter]
   );
 
-  const categoryTotals: Record<string, number> = {};
-  currentMonthExpenses.forEach((e) => {
-    categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
-  });
+  const {
+    donutSlices,
+    monthDonutTotal,
+    dayExpenseCounts,
+    topFiveCategorySet,
+    currentYear,
+    currentMonth,
+    currentYm,
+  } = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const ym = `${year}-${String(month).padStart(2, '0')}`;
 
-  const sortedCategories = Object.entries(categoryTotals)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5);
+    const totals: Record<string, number> = {};
+    const countsByDay: Record<number, number> = {};
+    let total = 0;
 
-  const recentExpenses = [...expenses]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 6);
+    for (const exp of expenses) {
+      if (splitFilter === 'shared' && !isSharedExpense(exp)) continue;
+      if (splitFilter === 'personal' && isSharedExpense(exp)) continue;
+      const parts = parseIsoDateParts(exp.date);
+      if (!parts || parts.year !== year || parts.month !== month) continue;
+
+      totals[exp.category] = (totals[exp.category] || 0) + exp.amount;
+      countsByDay[parts.day] = (countsByDay[parts.day] || 0) + 1;
+      total += exp.amount;
+    }
+
+    const sorted = Object.entries(totals).sort(([, a], [, b]) => b - a);
+    const topFive = sorted.slice(0, 5);
+    const restSum = sorted.slice(5).reduce((acc, [, val]) => acc + val, 0);
+
+    const slices: DonutSlice[] = topFive.map(([category, value]) => ({
+      id: category,
+      label: category,
+      value: Math.round(value * 100) / 100,
+      color: getCategoryMeta(category).chartColor,
+    }));
+
+    if (restSum > 0) {
+      slices.push({
+        id: '__other__',
+        label: 'Altre categorie',
+        value: Math.round(restSum * 100) / 100,
+        color: 'var(--theme-text-subtle)',
+      });
+    }
+
+    return {
+      donutSlices: slices,
+      monthDonutTotal: Math.round(total * 100) / 100,
+      dayExpenseCounts: countsByDay,
+      topFiveCategorySet: new Set(topFive.map(([cat]) => cat)),
+      currentYear: year,
+      currentMonth: month,
+      currentYm: ym,
+    };
+  }, [expenses, splitFilter]);
+
+  const recentExpenses = useMemo(
+    () =>
+      [...expenses]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 6),
+    [expenses]
+  );
+
+  const monthBudgetPct =
+    budgetGoal > 0 ? Math.round((monthDonutTotal / budgetGoal) * 100) : 0;
+
+  const handleChangeSplitFilter = (next: SplitFilter) => {
+    setSplitFilter(next);
+    setSelectedMonthCategory(null);
+  };
+
+  const handleInspectBurnDay = (day: number, mode: 'day' | 'month') => {
+    if (mode === 'day') {
+      const dayItems = filterExpensesByDay(
+        expenses,
+        currentYear,
+        currentMonth,
+        day,
+        splitFilter
+      );
+      const pt = burnRate.points.find((p) => p.day === day);
+      setDrilldown({
+        title: `Spese del ${day} ${burnRate.monthLabel}`,
+        subtitle:
+          splitFilter === 'shared'
+            ? 'Solo spese condivise'
+            : splitFilter === 'personal'
+              ? 'Solo spese personali'
+              : 'Tutte le spese del giorno',
+        expenses: dayItems,
+        highlightNote: pt
+          ? `Cumulata al giorno ${day}: ${formatCurrency(
+              pt.cumulative ?? burnRate.currentTotal,
+              profile.currency
+            )} (passo ideale ${formatCurrency(pt.ideal, profile.currency)})`
+          : undefined,
+      });
+      return;
+    }
+
+    const monthItems = filterExpensesByMonth(expenses, currentYm, splitFilter);
+    setDrilldown({
+      title: `Spese di ${burnRate.monthLabel}`,
+      subtitle: `${monthItems.length} ${
+        monthItems.length === 1 ? 'spesa registrata' : 'spese registrate'
+      }`,
+      expenses: monthItems,
+      highlightNote: `Proiezione fine mese: ${formatCurrency(
+        burnRate.projectedEndOfMonth,
+        profile.currency
+      )} su budget di ${formatCurrency(burnRate.budgetGoal, profile.currency)}`,
+    });
+  };
+
+  const handleInspectMonthSlice = (sliceId: string) => {
+    const monthItems = filterExpensesByMonth(expenses, currentYm, splitFilter);
+    const matching =
+      sliceId === '__other__'
+        ? monthItems.filter((e) => !topFiveCategorySet.has(e.category))
+        : monthItems.filter((e) => e.category === sliceId);
+
+    setDrilldown({
+      title: sliceId === '__other__' ? 'Altre categorie del mese' : sliceId,
+      subtitle: `${burnRate.monthLabel} · ${matching.length} ${
+        matching.length === 1 ? 'spesa' : 'spese'
+      }`,
+      expenses: matching,
+    });
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <BalanceHeroCard
         profile={profile}
         netBalance={netBalance}
@@ -74,90 +216,45 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         onNavigateToSettlement={() => onNavigateTab('settlement')}
       />
 
-      {/* 2. Andamento Budget Mensile */}
-      <div className="ds-card p-5 sm:p-6 space-y-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-bold text-stone-900 font-display">
-                Andamento Spese del Mese
-              </h3>
-              <p className="text-xs text-stone-500 mt-0.5">
-                Novembre 2026 · Obiettivo mensile {formatCurrency(budgetGoal, profile.currency)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('analytics')}
-              className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <span>Tutti i Trend</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      {/* 2. Dashboard Mensile: Ritmo di Spesa & Top Categorie */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+        <div className="lg:col-span-7 min-w-0">
+          <BurnRateAreaChart
+            burnRate={burnRate}
+            currency={profile.currency}
+            splitFilter={splitFilter}
+            onChangeSplitFilter={handleChangeSplitFilter}
+            onNavigateToAnalytics={() => onNavigateTab('analytics')}
+            onDoubleClickBudget={onOpenSecurityModal}
+            onInspectDay={handleInspectBurnDay}
+            dayExpenseCounts={dayExpenseCounts}
+          />
+        </div>
 
-          <div
-            onDoubleClick={onOpenSecurityModal}
-            title="Doppio clic per modificare budget mensile e profilo"
-            className="ds-subcard p-4 space-y-2.5 cursor-pointer"
-          >
-            <div className="flex items-baseline justify-between text-xs">
-              <span className="font-bold text-lg font-mono text-stone-900 tabular-nums">
-                {formatCurrency(currentMonthTotal, profile.currency)}{' '}
-                <span className="text-xs font-sans font-normal text-stone-500">
-                  spesi su €{budgetGoal.toLocaleString()}
-                </span>
-              </span>
-              <span
-                className={`font-semibold font-mono text-xs px-2 py-0.5 rounded-md ${
-                  budgetPercentage > 90
-                    ? 'bg-rose-500/12 text-rose-600'
-                    : 'bg-orange-500/12 text-orange-700'
-                }`}
-              >
-                {budgetPercentage}%
-              </span>
-            </div>
-            <ProgressBar
-              value={budgetPercentage}
-              size="md"
-              variant={budgetPercentage > 90 ? 'danger' : 'default'}
-              label="Obiettivo mensile utilizzato"
-            />
-          </div>
-
-          <div className="pt-1 space-y-3">
-            <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-              Categorie Principali del Mese
-            </span>
-            {sortedCategories.length === 0 ? (
-              <p className="text-xs text-stone-500">Nessuna spesa registrata nel mese corrente.</p>
-            ) : (
-              <div className="space-y-3">
-                {sortedCategories.map(([category, amount]) => {
-                  const percent = Math.round((amount / (currentMonthTotal || 1)) * 100);
-                  return (
-                    <div key={category} className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 text-xs text-stone-700">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <CategoryBadge category={category} size="sm" />
-                          <span className="font-medium truncate">{category}</span>
-                        </div>
-                        <span className="font-mono font-semibold tabular-nums shrink-0">
-                          {formatCurrency(amount, profile.currency)}{' '}
-                          <span className="text-stone-400">({percent}%)</span>
-                        </span>
-                      </div>
-                      <ProgressBar value={percent} label={`Spese ${category}`} />
-                    </div>
-                  );
-                })}
-              </div>
+        <div className="lg:col-span-5 min-w-0">
+          <InteractiveDonutChart
+            title="Top Categorie del Mese"
+            subtitle={`${burnRate.monthLabel} · Tocca una categoria per vedere le spese`}
+            slices={donutSlices}
+            currency={profile.currency}
+            totalAmount={monthDonutTotal}
+            centerTopDefault={burnRate.monthLabel}
+            centerMainDefault={formatCompactCurrency(
+              monthDonutTotal,
+              profile.currency
             )}
-          </div>
+            centerSubDefault={`${monthBudgetPct}% budget`}
+            selectedId={selectedMonthCategory}
+            onSelectSlice={setSelectedMonthCategory}
+            onInspectSlice={handleInspectMonthSlice}
+            emptyMessage="Nessuna spesa registrata nel mese corrente."
+            className="h-full"
+          />
+        </div>
       </div>
 
       {/* 3. Ultime Transazioni Registrate */}
-      <div className="ds-card p-5 sm:p-6 space-y-4">
+      <div className="ds-card p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-stone-900 font-display">
@@ -217,7 +314,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <span>
                   Pagato da{' '}
                   <span className="font-semibold text-stone-700">
-                    {exp.payer === 'user' ? profile.userName : profile.partnerName}
+                    {exp.payer === 'user'
+                      ? profile.userName
+                      : profile.partnerName}
                   </span>
                 </span>
                 <span aria-hidden="true">·</span>
@@ -227,6 +326,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           ))}
         </div>
       </div>
+
+      <ExpenseDrilldownModal
+        payload={drilldown}
+        profile={profile}
+        onClose={() => setDrilldown(null)}
+        onSelectExpense={onSelectExpense}
+      />
     </div>
   );
 };

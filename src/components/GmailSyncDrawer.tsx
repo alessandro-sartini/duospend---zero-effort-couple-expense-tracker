@@ -6,7 +6,9 @@ import {
   ExpenseCategory,
   GmailRecurringRule,
   Payer,
+  SavingGoal,
 } from '../types';
+import { getActiveCategories } from '../constants/categories';
 import { getAccessToken, googleSignIn, hasGmailAccess, logout, usesServerSideOAuth } from '../services/auth';
 import { loadGmailDraft, saveGmailDraft } from '../services/storage';
 import { ConfirmDialog } from './ui/ConfirmDialog';
@@ -33,6 +35,7 @@ interface GmailSyncDrawerProps {
   gmailRecurringRules: GmailRecurringRule[];
   onSaveRecurringRule: (rule: GmailRecurringRule) => void;
   profile: CoupleProfile;
+  goals?: SavingGoal[];
   isSignedIn: boolean;
   userEmail?: string;
   onAuthChanged: (signedIn: boolean, email?: string) => void;
@@ -54,6 +57,7 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
   gmailRecurringRules,
   onSaveRecurringRule,
   profile,
+  goals = [],
   isSignedIn,
   userEmail,
   onAuthChanged,
@@ -828,6 +832,7 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
               <GmailReviewCandidateList
                 candidates={reviewCandidates}
                 currency={profile.currency}
+                categoryOptions={getActiveCategories(profile, goals)}
                 recurringSetupId={recurringSetupId}
                 recurringMerchantDrafts={recurringMerchantDrafts}
                 recurringAmountDrafts={recurringAmountDrafts}

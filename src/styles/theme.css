@@ -11,6 +11,10 @@
   --theme-progress-track: #ddd5c8;
   --theme-progress-fill: #ea580c;
   --theme-progress-danger: #e11d48;
+  --theme-text: #1c1917;
+  --theme-text-strong: #292524;
+  --theme-text-muted: #57534e;
+  --theme-text-subtle: #78716c;
 }
 
 [data-theme='dark'] {

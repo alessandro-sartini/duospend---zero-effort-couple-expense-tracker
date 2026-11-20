@@ -1,7 +1,20 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowRight, History, Scale, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../constants/categories';
+import {
+  computeMonthlyPartnerComparison,
+  computeNetBalanceTimeline,
+  filterExpensesByMonth,
+  type MonthlyPartnerPoint,
+  type NetBalanceTimelinePoint,
+  type SettlementChartRange,
+} from '../services/analytics-math';
 import { CoupleProfile, Expense, Settlement } from '../types';
+import {
+  ExpenseDrilldownModal,
+  type ExpenseDrilldownPayload,
+} from './charts/ExpenseDrilldownModal';
+import { NetBalanceTimelineChart } from './charts/NetBalanceTimelineChart';
 import { BalanceHeroCard } from './dashboard/BalanceHeroCard';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 
@@ -15,6 +28,7 @@ interface SettlementViewProps {
   partnerTotalPaid: number;
   onOpenSettlement: () => void;
   onDeleteSettlement?: (id: string) => void;
+  onSelectExpense?: (expense: Expense) => void;
 }
 
 export const SettlementView: React.FC<SettlementViewProps> = ({
@@ -27,11 +41,62 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
   partnerTotalPaid,
   onOpenSettlement,
   onDeleteSettlement,
+  onSelectExpense,
 }) => {
-  const [settlementPendingDelete, setSettlementPendingDelete] = useState<Settlement | null>(null);
+  const [settlementPendingDelete, setSettlementPendingDelete] =
+    useState<Settlement | null>(null);
+  const [chartRange, setChartRange] = useState<SettlementChartRange>('6m');
+  const [drilldown, setDrilldown] = useState<ExpenseDrilldownPayload | null>(
+    null
+  );
+
+  const timeline = useMemo(
+    () =>
+      computeNetBalanceTimeline(expenses, settlements, profile, chartRange),
+    [expenses, settlements, profile, chartRange]
+  );
+
+  const monthlyPartner = useMemo(
+    () => computeMonthlyPartnerComparison(expenses, chartRange),
+    [expenses, chartRange]
+  );
+
+  const handleInspectTimelinePoint = (point: NetBalanceTimelinePoint) => {
+    const dayExpenses = expenses.filter((e) => e.date === point.date);
+    const daySettlements = settlements.filter((s) => s.date === point.date);
+    setDrilldown({
+      title: `Movimenti del ${point.date}`,
+      subtitle: `${dayExpenses.length} spese · ${daySettlements.length} pareggi`,
+      expenses: dayExpenses,
+      settlements: daySettlements,
+      highlightNote: `Saldo netto al termine del ${point.date}: ${
+        point.balance > 0 ? '+' : ''
+      }${formatCurrency(point.balance, profile.currency)}`,
+    });
+  };
+
+  const handleInspectPartnerMonth = (point: MonthlyPartnerPoint) => {
+    const monthExpenses = filterExpensesByMonth(expenses, point.ym);
+    const monthSettlements = settlements.filter((s) =>
+      s.date.startsWith(point.ym)
+    );
+    setDrilldown({
+      title: `Movimenti di ${point.fullLabel}`,
+      subtitle: `${monthExpenses.length} spese · ${monthSettlements.length} pareggi`,
+      expenses: monthExpenses,
+      settlements: monthSettlements,
+      highlightNote: `${profile.userName}: ${formatCurrency(
+        point.userPaid,
+        profile.currency
+      )} · ${profile.partnerName}: ${formatCurrency(
+        point.partnerPaid,
+        profile.currency
+      )}`,
+    });
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <BalanceHeroCard
         profile={profile}
         netBalance={netBalance}
@@ -43,7 +108,18 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
         onOpenSettlement={onOpenSettlement}
       />
 
-      {/* 2. Storico Rimborsi Effettuati */}
+      {/* 2. Grafici Evoluzione Saldo & Anticipi Mensili */}
+      <NetBalanceTimelineChart
+        timeline={timeline}
+        monthlyPartner={monthlyPartner}
+        profile={profile}
+        range={chartRange}
+        onChangeRange={setChartRange}
+        onInspectTimelinePoint={handleInspectTimelinePoint}
+        onInspectMonth={handleInspectPartnerMonth}
+      />
+
+      {/* 3. Storico Rimborsi Effettuati */}
       <div className="ds-card overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-stone-100 bg-stone-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -64,8 +140,10 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
         ) : (
           <div className="divide-y divide-stone-100">
             {settlements.map((stl) => {
-              const fromName = stl.from === 'user' ? profile.userName : profile.partnerName;
-              const toName = stl.to === 'user' ? profile.userName : profile.partnerName;
+              const fromName =
+                stl.from === 'user' ? profile.userName : profile.partnerName;
+              const toName =
+                stl.to === 'user' ? profile.userName : profile.partnerName;
 
               return (
                 <div
@@ -93,9 +171,14 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
                       <span className="text-base font-bold font-mono text-emerald-600 tabular-nums">
-                        {formatCurrency(stl.amount, stl.currency || profile.currency)}
+                        {formatCurrency(
+                          stl.amount,
+                          stl.currency || profile.currency
+                        )}
                       </span>
-                      <span className="block text-[11px] text-stone-400">Pareggiato</span>
+                      <span className="block text-[11px] text-stone-400">
+                        Pareggiato
+                      </span>
                     </div>
                     {onDeleteSettlement && (
                       <button
@@ -137,6 +220,13 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
           setSettlementPendingDelete(null);
         }}
         onCancel={() => setSettlementPendingDelete(null)}
+      />
+
+      <ExpenseDrilldownModal
+        payload={drilldown}
+        profile={profile}
+        onClose={() => setDrilldown(null)}
+        onSelectExpense={onSelectExpense}
       />
     </div>
   );

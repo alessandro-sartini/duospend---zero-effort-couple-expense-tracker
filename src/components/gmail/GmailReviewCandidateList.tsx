@@ -8,6 +8,7 @@ import { getDefaultMerchant } from './types';
 interface GmailReviewCandidateListProps {
   candidates: GmailReviewCandidate[];
   currency: string;
+  categoryOptions?: string[];
   recurringSetupId: string | null;
   recurringMerchantDrafts: Record<string, string>;
   recurringAmountDrafts: Record<string, string>;
@@ -25,6 +26,7 @@ interface GmailReviewCandidateListProps {
 export const GmailReviewCandidateList: React.FC<GmailReviewCandidateListProps> = ({
   candidates,
   currency,
+  categoryOptions = EXPENSE_CATEGORIES,
   recurringSetupId,
   recurringMerchantDrafts,
   recurringAmountDrafts,
@@ -155,7 +157,7 @@ export const GmailReviewCandidateList: React.FC<GmailReviewCandidateListProps> =
                       }
                       className="ds-input min-h-9 min-w-44 px-2.5 text-xs"
                     >
-                      {EXPENSE_CATEGORIES.map((cat) => (
+                      {categoryOptions.map((cat) => (
                         <option key={cat} value={cat}>
                           {cat}
                         </option>

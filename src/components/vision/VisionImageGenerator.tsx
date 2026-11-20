@@ -3,8 +3,8 @@ import { Check, RefreshCw, Sparkles } from 'lucide-react';
 import { SavingGoal } from '../../types';
 
 const GOAL_PRESETS = [
-  'Tramonto romantico per luna di miele in terrazza a Positano con vista mare e bouganville',
-  'Ricevimento matrimonio intimo in casale rustico toscano con luci calde soffuse al crepuscolo',
+  'Tramonto romantico in terrazza a Positano con vista mare e bouganville al tramonto',
+  'Casa indipendente immersa nel verde toscano con giardino illuminato da luci calde',
   'Soggiorno luminoso in appartamento moderno scandinavo con parquet chiaro e balcone fiorito',
   'Viaggio in camper tra i passi dolomitici con colazione all aperto ammirando le montagne',
 ];
@@ -118,7 +118,7 @@ export const VisionImageGenerator: React.FC<VisionImageGeneratorProps> = ({
           type="text"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Descrivi il vostro traguardo (es. matrimonio, viaggio, casa dei sogni)..."
+          placeholder="Descrivi il vostro traguardo (es. nuova casa, viaggio, progetto futuro)..."
           className="ds-input w-full px-3.5 py-2.5 text-xs sm:text-sm"
         />
       </div>

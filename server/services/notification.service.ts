@@ -115,7 +115,7 @@ Estrai con precisione:
 - merchant: nome dell'esercente, negozio, bar, supermercato o servizio (es. "Esselunga", "Bar Roma", "Amazon", "Pizzeria Da Mario")
 - amount: importo numerico pagato (se espresso con virgola es. "14,50" converti in 14.50)
 - currency: valuta (di default "EUR")
-- category: categorizza rigorosamente in una di queste: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Matrimonio e Obiettivi", "Altro"
+- category: categorizza rigorosamente in una di queste: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Altro"
 - date: data nel formato YYYY-MM-DD (se non specificata, usa la data odierna)
 - notes: breve riassunto (es. "Pagamento con carta tramite ${safeAppName}")
 
@@ -209,7 +209,7 @@ Per ogni notifica o SMS che rappresenta una spesa effettuata, invio denaro o acq
 - merchant (esercente o fornitore)
 - amount (importo numerico pagato)
 - currency (valuta, default EUR)
-- category (una tra: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Matrimonio e Obiettivi", "Altro")
+- category (una tra: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Altro")
 - date (YYYY-MM-DD)
 - notes (breve descrizione)
 

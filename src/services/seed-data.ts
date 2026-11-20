@@ -82,15 +82,15 @@ export const initialExpenses: Expense[] = [
   },
   {
     id: 'exp-6',
-    title: 'Acconto Fotografo Matrimonio',
+    title: 'Acconto Arredo Soggiorno',
     amount: 450.00,
     currency: 'EUR',
     date: '2026-10-28',
-    category: 'Matrimonio e Obiettivi',
+    category: 'Casa e Affitto',
     payer: 'user',
     splitType: '50_50',
     source: 'manual',
-    notes: 'Primo acconto pacchetto servizio fotografico nozze',
+    notes: 'Primo acconto tavolo e sedie soggiorno',
   },
   {
     id: 'exp-7',
@@ -133,7 +133,7 @@ export const initialSettlements: Settlement[] = [
 export const initialGoals: SavingGoal[] = [
   {
     id: 'goal-1',
-    title: 'Luna di Miele in Costiera Amalfitana',
+    title: 'Viaggio in Costiera Amalfitana',
     targetAmount: 4000,
     currentAmount: 2650,
     targetDate: '2027-06-15',
@@ -142,9 +142,9 @@ export const initialGoals: SavingGoal[] = [
   },
   {
     id: 'goal-2',
-    title: 'Caparra Location Ricevimento Matrimonio',
-    targetAmount: 6000,
-    currentAmount: 4800,
+    title: 'Fondo Vacanza Estiva',
+    targetAmount: 3000,
+    currentAmount: 1800,
     targetDate: '2027-02-01',
   },
   {

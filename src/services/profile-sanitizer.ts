@@ -4,6 +4,7 @@ import { defaultProfile } from './seed-data';
 
 const LEGACY_USER_NAMES = new Set(['utente 1', 'legacy_user']);
 const LEGACY_PARTNER_NAMES = new Set(['fidanzata']);
+const BUILTIN_LOWER_SET = new Set(EXPENSE_CATEGORIES.map((c) => c.toLowerCase()));
 
 export const deriveNameFromEmail = (email?: string): string => {
   if (typeof email !== 'string') return '';
@@ -24,18 +25,57 @@ export const deriveNameFromEmail = (email?: string): string => {
     .slice(0, 60);
 };
 
+const sanitizeCustomCategories = (raw: unknown): string[] | undefined => {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const clean = entry.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (clean.length < 2) continue;
+    const lower = clean.toLowerCase();
+    if (BUILTIN_LOWER_SET.has(lower) || seen.has(lower)) continue;
+    seen.add(lower);
+    cleaned.push(clean);
+    if (cleaned.length >= 40) break;
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
+};
+
+const sanitizeHiddenCategories = (raw: unknown): string[] | undefined => {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const clean = entry.trim();
+    if (
+      clean === 'Altro' ||
+      clean === 'Other' ||
+      !EXPENSE_CATEGORIES.includes(clean) ||
+      seen.has(clean)
+    ) {
+      continue;
+    }
+    seen.add(clean);
+    cleaned.push(clean);
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
+};
+
 const sanitizeCategoryBudgets = (
   raw: unknown
 ): Partial<Record<ExpenseCategory, number>> | undefined => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const record = raw as Record<string, unknown>;
   const cleaned: Partial<Record<ExpenseCategory, number>> = {};
-  for (const category of EXPENSE_CATEGORIES) {
-    const rawValue = record[category];
+  for (const [category, rawValue] of Object.entries(record)) {
+    const cleanCategory = category.trim();
+    if (cleanCategory.length < 2 || cleanCategory.length > 100) continue;
     if (rawValue === undefined || rawValue === null || rawValue === '') continue;
     const numeric = Number(rawValue);
     if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 1_000_000) {
-      cleaned[category] = Math.round(numeric * 100) / 100;
+      cleaned[cleanCategory] = Math.round(numeric * 100) / 100;
     }
   }
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
@@ -71,6 +111,9 @@ export const sanitizeAndMigrateProfile = (
   const userEmail = typeof raw.userEmail === 'string' ? raw.userEmail.slice(0, 254).toLowerCase().trim() : '';
   const partnerEmail = typeof raw.partnerEmail === 'string' ? raw.partnerEmail.slice(0, 254).toLowerCase().trim() : '';
 
+  const customCategories = sanitizeCustomCategories(raw.customCategories);
+  const hiddenCategories = sanitizeHiddenCategories(raw.hiddenCategories);
+
   return {
     userName,
     partnerName,
@@ -80,5 +123,7 @@ export const sanitizeAndMigrateProfile = (
     userEmail,
     partnerEmail,
     categoryBudgets: sanitizeCategoryBudgets(raw.categoryBudgets),
+    ...(customCategories ? { customCategories } : {}),
+    ...(hiddenCategories ? { hiddenCategories } : {}),
   };
 };

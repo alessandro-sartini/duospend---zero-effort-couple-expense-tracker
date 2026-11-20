@@ -573,7 +573,7 @@ For likely expenses, extract:
 - total (numeric paid amount > 0, e.g. 24.50)
 - currency (USD, EUR, GBP, etc.)
 - date (YYYY-MM-DD format)
-- category (one of: Spesa, Ristoranti e Bar, Casa e Affitto, Bollette e Utenze, Trasporti, Shopping, Svago e Intrattenimento, Salute e Benessere, Viaggi, Matrimonio e Obiettivi, Altro)
+- category (one of: Spesa, Ristoranti e Bar, Casa e Affitto, Bollette e Utenze, Trasporti, Shopping, Svago e Intrattenimento, Salute e Benessere, Viaggi, Altro)
 - itemsDescription (one sentence summary of purchased items)
 - id (copy the exact id of the source email)
 

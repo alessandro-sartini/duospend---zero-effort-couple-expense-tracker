@@ -2,7 +2,7 @@ export type Payer = 'user' | 'partner';
 
 export type SplitType = '50_50' | '100_user' | '100_partner' | 'custom';
 
-export type ExpenseCategory =
+export type BuiltinExpenseCategory =
   | 'Spesa'
   | 'Ristoranti e Bar'
   | 'Casa e Affitto'
@@ -24,6 +24,8 @@ export type ExpenseCategory =
   | 'Travel'
   | 'Wedding & Goals'
   | 'Other';
+
+export type ExpenseCategory = string;
 
 export interface ExpenseItem {
   name: string;
@@ -76,6 +78,8 @@ export interface CoupleProfile {
   userEmail?: string;
   partnerEmail?: string;
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
+  customCategories?: string[];
+  hiddenCategories?: string[];
 }
 
 export interface ChatMessage {

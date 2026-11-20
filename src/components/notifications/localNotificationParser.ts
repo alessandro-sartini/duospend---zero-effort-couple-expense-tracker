@@ -50,7 +50,6 @@ const LOCAL_CATEGORY_RULES: Array<{ category: ExpenseCategory; pattern: RegExp }
   { category: 'Salute e Benessere', pattern: /\b(farmacia|medico|dentista|analisi|salute|ottica)\b/i },
   { category: 'Svago e Intrattenimento', pattern: /\b(cinema|netflix|spotify|teatro|concerto|biglietti)\b/i },
   { category: 'Viaggi', pattern: /\b(hotel|booking|airbnb|ryanair|easyjet|ita airways|viaggio)\b/i },
-  { category: 'Matrimonio e Obiettivi', pattern: /\b(matrimonio|nozze|fedi)\b/i },
   { category: 'Shopping', pattern: /\b(amazon|zalando|decathlon|mediaworld|unieuro|apple|negozio)\b/i },
 ];
 

@@ -275,7 +275,7 @@ export async function parseReceiptWithAiOrFallback(params: {
       contents: { parts },
       config: {
         systemInstruction:
-          'You are an expert financial auditor and receipt OCR engine. Categorize expenses strictly into one of: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Matrimonio e Obiettivi", "Altro".',
+          'You are an expert financial auditor and receipt OCR engine. Categorize expenses strictly into one of: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Altro".',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,

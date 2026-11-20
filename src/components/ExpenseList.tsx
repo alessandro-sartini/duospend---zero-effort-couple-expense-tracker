@@ -10,11 +10,11 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  EXPENSE_CATEGORIES,
   formatCurrency,
   formatSplitLabel,
+  getActiveCategories,
 } from '../constants/categories';
-import { CoupleProfile, Expense } from '../types';
+import { CoupleProfile, Expense, SavingGoal } from '../types';
 import { CategoryBadge } from './ui/CategoryBadge';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { SourceBadge } from './ui/SourceBadge';
@@ -28,6 +28,7 @@ function escapeCsvCell(value: string | number): string {
 interface ExpenseListProps {
   expenses: Expense[];
   profile: CoupleProfile;
+  goals?: SavingGoal[];
   onEditExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
   onOpenScanReceipt: () => void;
@@ -38,12 +39,25 @@ interface ExpenseListProps {
 export const ExpenseList: React.FC<ExpenseListProps> = ({
   expenses,
   profile,
+  goals = [],
   onEditExpense,
   onDeleteExpense,
   onOpenScanReceipt,
   onlyZeroAmount = false,
   onClearZeroAmountFilter,
 }) => {
+  const filterCategories = React.useMemo(() => {
+    const active = getActiveCategories(profile, goals);
+    const seen = new Set(active);
+    const extraFromHistory: string[] = [];
+    for (const exp of expenses) {
+      if (exp.category && !seen.has(exp.category)) {
+        seen.add(exp.category);
+        extraFromHistory.push(exp.category);
+      }
+    }
+    return [...active, ...extraFromHistory];
+  }, [profile, goals, expenses]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPayer, setSelectedPayer] = useState<string>('all');
@@ -159,7 +173,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             className="ds-input w-full px-3 py-2 text-xs"
           >
             <option value="all">Tutte le Categorie</option>
-            {EXPENSE_CATEGORIES.map((cat) => (
+            {filterCategories.map((cat) => (
               <option key={cat} value={cat}>
                 {cat}
               </option>

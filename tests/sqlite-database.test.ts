@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { DatabaseSync } from 'node:sqlite';
 import os from 'os';
 import path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -502,5 +503,60 @@ describe('Persistenza SQLite (node:sqlite) e migrazione automatica da JSON', () 
       replacementModel: 'gemini-3.8-flash',
     });
     expect(entries.some((e) => e.modelId === 'gemini-expired-model')).toBe(false);
+  });
+
+  it('migra la tabella profile legacy senza perdere dati e persiste customCategories e hiddenCategories', () => {
+    const dir = createTempDir();
+    const sqliteFile = path.join(dir, 'legacy-profile.sqlite');
+
+    const rawDb = new DatabaseSync(sqliteFile);
+    try {
+      rawDb.exec(`
+        CREATE TABLE profile (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          user_name TEXT NOT NULL,
+          partner_name TEXT NOT NULL,
+          monthly_budget REAL NOT NULL,
+          currency TEXT NOT NULL,
+          wedding_budget_goal REAL,
+          user_email TEXT,
+          partner_email TEXT,
+          category_budgets_json TEXT,
+          last_updated TEXT NOT NULL
+        );
+        INSERT INTO profile (
+          id, user_name, partner_name, monthly_budget, currency, wedding_budget_goal, user_email, partner_email, category_budgets_json, last_updated
+        ) VALUES (1, 'Ale', 'Bea', 3000, 'EUR', NULL, 'ale@example.com', 'bea@example.com', '{"Spesa":500}', '2026-11-01T00:00:00.000Z');
+      `);
+    } finally {
+      rawDb.close();
+    }
+
+    const db = trackHandle(createSqliteDatabase({ dbFile: sqliteFile }));
+    const initialAfterMigration = db.readDatabase();
+    expect(initialAfterMigration.profile.userName).toBe('Ale');
+    expect(initialAfterMigration.profile.categoryBudgets).toEqual({ Spesa: 500 });
+    expect(initialAfterMigration.profile.customCategories).toBeUndefined();
+    expect(initialAfterMigration.profile.hiddenCategories).toBeUndefined();
+
+    db.writeDatabase({
+      profile: {
+        ...initialAfterMigration.profile,
+        customCategories: ['Animali', 'Palestra'],
+        hiddenCategories: ['Shopping'],
+        categoryBudgets: {
+          Spesa: 500,
+          Animali: 120,
+        },
+      },
+    });
+
+    const updated = db.readDatabase();
+    expect(updated.profile.customCategories).toEqual(['Animali', 'Palestra']);
+    expect(updated.profile.hiddenCategories).toEqual(['Shopping']);
+    expect(updated.profile.categoryBudgets).toEqual({
+      Spesa: 500,
+      Animali: 120,
+    });
   });
 });

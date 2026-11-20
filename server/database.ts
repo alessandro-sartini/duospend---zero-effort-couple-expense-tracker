@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { LEGACY_JSON_DB_FILE, SQLITE_DB_FILE } from './config';
 import type { CoupleProfile, Expense, SavingGoal, Settlement } from '../src/types';
 import {
+  buildAllowedCategorySet,
+  sanitizeCustomCategories,
   sanitizeExpenseRecord,
   sanitizeGoalRecord,
   sanitizePlainText,
@@ -131,15 +133,15 @@ export const getInitialDatabase = (): ServerDatabase => ({
     },
     {
       id: 'exp-6',
-      title: 'Acconto Fotografo Matrimonio',
+      title: 'Acconto Arredo Soggiorno',
       amount: 450.00,
       currency: 'EUR',
       date: '2026-10-28',
-      category: 'Matrimonio e Obiettivi',
+      category: 'Casa e Affitto',
       payer: 'user',
       splitType: '50_50',
       source: 'manual',
-      notes: 'Primo acconto pacchetto servizio fotografico nozze',
+      notes: 'Primo acconto tavolo e sedie soggiorno',
     },
     {
       id: 'exp-7',
@@ -180,7 +182,7 @@ export const getInitialDatabase = (): ServerDatabase => ({
   goals: [
     {
       id: 'goal-1',
-      title: 'Luna di Miele in Costiera Amalfitana',
+      title: 'Viaggio in Costiera Amalfitana',
       targetAmount: 4000,
       currentAmount: 2650,
       targetDate: '2027-06-15',
@@ -189,9 +191,9 @@ export const getInitialDatabase = (): ServerDatabase => ({
     },
     {
       id: 'goal-2',
-      title: 'Caparra Location Ricevimento Matrimonio',
-      targetAmount: 6000,
-      currentAmount: 4800,
+      title: 'Fondo Vacanza Estiva',
+      targetAmount: 3000,
+      currentAmount: 1800,
       targetDate: '2027-02-01',
     },
     {
@@ -293,10 +295,27 @@ function sanitizeLegacyDatabasePayload(raw: unknown): ServerDatabase {
     ? candidatePartnerEmail
     : fallback.profile.partnerEmail || '';
 
+  const goals = Array.isArray(candidate.goals)
+    ? candidate.goals
+        .slice(0, 1_000)
+        .map(sanitizeGoalRecord)
+        .filter((goal): goal is SavingGoal => goal !== null)
+    : fallback.goals;
+
+  const customCatsFromLegacy = sanitizeCustomCategories(
+    rawProfileSource.customCategories,
+    fallback.profile.customCategories
+  );
+  const legacyAllowedCategories = buildAllowedCategorySet(
+    { customCategories: customCatsFromLegacy },
+    goals
+  );
+
   const profile = sanitizeProfileRecord(
     rawProfileSource,
     { ...fallback.profile, userEmail: legacyUserEmail },
-    legacyPartnerEmail
+    legacyPartnerEmail,
+    legacyAllowedCategories
   );
 
   const expenses = Array.isArray(candidate.expenses)
@@ -310,7 +329,7 @@ function sanitizeLegacyDatabasePayload(raw: unknown): ServerDatabase {
             ? { ...record, title: 'Decathlon Abbigliamento Running (Personale)' }
             : record;
         })
-        .map(sanitizeExpenseRecord)
+        .map((item) => sanitizeExpenseRecord(item, legacyAllowedCategories))
         .filter((expense): expense is Expense => expense !== null)
     : fallback.expenses;
 
@@ -320,13 +339,6 @@ function sanitizeLegacyDatabasePayload(raw: unknown): ServerDatabase {
         .map(sanitizeSettlementRecord)
         .filter((settlement): settlement is Settlement => settlement !== null)
     : fallback.settlements;
-
-  const goals = Array.isArray(candidate.goals)
-    ? candidate.goals
-        .slice(0, 1_000)
-        .map(sanitizeGoalRecord)
-        .filter((goal): goal is SavingGoal => goal !== null)
-    : fallback.goals;
 
   const parsedLastUpdated =
     typeof candidate.lastUpdated === 'string' ? Date.parse(candidate.lastUpdated) : NaN;
@@ -440,6 +452,8 @@ function initializeSchema(db: DatabaseSync): void {
       user_email TEXT NOT NULL DEFAULT '',
       partner_email TEXT NOT NULL DEFAULT '',
       category_budgets_json TEXT,
+      custom_categories_json TEXT,
+      hidden_categories_json TEXT,
       last_updated TEXT NOT NULL
     );
 
@@ -464,6 +478,15 @@ function initializeSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_ai_model_registry_expires_at ON ai_model_registry (expires_at);
   `);
+
+  const profileCols = db.prepare('PRAGMA table_info(profile)').all() as Array<{ name?: string }>;
+  const profileColNames = new Set(profileCols.map((col) => col.name));
+  if (!profileColNames.has('custom_categories_json')) {
+    db.exec('ALTER TABLE profile ADD COLUMN custom_categories_json TEXT');
+  }
+  if (!profileColNames.has('hidden_categories_json')) {
+    db.exec('ALTER TABLE profile ADD COLUMN hidden_categories_json TEXT');
+  }
 }
 
 export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): SqliteDatabaseHandle {
@@ -536,8 +559,9 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
   const upsertProfileStmt = db.prepare(`
     INSERT INTO profile (
       id, user_name, partner_name, monthly_budget, currency, wedding_budget_goal,
-      user_email, partner_email, category_budgets_json, last_updated
-    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      user_email, partner_email, category_budgets_json, custom_categories_json,
+      hidden_categories_json, last_updated
+    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       user_name = excluded.user_name,
       partner_name = excluded.partner_name,
@@ -547,6 +571,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       user_email = excluded.user_email,
       partner_email = excluded.partner_email,
       category_budgets_json = excluded.category_budgets_json,
+      custom_categories_json = excluded.custom_categories_json,
+      hidden_categories_json = excluded.hidden_categories_json,
       last_updated = excluded.last_updated
   `);
 
@@ -622,6 +648,14 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       profile.categoryBudgets && Object.keys(profile.categoryBudgets).length > 0
         ? JSON.stringify(profile.categoryBudgets)
         : null;
+    const customCategoriesJson =
+      profile.customCategories && profile.customCategories.length > 0
+        ? JSON.stringify(profile.customCategories)
+        : null;
+    const hiddenCategoriesJson =
+      profile.hiddenCategories && profile.hiddenCategories.length > 0
+        ? JSON.stringify(profile.hiddenCategories)
+        : null;
     upsertProfileStmt.run(
       profile.userName,
       profile.partnerName,
@@ -631,6 +665,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       profile.userEmail ?? '',
       profile.partnerEmail ?? '',
       categoryBudgetsJson,
+      customCategoriesJson,
+      hiddenCategoriesJson,
       lastUpdated
     );
   };
@@ -699,6 +735,12 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       const categoryBudgets = parseJsonSafe<CoupleProfile['categoryBudgets']>(
         profileRow?.category_budgets_json
       );
+      const customCategories = parseJsonSafe<string[]>(
+        profileRow?.custom_categories_json
+      );
+      const hiddenCategories = parseJsonSafe<string[]>(
+        profileRow?.hidden_categories_json
+      );
 
       const profile: CoupleProfile = profileRow
         ? {
@@ -713,6 +755,12 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
             partnerEmail: String(profileRow.partner_email ?? ''),
             ...(categoryBudgets && Object.keys(categoryBudgets).length > 0
               ? { categoryBudgets }
+              : {}),
+            ...(Array.isArray(customCategories) && customCategories.length > 0
+              ? { customCategories }
+              : {}),
+            ...(Array.isArray(hiddenCategories) && hiddenCategories.length > 0
+              ? { hiddenCategories }
               : {}),
           }
         : fallbackProfile;

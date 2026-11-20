@@ -83,6 +83,7 @@ app.use((req, _res, next) => {
   }
   next();
 });
+app.use('/api/auth/google-code', rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/google-session', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use(authRoutes);
 app.use('/api/gemini', rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false }));

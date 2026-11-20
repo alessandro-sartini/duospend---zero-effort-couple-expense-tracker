@@ -41,12 +41,12 @@ export async function postGmailSyncController(req: Request, res: Response) {
       body: (req.body ?? {}) as Record<string, unknown>,
     });
     return res.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     return sendControllerError(
       res,
       error,
       500,
-      error?.message || 'Failed to sync Gmail receipts.',
+      'Errore durante la sincronizzazione Gmail.',
       'Gmail sync error'
     );
   }

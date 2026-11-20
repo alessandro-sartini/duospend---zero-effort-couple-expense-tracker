@@ -1,7 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { Receipt } from 'lucide-react';
-import { EXPENSE_CATEGORIES } from '../constants/categories';
-import { CoupleProfile, Expense, ExpenseCategory, Payer, SplitType } from '../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Receipt, Target, Trash2 } from 'lucide-react';
+import {
+  formatCurrency,
+  getSelectableCategoryGroups,
+} from '../constants/categories';
+import {
+  CoupleProfile,
+  Expense,
+  ExpenseCategory,
+  Payer,
+  SavingGoal,
+  SplitType,
+} from '../types';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { ModalShell } from './ui/ModalShell';
 import { PayerSelector } from './ui/PayerSelector';
 
@@ -9,7 +20,10 @@ interface AddExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (expense: Omit<Expense, 'id'>) => void;
+  onDelete?: (id: string) => void;
+  onCreditGoal?: (goalId: string, delta: number) => void;
   profile: CoupleProfile;
+  goals?: SavingGoal[];
   initialData?: Partial<Expense>;
 }
 
@@ -17,9 +31,19 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDelete,
+  onCreditGoal,
   profile,
+  goals = [],
   initialData,
 }) => {
+  const categoryGroups = useMemo(
+    () => getSelectableCategoryGroups(profile, goals),
+    [profile, goals]
+  );
+
+  const fallbackCategory = categoryGroups.base[0] || 'Altro';
+
   const [title, setTitle] = useState(initialData?.title || '');
   const [amount, setAmount] = useState(initialData?.amount?.toString() || '');
   const [currency, setCurrency] = useState(initialData?.currency || profile.currency);
@@ -27,7 +51,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     initialData?.date || new Date().toISOString().slice(0, 10)
   );
   const [category, setCategory] = useState<ExpenseCategory>(
-    initialData?.category || 'Spesa'
+    initialData?.category || fallbackCategory
   );
   const [payer, setPayer] = useState<Payer>(initialData?.payer || 'user');
   const [splitType, setSplitType] = useState<SplitType>(
@@ -37,6 +61,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     initialData?.customSplitRatio ? Math.round(initialData.customSplitRatio * 100) : 50
   );
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [creditGoalOnSave, setCreditGoalOnSave] = useState(true);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  const isEditing = Boolean(initialData?.id);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -44,7 +72,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     setAmount(initialData?.amount != null ? String(initialData.amount) : '');
     setCurrency(initialData?.currency || profile.currency);
     setDate(initialData?.date || new Date().toISOString().slice(0, 10));
-    setCategory(initialData?.category || 'Spesa');
+    setCategory(initialData?.category || fallbackCategory);
     setPayer(initialData?.payer || 'user');
     setSplitType(initialData?.splitType || '50_50');
     setCustomRatio(
@@ -53,7 +81,27 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         : 50
     );
     setNotes(initialData?.notes || '');
-  }, [isOpen, initialData, profile.currency]);
+    setCreditGoalOnSave(true);
+    setConfirmDeleteOpen(false);
+  }, [isOpen, initialData, profile.currency, fallbackCategory]);
+
+  const allListedCategories = useMemo(
+    () =>
+      new Set([
+        ...categoryGroups.base,
+        ...categoryGroups.custom,
+        ...categoryGroups.goals,
+      ]),
+    [categoryGroups]
+  );
+
+  const matchedGoal = useMemo(
+    () =>
+      goals.find(
+        (g) => g.title.trim().toLowerCase() === category.trim().toLowerCase()
+      ) ?? null,
+    [goals, category]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +123,11 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       items: initialData?.items,
       tax: initialData?.tax,
     });
+
+    if (!isEditing && matchedGoal && creditGoalOnSave && onCreditGoal) {
+      onCreditGoal(matchedGoal.id, parsedAmount);
+    }
+
     onClose();
   };
 
@@ -105,173 +158,258 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   ];
 
   const footer = (
-    <div className="flex items-center justify-end gap-2">
-      <button
-        type="button"
-        onClick={onClose}
-        className="ds-btn-secondary min-h-10 px-4 text-xs"
-      >
-        Annulla
-      </button>
-      <button
-        type="submit"
-        form="add-expense-form"
-        className="ds-btn-primary min-h-10 px-5 text-xs"
-      >
-        Salva Spesa
-      </button>
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        {isEditing && onDelete && initialData?.id && (
+          <button
+            type="button"
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="min-h-10 px-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Elimina</span>
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="ds-btn-secondary min-h-10 px-4 text-xs"
+        >
+          Annulla
+        </button>
+        <button
+          type="submit"
+          form="add-expense-form"
+          className="ds-btn-primary min-h-10 px-5 text-xs"
+        >
+          Salva Spesa
+        </button>
+      </div>
     </div>
   );
 
   return (
-    <ModalShell
-      isOpen={isOpen}
-      onClose={onClose}
-      title={initialData?.title ? 'Modifica Spesa' : 'Registra Nuova Spesa'}
-      subtitle="Registrata nel fondo comune di coppia"
-      icon={Receipt}
-      closeLabel="Chiudi modifica spesa"
-      footer={footer}
-    >
-      <form id="add-expense-form" onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
-        {/* Importo e Titolo */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-1">
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Importo ({currency})
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-xs text-stone-400 font-mono">
-                {currency === 'EUR' ? '€' : currency}
-              </span>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="ds-input w-full pl-7 pr-3 py-2 text-base font-mono font-bold"
-              />
-            </div>
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Esercente / Descrizione
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="es. Esselunga, Trattoria, Bolletta Luce"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="ds-input w-full px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-
-        {/* Data & Categoria */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Data
-            </label>
-            <input
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="ds-input w-full px-3 py-2 text-xs font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Categoria
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
-              className="ds-input w-full px-3 py-2 text-xs"
-            >
-              {EXPENSE_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Chi ha pagato */}
-        <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1.5">
-            Chi ha pagato?
-          </label>
-          <PayerSelector value={payer} onChange={setPayer} profile={profile} />
-        </div>
-
-        {/* Regola di Ripartizione */}
-        <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1.5">
-            Ripartizione della Spesa
-          </label>
-          <div className="grid grid-cols-1 min-[400px]:grid-cols-3 gap-2">
-            {splitOptions.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={opt.onSelect}
-                className={`min-h-11 py-2 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
-                  opt.active
-                    ? 'border-orange-500 bg-orange-50/50 text-orange-950 font-semibold'
-                    : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-medium'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {splitType === 'custom' && (
-            <div className="ds-subcard mt-3 p-3">
-              <div className="flex justify-between text-xs font-semibold text-stone-700 mb-1">
-                <span>
-                  {profile.userName}: {customRatio}%
+    <>
+      <ModalShell
+        isOpen={isOpen}
+        onClose={onClose}
+        title={initialData?.title ? 'Modifica Spesa' : 'Registra Nuova Spesa'}
+        subtitle="Registrata nel fondo comune di coppia"
+        icon={Receipt}
+        closeLabel="Chiudi modifica spesa"
+        footer={footer}
+      >
+        <form id="add-expense-form" onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
+          {/* Importo e Titolo */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-1">
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Importo ({currency})
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-xs text-stone-400 font-mono">
+                  {currency === 'EUR' ? '€' : currency}
                 </span>
-                <span>
-                  {profile.partnerName}: {100 - customRatio}%
-                </span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="ds-input w-full pl-7 pr-3 py-2 text-base font-mono font-bold"
+                />
               </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Esercente / Descrizione
+              </label>
               <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={customRatio}
-                onChange={(e) => setCustomRatio(parseInt(e.target.value, 10))}
-                className="w-full accent-orange-600"
+                type="text"
+                required
+                placeholder="es. Esselunga, Trattoria, Bolletta Luce"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="ds-input w-full px-3 py-2 text-sm"
               />
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Note */}
-        <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">
-            Note Aggiuntive (Opzionale)
-          </label>
-          <textarea
-            rows={3}
-            placeholder="es. pagato con buoni pasto, mancia inclusa"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="ds-input w-full resize-y px-3 py-2 text-sm"
-          />
-        </div>
-      </form>
-    </ModalShell>
+          {/* Data & Categoria */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Data
+              </label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="ds-input w-full px-3 py-2 text-xs font-mono min-h-10"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Categoria
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+                className="ds-input w-full px-3 py-2 text-xs min-h-10"
+              >
+                {category && !allListedCategories.has(category) && (
+                  <option value={category}>{category}</option>
+                )}
+                <optgroup label="Categorie">
+                  {categoryGroups.base.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </optgroup>
+                {categoryGroups.custom.length > 0 && (
+                  <optgroup label="Categorie Personalizzate">
+                    {categoryGroups.custom.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {categoryGroups.goals.length > 0 && (
+                  <optgroup label="Obiettivi di Coppia">
+                    {categoryGroups.goals.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          </div>
+
+          {/* Collegamento automatico all'obiettivo selezionato */}
+          {!isEditing && matchedGoal && (
+            <label className="ds-subcard p-3 flex items-start gap-2.5 text-xs cursor-pointer border border-orange-500/25">
+              <input
+                type="checkbox"
+                checked={creditGoalOnSave}
+                onChange={(e) => setCreditGoalOnSave(e.target.checked)}
+                className="mt-0.5 accent-orange-600 rounded"
+              />
+              <div className="min-w-0 space-y-0.5">
+                <div className="font-semibold text-stone-900 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                  <span>
+                    Aggiorna automaticamente i risparmi di «{matchedGoal.title}»
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-500 font-mono">
+                  Attuale: {formatCurrency(matchedGoal.currentAmount, profile.currency)} /{' '}
+                  {formatCurrency(matchedGoal.targetAmount, profile.currency)}
+                </p>
+              </div>
+            </label>
+          )}
+
+          {/* Chi ha pagato */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+              Chi ha pagato?
+            </label>
+            <PayerSelector value={payer} onChange={setPayer} profile={profile} />
+          </div>
+
+          {/* Regola di Ripartizione */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+              Ripartizione della Spesa
+            </label>
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-3 gap-2">
+              {splitOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={opt.onSelect}
+                  className={`min-h-11 py-2 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
+                    opt.active
+                      ? 'border-orange-500 bg-orange-50/50 text-orange-950 font-semibold'
+                      : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-medium'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {splitType === 'custom' && (
+              <div className="ds-subcard mt-3 p-3">
+                <div className="flex justify-between text-xs font-semibold text-stone-700 mb-1">
+                  <span>
+                    {profile.userName}: {customRatio}%
+                  </span>
+                  <span>
+                    {profile.partnerName}: {100 - customRatio}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={customRatio}
+                  onChange={(e) => setCustomRatio(parseInt(e.target.value, 10))}
+                  className="w-full accent-orange-600"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              Note Aggiuntive (Opzionale)
+            </label>
+            <textarea
+              rows={3}
+              placeholder="es. pagato con buoni pasto, mancia inclusa"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="ds-input w-full resize-y px-3 py-2 text-sm"
+            />
+          </div>
+        </form>
+      </ModalShell>
+
+      <ConfirmDialog
+        isOpen={confirmDeleteOpen}
+        variant="danger"
+        title="Eliminare questa spesa?"
+        description={
+          initialData?.title
+            ? `La spesa "${initialData.title}" sarà rimossa definitivamente dal registro di coppia e il saldo verrà ricalcolato.`
+            : 'Questa spesa verrà rimossa definitivamente.'
+        }
+        confirmLabel="Elimina Spesa"
+        cancelLabel="Annulla"
+        onConfirm={() => {
+          if (initialData?.id && onDelete) {
+            onDelete(initialData.id);
+          }
+          setConfirmDeleteOpen(false);
+          onClose();
+        }}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
+    </>
   );
 };

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Check, Plus, Sparkles, X } from 'lucide-react';
+import { computeGoalsSavingsOverview } from '../services/analytics-math';
 import { SavingGoal, CoupleProfile } from '../types';
+import { GoalsSavingsOverview } from './charts/GoalsSavingsOverview';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { GoalCardItem } from './vision/GoalCardItem';
 import { VisionImageGenerator } from './vision/VisionImageGenerator';
@@ -86,8 +88,13 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
     onUpdateGoal({ ...goal, currentAmount: nextAmount });
   };
 
+  const savingsOverview = useMemo(
+    () => computeGoalsSavingsOverview(goals),
+    [goals]
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Intestazione */}
       <div className="ds-card p-5 sm:p-6">
         <div className="flex items-start sm:items-center gap-3">
@@ -104,6 +111,20 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
           </div>
         </div>
       </div>
+
+      {goals.length > 0 && (
+        <GoalsSavingsOverview
+          overview={savingsOverview}
+          currency={profile.currency}
+          onQuickAddGoal={handleQuickAdd}
+          onEditGoal={(targetGoal) => {
+            setEditingGoalId(targetGoal.id);
+            document
+              .getElementById(`goal-card-${targetGoal.id}`)
+              ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        />
+      )}
 
       {/* Sezione Generatore Immagini */}
       <VisionImageGenerator
@@ -245,17 +266,20 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {goals.map((goal) => (
-              <GoalCardItem
-                key={goal.id}
-                goal={goal}
-                currency={profile.currency}
-                isEditing={editingGoalId === goal.id}
-                onStartEdit={(targetGoal) => setEditingGoalId(targetGoal.id)}
-                onCancelEdit={() => setEditingGoalId(null)}
-                onSaveEdit={handleSaveGoalEdit}
-                onQuickAdd={handleQuickAdd}
-                onRequestDelete={(targetGoal) => setGoalPendingDelete(targetGoal)}
-              />
+              <div key={goal.id} id={`goal-card-${goal.id}`} className="flex">
+                <div className="w-full flex [&>*]:w-full">
+                  <GoalCardItem
+                    goal={goal}
+                    currency={profile.currency}
+                    isEditing={editingGoalId === goal.id}
+                    onStartEdit={(targetGoal) => setEditingGoalId(targetGoal.id)}
+                    onCancelEdit={() => setEditingGoalId(null)}
+                    onSaveEdit={handleSaveGoalEdit}
+                    onQuickAdd={handleQuickAdd}
+                    onRequestDelete={(targetGoal) => setGoalPendingDelete(targetGoal)}
+                  />
+                </div>
+              </div>
             ))}
           </div>
         )}
