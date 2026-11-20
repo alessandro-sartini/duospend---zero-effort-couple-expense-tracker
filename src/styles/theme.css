@@ -25,7 +25,7 @@
   --theme-surface-muted: #302c27;
   --theme-border: #3a352e;
   --theme-border-subtle: #2b2722;
-  --theme-header-bg: rgba(19, 18, 16, 0.84);
+  --theme-header-bg: rgba(19, 18, 16, 0.9);
   --theme-nav-track: #141210;
   --theme-nav-active: #2e2a24;
   --theme-text: #f5f1eb;
@@ -86,6 +86,7 @@
   --chart-color-11: #64748b;
 }
 
+html,
 body,
 .bg-\[\#FAFAF8\],
 [class~="bg-[#FAFAF8]"] {

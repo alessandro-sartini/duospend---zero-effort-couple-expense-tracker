@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Lock,
   Moon,
+  MoreHorizontal,
   PieChart,
   Receipt,
   Scale,
@@ -63,8 +64,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const lgPrimaryItems = NAV_ITEMS.slice(0, 4);
   const lgSecondaryItems = NAV_ITEMS.slice(4);
-  const mobilePrimaryItems = NAV_ITEMS.slice(0, 3);
-  const mobileSecondaryItems = NAV_ITEMS.slice(3);
+  const mobilePrimaryItems = NAV_ITEMS.slice(0, 4);
+  const mobileSecondaryItems = NAV_ITEMS.slice(4);
 
   const selectTab = (tab: string) => {
     onTabChange(tab);
@@ -144,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         aria-current={isActive ? 'page' : undefined}
         className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 2xl:px-3 py-1.5 text-xs 2xl:text-[13px] transition-all cursor-pointer ${
           isActive
-            ? 'ds-nav-pill-active font-semibold text-stone-900 shadow-xs border border-orange-500/35'
+            ? 'ds-nav-pill-active font-semibold text-stone-900 shadow-xs border border-stone-200/70'
             : 'border border-transparent font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
         }`}
       >
@@ -155,10 +156,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     );
   };
 
+  const isMobileSecondaryActive = mobileSecondaryItems.some((item) => item.id === currentTab);
+
   return (
-    <header className="sticky top-0 z-30 ds-header backdrop-blur-xl border-b border-stone-200/80">
-      <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 min-w-0 items-center justify-between gap-2 sm:gap-3">
+    <>
+      <header className="sticky top-0 z-30 ds-header backdrop-blur-xl border-b border-stone-200/80 pt-[env(safe-area-inset-top,0px)]">
+        <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-14 lg:h-16 min-w-0 items-center justify-between gap-2 sm:gap-3">
           {/* Zona 1: Brand & Pillola Coppia */}
           <div className="flex items-center gap-2.5 shrink-0 min-w-0">
             <button
@@ -214,7 +218,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => setIsMoreOpen((open) => !open)}
                 className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-[13px] transition-all cursor-pointer ${
                   lgSecondaryItems.some((item) => item.id === currentTab)
-                    ? 'ds-nav-pill-active font-semibold text-stone-900 shadow-xs border border-orange-500/35'
+                    ? 'ds-nav-pill-active font-semibold text-stone-900 shadow-xs border border-stone-200/70'
                     : 'border border-transparent font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
                 }`}
                 aria-expanded={isMoreOpen}
@@ -281,12 +285,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
         </div>
+        </div>
+      </header>
 
-        {/* Barra Navigazione Mobile (< LG) */}
-        <nav
-          aria-label="Navigazione mobile"
-          className="grid grid-cols-4 gap-1 border-t border-stone-200/80 py-2 text-[11px] font-medium text-stone-600 lg:hidden"
-        >
+      {isMoreOpen && (
+        <div
+          aria-hidden="true"
+          onClick={() => setIsMoreOpen(false)}
+          className="fixed inset-0 z-[46] bg-stone-950/20 backdrop-blur-[1px] lg:hidden"
+        />
+      )}
+
+      {/* Bottom Tab Bar Nativa Mobile (< LG) */}
+      <nav
+        aria-label="Navigazione mobile"
+        className={`fixed bottom-0 inset-x-0 lg:hidden ds-header backdrop-blur-xl border-t border-stone-200/80 pb-[env(safe-area-inset-bottom,0px)] ${
+          isMoreOpen ? 'z-[48]' : 'z-30'
+        }`}
+      >
+        <div className="grid grid-cols-5 h-16 max-w-lg mx-auto px-1.5">
           {mobilePrimaryItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
@@ -295,37 +312,59 @@ export const Navbar: React.FC<NavbarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => selectTab(item.id)}
-                className={`flex min-w-0 items-center justify-center gap-1 rounded-xl px-1.5 py-1.5 transition-colors cursor-pointer ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex flex-col items-center justify-center gap-0.5 min-w-0 py-1.5 rounded-xl transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-orange-600 font-semibold text-white shadow-xs'
-                    : 'text-stone-600 hover:bg-stone-100'
+                    ? 'text-orange-600'
+                    : 'text-stone-500 hover:text-stone-900'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{item.mobileLabel}</span>
+                <span
+                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-colors ${
+                    isActive ? 'bg-orange-500/14' : ''
+                  }`}
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                </span>
+                <span className="text-[10px] font-semibold leading-none truncate max-w-full">
+                  {item.mobileLabel}
+                </span>
               </button>
             );
           })}
 
-          <div className="relative min-w-0" ref={(el) => { moreMenuRefs.current[1] = el; }}>
+          <div
+            className="relative flex min-w-0"
+            ref={(el) => {
+              moreMenuRefs.current[1] = el;
+            }}
+          >
             <button
               type="button"
               onClick={() => setIsMoreOpen((open) => !open)}
-              className={`flex w-full items-center justify-center gap-1 rounded-xl px-1.5 py-1.5 transition-colors cursor-pointer ${
-                mobileSecondaryItems.some((item) => item.id === currentTab)
-                  ? 'bg-orange-600 font-semibold text-white shadow-xs'
-                  : 'text-stone-600 hover:bg-stone-100'
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 min-w-0 py-1.5 rounded-xl transition-colors cursor-pointer ${
+                isMobileSecondaryActive || isMoreOpen
+                  ? 'text-orange-600'
+                  : 'text-stone-500 hover:text-stone-900'
               }`}
               aria-expanded={isMoreOpen}
               aria-controls="mobile-secondary-navigation"
             >
-              <span>Altro</span>
-              <ChevronDown className={`h-3 w-3 transition-transform ${isMoreOpen ? 'rotate-180' : ''}`} />
+              <span
+                className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-colors ${
+                  isMobileSecondaryActive || isMoreOpen ? 'bg-orange-500/14' : ''
+                }`}
+              >
+                <MoreHorizontal className="h-[18px] w-[18px] shrink-0" />
+              </span>
+              <span className="text-[10px] font-semibold leading-none truncate max-w-full">
+                Altro
+              </span>
             </button>
             {isMoreOpen && (
               <div
                 id="mobile-secondary-navigation"
-                className="ds-card absolute right-0 top-full z-40 mt-1.5 min-w-52 p-1.5 shadow-xl"
+                className="ds-card absolute right-1 bottom-full z-40 mb-2.5 min-w-52 p-1.5 shadow-2xl"
               >
                 {mobileSecondaryItems.map((item) => {
                   const Icon = item.icon;
@@ -335,7 +374,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       key={item.id}
                       type="button"
                       onClick={() => selectTab(item.id)}
-                      className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                      className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-orange-500/12 font-semibold text-orange-700'
                           : 'text-stone-700 hover:bg-stone-100'
@@ -349,8 +388,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
           </div>
-        </nav>
-      </div>
-    </header>
+        </div>
+      </nav>
+    </>
   );
 };

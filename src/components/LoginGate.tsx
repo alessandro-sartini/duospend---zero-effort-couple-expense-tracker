@@ -80,7 +80,7 @@ export const LoginGate: React.FC<LoginGateProps> = ({
     <div className="h-[100dvh] overflow-hidden overscroll-none bg-[#FAFAF8] flex flex-col justify-center items-center sm:px-4 sm:py-6">
       <div className="w-full h-full sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:max-w-md bg-white sm:rounded-3xl sm:shadow-xl sm:border sm:border-stone-200/80 overflow-hidden flex flex-col">
         {/* Banner superiore sicurezza */}
-        <div className="bg-stone-900 px-6 py-6 sm:py-8 text-white text-center relative overflow-hidden shrink-0">
+        <div className="bg-stone-900 px-6 pt-[calc(1.5rem+env(safe-area-inset-top,0px))] pb-6 sm:py-8 text-white text-center relative overflow-hidden shrink-0">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
 

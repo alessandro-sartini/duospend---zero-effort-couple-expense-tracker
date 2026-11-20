@@ -121,7 +121,13 @@ export const ModalShell: React.FC<ModalShellProps> = ({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
 
         {footer && (
-          <div className="px-4 sm:px-6 py-3.5 border-t border-stone-100 bg-stone-50/60 shrink-0">
+          <div
+            className={`px-4 sm:px-6 pt-3.5 border-t border-stone-100 bg-stone-50/60 shrink-0 ${
+              mobileBottomSheet
+                ? 'pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5'
+                : 'pb-3.5'
+            }`}
+          >
             {footer}
           </div>
         )}

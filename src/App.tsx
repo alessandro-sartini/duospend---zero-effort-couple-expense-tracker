@@ -2,7 +2,6 @@ import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { DashboardOverview } from './components/DashboardOverview';
 import { LoginGate } from './components/LoginGate';
-import { Footer } from './components/layout/Footer';
 import { NotFoundView } from './components/layout/NotFoundView';
 import { QuickActionsFab } from './components/layout/QuickActionsFab';
 import { ZeroAmountBanner } from './components/layout/ZeroAmountBanner';
@@ -358,7 +357,7 @@ export default function App() {
   }
 
   return (
-    <div data-theme={theme} className="min-h-screen w-full max-w-full overflow-x-clip bg-[#FAFAF8] text-stone-900 flex flex-col font-sans">
+    <div data-theme={theme} className="min-h-[100dvh] w-full max-w-full overflow-x-clip bg-[#FAFAF8] text-stone-900 flex flex-col font-sans">
       <Navbar
         currentTab={currentTab}
         onTabChange={navigateToTab}
@@ -371,7 +370,7 @@ export default function App() {
         onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
       />
 
-      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-10 pt-5 pb-24 sm:pt-8 sm:pb-12">
+      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-[calc(7.25rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
         <ZeroAmountBanner
           count={zeroAmountExpenses.length}
           onGoToExpenses={() => {
@@ -607,10 +606,6 @@ export default function App() {
         }}
         onOpenNotificationSync={() => setIsNotificationSyncOpen(true)}
         onOpenGmailSync={() => setIsGmailSyncOpen(true)}
-      />
-
-      <Footer
-        onOpenDevModal={isDevConsoleEnabled ? () => setIsDevModalOpen(true) : undefined}
       />
     </div>
   );

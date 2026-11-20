@@ -128,7 +128,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
       {showStatusPills && (
         <div
           aria-live="polite"
-          className="fixed top-[calc(7.35rem+env(safe-area-inset-top,0px))] lg:top-[calc(4.5rem+env(safe-area-inset-top,0px))] right-3 left-3 sm:left-auto sm:right-6 z-20 pointer-events-none flex flex-col items-end gap-2"
+          className="fixed top-[calc(4.1rem+env(safe-area-inset-top,0px))] lg:top-[calc(4.5rem+env(safe-area-inset-top,0px))] right-3 left-3 sm:left-auto sm:right-6 z-20 pointer-events-none flex flex-col items-end gap-2"
         >
           {showGmailPill && (
             <SwipeableNotificationPill
@@ -226,12 +226,12 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
         <div
           aria-hidden="true"
           onClick={() => setIsMenuOpen(false)}
-          className="fixed inset-0 z-30 bg-stone-950/25 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 bg-stone-950/25 backdrop-blur-[1px]"
         />
       )}
 
       {!isAnyModalOpen && (
-        <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-4 lg:bottom-6 lg:right-6 z-[45] flex flex-col items-end">
           {isMenuOpen && (
             <div
               role="menu"

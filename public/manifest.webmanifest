@@ -6,9 +6,10 @@
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
-  "background_color": "#141210",
-  "theme_color": "#ea580c",
+  "background_color": "#131210",
+  "theme_color": "#131210",
   "categories": ["finance", "productivity", "lifestyle"],
   "icons": [
     {
