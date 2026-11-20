@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Layers, Users } from 'lucide-react';
 import { formatCurrency, getCategoryMeta } from '../../constants/categories';
 import {
   formatAxisCurrency,
@@ -109,37 +109,48 @@ export const MonthlyTrendBarChart: React.FC<MonthlyTrendBarChartProps> = ({
             Andamento Mensile vs Budget
           </h3>
           <p className="text-xs text-stone-500 mt-0.5">
-            Tocca un mese per i dettagli · Linea tratteggiata = budget{' '}
-            {formatCompactCurrency(monthlyBudget, currency)}
+            Budget {formatCompactCurrency(monthlyBudget, currency)} · Tocca un mese per i dettagli
           </p>
         </div>
 
         <div
           role="group"
           aria-label="Modalità suddivisione barre mensili"
-          className="ds-nav-track grid grid-cols-2 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold shrink-0 self-start sm:self-auto"
+          className="ds-nav-track grid grid-cols-2 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold w-full sm:w-auto sm:min-w-[220px] shrink-0"
         >
           <button
             type="button"
             onClick={() => onChangeMode('partner')}
-            className={`min-h-9 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+            className={`min-h-9 px-3 py-1 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 ${
               mode === 'partner'
-                ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            Partner
+            <Users
+              className={`w-3.5 h-3.5 shrink-0 ${
+                mode === 'partner' ? 'text-orange-600' : 'text-stone-400'
+              }`}
+              aria-hidden="true"
+            />
+            <span>Partner</span>
           </button>
           <button
             type="button"
             onClick={() => onChangeMode('category')}
-            className={`min-h-9 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+            className={`min-h-9 px-3 py-1 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 ${
               mode === 'category'
-                ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            Categorie
+            <Layers
+              className={`w-3.5 h-3.5 shrink-0 ${
+                mode === 'category' ? 'text-orange-600' : 'text-stone-400'
+              }`}
+              aria-hidden="true"
+            />
+            <span>Categorie</span>
           </button>
         </div>
       </div>

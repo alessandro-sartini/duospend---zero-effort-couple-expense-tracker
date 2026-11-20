@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Check,
   CheckCircle2,
+  ChevronRight,
   Flame,
   Plus,
   RotateCcw,
@@ -56,7 +57,6 @@ import {
 import { MonthlyTrendBarChart } from './charts/MonthlyTrendBarChart';
 import { WeekdayAndSourceInsights } from './charts/WeekdayAndSourceInsights';
 import { ConfirmDialog } from './ui/ConfirmDialog';
-import { StatCard } from './ui/StatCard';
 
 interface CategoryAnalyticsProps {
   expenses: Expense[];
@@ -594,7 +594,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
                     onClick={() => handleSelectTimeframe(tf.id)}
                     className={`min-h-10 px-2 sm:px-3 py-1.5 rounded-lg transition-all text-center cursor-pointer truncate ${
                       isActive
-                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                         : 'text-stone-600 hover:text-stone-900'
                     }`}
                   >
@@ -626,7 +626,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
                       onClick={() => handleSelectSplitFilter(sf.id)}
                       className={`min-h-10 px-2 py-1.5 rounded-lg transition-all text-center cursor-pointer truncate ${
                         isActive
-                          ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                          ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                           : 'text-stone-600 hover:text-stone-900'
                       }`}
                     >
@@ -655,7 +655,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
                       onClick={() => handleSelectPayerFilter(pf.id)}
                       className={`min-h-10 px-2 py-1.5 rounded-lg transition-all text-center cursor-pointer truncate ${
                         isActive
-                          ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                          ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                           : 'text-stone-600 hover:text-stone-900'
                       }`}
                     >
@@ -699,65 +699,182 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
         </div>
       )}
 
-      {/* 4 Schede KPI Aggregate */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          label="Totale Spese"
-          value={formatCurrency(totalSpent, profile.currency)}
-          icon={Wallet}
-          iconClassName="bg-orange-500/12 text-orange-600 border-orange-500/25"
-          subtitle={
-            comparison.deltaPercent !== null ? (
-              <span
-                className={`font-mono font-semibold ${
-                  comparison.deltaPercent > 0
-                    ? 'text-rose-600'
-                    : 'text-emerald-600'
-                }`}
+      {/* 4 Schede KPI Aggregate in Matrice Unificata */}
+      <div className="ds-card overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--theme-border-subtle)]">
+          {/* Cella 1: Totale Spese */}
+          {(() => {
+            const cellBody = (
+              <>
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                    <Wallet
+                      className="w-3.5 h-3.5 text-orange-600 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">Totale Spese</span>
+                  </span>
+                  {filtered.length > 0 && (
+                    <ChevronRight
+                      className="w-3.5 h-3.5 text-stone-400 shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
+
+                <div className="text-lg sm:text-xl font-bold font-mono tabular-nums text-stone-900 leading-tight truncate">
+                  {formatCurrency(totalSpent, profile.currency)}
+                </div>
+
+                <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-stone-500">
+                  {comparison.deltaPercent !== null ? (
+                    <>
+                      <span
+                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-mono font-semibold tabular-nums shrink-0 ${
+                          comparison.deltaPercent > 0
+                            ? 'bg-rose-500/12 text-rose-700 border-rose-500/25'
+                            : 'bg-emerald-500/12 text-emerald-700 border-emerald-500/25'
+                        }`}
+                      >
+                        {comparison.deltaPercent >= 0 ? '+' : ''}
+                        {comparison.deltaPercent}%
+                      </span>
+                      <span className="truncate">
+                        {comparison.comparisonLabel}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="truncate">
+                      {filtered.length} transazioni
+                    </span>
+                  )}
+                </div>
+              </>
+            );
+
+            return filtered.length > 0 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setDrilldown({
+                    title: 'Tutte le Spese',
+                    subtitle: `${activePeriodLabel} · ${filtered.length} ${
+                      filtered.length === 1 ? 'spesa' : 'spese'
+                    }`,
+                    expenses: filtered,
+                  })
+                }
+                className="bg-[var(--theme-surface)] hover:bg-stone-50/70 p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left transition-colors cursor-pointer"
               >
-                {comparison.deltaPercent >= 0 ? '+' : ''}
-                {comparison.deltaPercent}% {comparison.comparisonLabel}
-              </span>
+                {cellBody}
+              </button>
             ) : (
-              `${filtered.length} transazioni`
-            )
-          }
-        />
+              <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
+                {cellBody}
+              </div>
+            );
+          })()}
 
-        <StatCard
-          label="Categoria Top"
-          value={
-            <span className="font-display truncate block">{topCategoryName}</span>
-          }
-          valueClassName="text-orange-600"
-          icon={Flame}
-          iconClassName="bg-rose-500/12 text-rose-600 border-rose-500/25"
-          subtitle={
-            <span className="font-mono">
-              {formatCompactCurrency(topCategoryTotal, profile.currency)} (
-              {topCategoryPercent}%)
-            </span>
-          }
-        />
+          {/* Cella 2: Categoria Top */}
+          {(() => {
+            const hasTopCategory = Boolean(sortedCategories[0]);
+            const topMeta = getCategoryMeta(topCategoryName, goals);
+            const cellBody = (
+              <>
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                    <Flame
+                      className="w-3.5 h-3.5 text-rose-500 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">Categoria Top</span>
+                  </span>
+                  {hasTopCategory && (
+                    <ChevronRight
+                      className="w-3.5 h-3.5 text-stone-400 shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
 
-        <StatCard
-          label="Media / Spesa"
-          value={formatCurrency(
-            filtered.length > 0 ? totalSpent / filtered.length : 0,
-            profile.currency
-          )}
-          icon={Calculator}
-          iconClassName="bg-emerald-500/12 text-emerald-600 border-emerald-500/25"
-          subtitle={`Su ${filtered.length} voci`}
-        />
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: topMeta.chartColor }}
+                    aria-hidden="true"
+                  />
+                  <span className="font-display font-bold text-lg sm:text-xl text-stone-900 leading-tight truncate">
+                    {topCategoryName}
+                  </span>
+                </div>
 
-        <StatCard
-          label="Media / Giorno"
-          value={formatCurrency(totalSpent / activeDays, profile.currency)}
-          icon={CalendarClock}
-          iconClassName="bg-blue-500/12 text-blue-600 border-blue-500/25"
-          subtitle={`Su ${activeDays} giorni`}
-        />
+                <div className="text-[11px] text-stone-500 font-mono tabular-nums truncate">
+                  {formatCompactCurrency(topCategoryTotal, profile.currency)} ·{' '}
+                  {topCategoryPercent}%
+                </div>
+              </>
+            );
+
+            return hasTopCategory ? (
+              <button
+                type="button"
+                onClick={() => openCategoryDrilldown(topCategoryName)}
+                className="bg-[var(--theme-surface)] hover:bg-stone-50/70 p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left transition-colors cursor-pointer"
+              >
+                {cellBody}
+              </button>
+            ) : (
+              <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
+                {cellBody}
+              </div>
+            );
+          })()}
+
+          {/* Cella 3: Media / Spesa */}
+          <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <Calculator
+                  className="w-3.5 h-3.5 text-emerald-600 shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="truncate">Media / Spesa</span>
+              </span>
+            </div>
+
+            <div className="text-lg sm:text-xl font-bold font-mono tabular-nums text-stone-900 leading-tight truncate">
+              {formatCurrency(
+                filtered.length > 0 ? totalSpent / filtered.length : 0,
+                profile.currency
+              )}
+            </div>
+
+            <div className="text-[11px] text-stone-500 truncate">
+              Su {filtered.length} voci
+            </div>
+          </div>
+
+          {/* Cella 4: Media / Giorno */}
+          <div className="bg-[var(--theme-surface)] p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0 text-left">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="inline-flex items-center gap-1.5 min-w-0 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <CalendarClock
+                  className="w-3.5 h-3.5 text-blue-500 shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="truncate">Media / Giorno</span>
+              </span>
+            </div>
+
+            <div className="text-lg sm:text-xl font-bold font-mono tabular-nums text-stone-900 leading-tight truncate">
+              {formatCurrency(totalSpent / activeDays, profile.currency)}
+            </div>
+
+            <div className="text-[11px] text-stone-500 truncate">
+              Su {activeDays} giorni
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Sub-Navigazione Pulita tra Grafici e Budget/Soglie */}
@@ -773,7 +890,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
           onClick={() => setActiveSection('charts')}
           className={`min-h-11 px-3 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeSection === 'charts'
-              ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/35'
+              ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
               : 'text-stone-600 hover:text-stone-900'
           }`}
         >
@@ -792,7 +909,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
           onClick={() => setActiveSection('budgets')}
           className={`min-h-11 px-3 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeSection === 'budgets'
-              ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/35'
+              ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
               : 'text-stone-600 hover:text-stone-900'
           }`}
         >
@@ -1028,12 +1145,12 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto shrink-0">
                   {selectedCategory && (
                     <button
                       type="button"
                       onClick={() => setSelectedCategory(null)}
-                      className="ds-btn-secondary min-h-9 px-3 py-1.5 text-xs"
+                      className="col-span-2 sm:col-span-1 ds-btn-secondary min-h-9 px-3 py-1.5 text-xs"
                     >
                       <X className="w-3.5 h-3.5" />
                       <span>Mostra tutte</span>
@@ -1207,6 +1324,7 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
       <ExpenseDrilldownModal
         payload={drilldown}
         profile={profile}
+        goals={goals}
         onClose={() => setDrilldown(null)}
         onSelectExpense={onSelectExpense}
       />

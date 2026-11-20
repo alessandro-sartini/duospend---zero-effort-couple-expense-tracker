@@ -17,29 +17,27 @@ export const StatCard: React.FC<StatCardProps> = ({
   value,
   subtitle,
   icon: Icon,
-  iconClassName = 'bg-orange-500/12 text-orange-600 border-orange-500/25',
+  iconClassName = 'text-orange-600',
   valueClassName = 'text-stone-900',
   variant = 'card',
   className = '',
 }) => {
-  const containerClass = variant === 'subcard' ? 'ds-subcard p-4' : 'ds-card p-5';
+  const containerClass = variant === 'subcard' ? 'ds-subcard p-3.5 sm:p-4' : 'ds-card p-4';
+  const iconColorClass =
+    iconClassName.split(/\s+/).find((cls) => cls.startsWith('text-')) ?? 'text-orange-600';
 
   return (
-    <div className={`${containerClass} flex flex-col justify-between gap-2 ${className}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+    <div className={`${containerClass} flex flex-col justify-between gap-1.5 min-w-0 ${className}`}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        {Icon && (
+          <Icon className={`h-3.5 w-3.5 shrink-0 ${iconColorClass}`} aria-hidden="true" />
+        )}
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 truncate">
           {label}
         </span>
-        {Icon && (
-          <div
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${iconClassName}`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-          </div>
-        )}
       </div>
 
-      <div className={`text-xl sm:text-2xl font-bold font-mono tabular-nums tracking-tight ${valueClassName}`}>
+      <div className={`text-lg sm:text-xl font-bold font-mono tabular-nums tracking-tight ${valueClassName}`}>
         {value}
       </div>
 

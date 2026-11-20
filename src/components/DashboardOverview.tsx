@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import {
   formatCurrency,
   formatSplitLabel,
@@ -289,38 +289,34 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 }
               }}
               title="Tocca o fai doppio clic per modificare questa spesa"
-              className="grid cursor-pointer grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-xl px-2.5 py-3.5 transition-colors hover:bg-stone-50/70"
+              className="flex cursor-pointer items-center gap-3 rounded-xl px-2.5 py-3.5 transition-colors hover:bg-stone-50/70"
             >
-              <div className="row-span-2 flex items-center justify-center">
-                <CategoryBadge category={exp.category} size="md" />
-              </div>
+              <CategoryBadge category={exp.category} size="md" />
 
-              <span className="min-w-0 break-words text-sm font-bold text-stone-900 sm:truncate">
-                {exp.title}
-              </span>
-
-              <div className="shrink-0 text-right space-y-1">
-                <div className="text-sm font-bold font-mono text-stone-900 tabular-nums">
-                  {formatCurrency(exp.amount, exp.currency)}
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="text-sm font-bold text-stone-900 truncate">
+                  {exp.title}
                 </div>
-                <div className="flex justify-end">
+
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-stone-500">
+                  <span className="font-mono">{exp.date}</span>
+                  <span aria-hidden="true">·</span>
+                  <strong className="text-stone-700">
+                    {exp.payer === 'user'
+                      ? profile.userName
+                      : profile.partnerName}
+                  </strong>
+                  <span aria-hidden="true">·</span>
+                  <span>{formatSplitLabel(exp)}</span>
                   <SourceBadge source={exp.source} compact />
                 </div>
               </div>
 
-              <div className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-stone-500">
-                <span className="font-mono">{exp.date}</span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  Pagato da{' '}
-                  <span className="font-semibold text-stone-700">
-                    {exp.payer === 'user'
-                      ? profile.userName
-                      : profile.partnerName}
-                  </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
+                  {formatCurrency(exp.amount, exp.currency)}
                 </span>
-                <span aria-hidden="true">·</span>
-                <span>{formatSplitLabel(exp)}</span>
+                <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
               </div>
             </div>
           ))}

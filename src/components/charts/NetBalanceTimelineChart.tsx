@@ -131,7 +131,7 @@ export const NetBalanceTimelineChart: React.FC<NetBalanceTimelineChartProps> = (
         <div
           role="group"
           aria-label="Periodo grafici pareggio"
-          className="ds-nav-track grid grid-cols-3 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold shrink-0"
+          className="ds-nav-track grid grid-cols-3 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold w-full sm:w-auto shrink-0"
         >
           {RANGE_OPTIONS.map((opt) => (
             <button
@@ -140,7 +140,7 @@ export const NetBalanceTimelineChart: React.FC<NetBalanceTimelineChartProps> = (
               onClick={() => onChangeRange(opt.id)}
               className={`min-h-9 px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 range === opt.id
-                  ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                  ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >

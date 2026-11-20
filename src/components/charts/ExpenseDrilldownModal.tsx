@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatSplitLabel } from '../../constants/categories';
 import type { PayerFilter } from '../../services/analytics-math';
-import type { CoupleProfile, Expense, Settlement } from '../../types';
+import type { CoupleProfile, Expense, SavingGoal, Settlement } from '../../types';
 import { CategoryBadge } from '../ui/CategoryBadge';
 import { ModalShell } from '../ui/ModalShell';
 import { SourceBadge } from '../ui/SourceBadge';
@@ -24,6 +24,7 @@ export interface ExpenseDrilldownPayload {
 interface ExpenseDrilldownModalProps {
   payload: ExpenseDrilldownPayload | null;
   profile: CoupleProfile;
+  goals?: SavingGoal[];
   onClose: () => void;
   onSelectExpense?: (expense: Expense) => void;
 }
@@ -31,6 +32,7 @@ interface ExpenseDrilldownModalProps {
 export const ExpenseDrilldownModal: React.FC<ExpenseDrilldownModalProps> = ({
   payload,
   profile,
+  goals,
   onClose,
   onSelectExpense,
 }) => {
@@ -159,18 +161,18 @@ export const ExpenseDrilldownModal: React.FC<ExpenseDrilldownModalProps> = ({
             </div>
 
             {rawExpenses.length > 1 && (
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-0.5">
                 <div
                   role="group"
                   aria-label="Ordina spese"
-                  className="ds-nav-track grid grid-cols-2 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold"
+                  className="ds-nav-track grid grid-cols-2 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold w-full sm:w-auto"
                 >
                   <button
                     type="button"
                     onClick={() => setSortBy('amount')}
                     className={`min-h-9 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                       sortBy === 'amount'
-                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                         : 'text-stone-600 hover:text-stone-900'
                     }`}
                   >
@@ -181,7 +183,7 @@ export const ExpenseDrilldownModal: React.FC<ExpenseDrilldownModalProps> = ({
                     onClick={() => setSortBy('date')}
                     className={`min-h-9 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                       sortBy === 'date'
-                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                        ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                         : 'text-stone-600 hover:text-stone-900'
                     }`}
                   >
@@ -193,7 +195,7 @@ export const ExpenseDrilldownModal: React.FC<ExpenseDrilldownModalProps> = ({
                   <div
                     role="group"
                     aria-label="Filtra per pagante"
-                    className="ds-nav-track grid grid-cols-3 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold"
+                    className="ds-nav-track grid grid-cols-3 gap-1 p-1 rounded-xl border border-stone-200/70 text-xs font-semibold w-full sm:w-auto"
                   >
                     {[
                       { id: 'all' as PayerFilter, label: 'Tutti' },
@@ -206,7 +208,7 @@ export const ExpenseDrilldownModal: React.FC<ExpenseDrilldownModalProps> = ({
                         onClick={() => setPayerFilter(opt.id)}
                         className={`min-h-9 px-2 py-1 rounded-lg transition-all cursor-pointer truncate ${
                           payerFilter === opt.id
-                            ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                            ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                             : 'text-stone-600 hover:text-stone-900'
                         }`}
                       >
@@ -230,51 +232,37 @@ export const ExpenseDrilldownModal: React.FC<ExpenseDrilldownModalProps> = ({
                 const payerName =
                   exp.payer === 'user' ? profile.userName : profile.partnerName;
                 const rowContent = (
-                  <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 w-full text-left">
-                    <div className="row-span-2 flex items-center justify-center">
-                      <CategoryBadge category={exp.category} size="md" />
-                    </div>
+                  <div className="flex items-center gap-3 w-full text-left">
+                    <CategoryBadge category={exp.category} goals={goals} size="md" />
 
-                    <span className="min-w-0 text-sm font-bold text-stone-900 truncate">
-                      {exp.title}
-                    </span>
-
-                    <div className="shrink-0 flex items-center gap-2">
-                      <div className="text-right space-y-1">
-                        <div className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
-                          {formatCurrency(exp.amount, exp.currency)}
-                        </div>
-                        <div className="flex justify-end">
-                          <SourceBadge source={exp.source} compact />
-                        </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="text-sm font-bold text-stone-900 truncate">
+                        {exp.title}
                       </div>
-                      {onSelectExpense && (
-                        <span className="text-stone-400 shrink-0 hidden sm:inline-flex">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </span>
-                      )}
-                      {onSelectExpense && (
-                        <span className="text-stone-400 shrink-0 sm:hidden inline-flex">
-                          <ChevronRight className="w-4 h-4" />
-                        </span>
+
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-stone-500">
+                        <span className="font-mono">{exp.date}</span>
+                        <span aria-hidden="true">·</span>
+                        <strong className="text-stone-700">{payerName}</strong>
+                        <span aria-hidden="true">·</span>
+                        <span>{formatSplitLabel(exp)}</span>
+                        <SourceBadge source={exp.source} compact />
+                      </div>
+
+                      {exp.notes && (
+                        <p className="text-xs text-stone-500 truncate">{exp.notes}</p>
                       )}
                     </div>
 
-                    <div className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-stone-500">
-                      <span className="font-mono">{exp.date}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>
-                        <strong className="text-stone-700">{payerName}</strong>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
+                        {formatCurrency(exp.amount, exp.currency)}
                       </span>
-                      <span aria-hidden="true">·</span>
-                      <span>{formatSplitLabel(exp)}</span>
-                      {exp.notes && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className="truncate max-w-[220px] sm:max-w-[340px]">
-                            {exp.notes}
-                          </span>
-                        </>
+                      {onSelectExpense && (
+                        <span className="text-stone-400 shrink-0 inline-flex items-center">
+                          <ChevronRight className="w-4 h-4 sm:hidden" />
+                          <Pencil className="w-3.5 h-3.5 hidden sm:inline" />
+                        </span>
                       )}
                     </div>
                   </div>

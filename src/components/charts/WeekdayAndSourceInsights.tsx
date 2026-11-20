@@ -215,33 +215,29 @@ export const WeekdayAndSourceInsights: React.FC<WeekdayAndSourceInsightsProps> =
               const isInteractive = Boolean(onInspectSource && stat.count > 0);
               const content = (
                 <>
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <span
-                      className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border shrink-0 ${meta.badgeClass}`}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border shrink-0 ${meta.badgeClass}`}
                     >
                       <Icon className="w-3.5 h-3.5" />
                     </span>
                     <div className="min-w-0">
-                      <div className="font-semibold text-stone-900 truncate">
+                      <div className="text-sm font-semibold text-stone-900 truncate">
                         {meta.shortLabel}
                       </div>
-                      <div className="text-sm font-bold font-mono text-stone-800 tabular-nums">
-                        {formatCurrency(stat.total, currency)}
+                      <div className="text-xs text-stone-500 font-mono tabular-nums">
+                        {stat.count} {stat.count === 1 ? 'spesa' : 'spese'} ·{' '}
+                        {stat.sharePercent}%
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="text-right font-mono tabular-nums">
-                      <div className="text-sm font-bold text-stone-900">
-                        {stat.count}
-                      </div>
-                      <div className="text-xs font-semibold text-stone-500">
-                        {stat.sharePercent}%
-                      </div>
-                    </div>
+                    <span className="text-sm font-bold font-mono text-stone-900 tabular-nums">
+                      {formatCurrency(stat.total, currency)}
+                    </span>
                     {isInteractive && (
-                      <ChevronRight className="w-4 h-4 text-stone-400" />
+                      <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
                     )}
                   </div>
                 </>
@@ -252,14 +248,14 @@ export const WeekdayAndSourceInsights: React.FC<WeekdayAndSourceInsightsProps> =
                   key={stat.source}
                   type="button"
                   onClick={() => onInspectSource?.(stat)}
-                  className="ds-subcard p-3 flex items-center justify-between gap-2 text-xs text-left hover:border-orange-500/40 transition-colors cursor-pointer"
+                  className="ds-subcard p-3 flex items-center justify-between gap-3 text-xs text-left hover:border-orange-500/40 transition-colors cursor-pointer"
                 >
                   {content}
                 </button>
               ) : (
                 <div
                   key={stat.source}
-                  className="ds-subcard p-3 flex items-center justify-between gap-2 text-xs"
+                  className="ds-subcard p-3 flex items-center justify-between gap-3 text-xs"
                 >
                   {content}
                 </div>

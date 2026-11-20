@@ -140,7 +140,7 @@ export const BurnRateAreaChart: React.FC<BurnRateAreaChartProps> = ({
                 onClick={() => onChangeSplitFilter(opt.id)}
                 className={`min-h-9 px-2.5 py-1 rounded-lg transition-all text-center cursor-pointer ${
                   active
-                    ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-orange-500/30'
+                    ? 'ds-nav-pill-active text-stone-900 shadow-xs border border-stone-200/70'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
