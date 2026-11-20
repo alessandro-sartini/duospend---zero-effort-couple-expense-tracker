@@ -1,0 +1,6 @@
+{
+  "name": "DuoSpend - Gestione Spese di Coppia & Pareggio 50/50",
+  "description": "Traccia ogni spesa di coppia a sforzo zero: sincronizzazione automatica scontrini Gmail, scansione fotocamera istantanea, lettura notifiche bancarie/SMS, pareggio conti 50/50 e consulente AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,97 @@
+export type Payer = 'user' | 'partner';
+
+export type SplitType = '50_50' | '100_user' | '100_partner' | 'custom';
+
+export type ExpenseCategory =
+  | 'Spesa'
+  | 'Ristoranti e Bar'
+  | 'Casa e Affitto'
+  | 'Bollette e Utenze'
+  | 'Trasporti'
+  | 'Shopping'
+  | 'Svago e Intrattenimento'
+  | 'Salute e Benessere'
+  | 'Viaggi'
+  | 'Matrimonio e Obiettivi'
+  | 'Altro'
+  | 'Groceries'
+  | 'Dining Out'
+  | 'Housing'
+  | 'Utilities'
+  | 'Transportation'
+  | 'Entertainment'
+  | 'Health & Wellness'
+  | 'Travel'
+  | 'Wedding & Goals'
+  | 'Other';
+
+export interface ExpenseItem {
+  name: string;
+  price: number;
+}
+
+export interface Expense {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  date: string; // YYYY-MM-DD
+  category: ExpenseCategory;
+  payer: Payer;
+  splitType: SplitType;
+  customSplitRatio?: number; // e.g., 0.6 means user pays 60%, partner 40%
+  source: 'gmail' | 'camera' | 'manual' | 'notification';
+  sourceReference?: string;
+  notes?: string;
+  receiptUrl?: string;
+  items?: ExpenseItem[];
+  tax?: number;
+}
+
+export interface GmailRecurringRule {
+  sender: string;
+  subject: string;
+  merchant: string;
+  amount: number;
+  currency: string;
+  category: ExpenseCategory;
+}
+
+export interface Settlement {
+  id: string;
+  date: string;
+  amount: number;
+  currency: string;
+  from: Payer;
+  to: Payer;
+  note: string;
+}
+
+export interface CoupleProfile {
+  userName: string;
+  partnerName: string;
+  monthlyBudget: number;
+  currency: string;
+  weddingBudgetGoal?: number;
+  userEmail?: string;
+  partnerEmail?: string;
+  categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+  timestamp: string;
+  modelUsed?: string;
+}
+
+export interface SavingGoal {
+  id: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string;
+  imageUrl?: string;
+  imageResolution?: string;
+}
