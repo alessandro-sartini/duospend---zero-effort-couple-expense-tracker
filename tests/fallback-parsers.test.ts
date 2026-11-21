@@ -460,6 +460,20 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(afterRestart.success).toBe(true);
       expect(afterRestart.persisted).toBe(true);
       expect(afterRestart.reconciled).toBe(true);
+      expect(afterRestart.deduplicated).toBe(true);
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
+
+      // 4) Doppia notifica da due app diverse per lo stesso pagamento POS a pochi secondi di distanza (es. Google Pay + Nexi SMS)
+      const walletFollowUp = await ingestNotification({
+        notificationText: 'Google Wallet: €42,80 pagati con carta presso Esselunga Superstore.',
+        appName: 'Google Wallet',
+        payer: 'user',
+        shouldPersist: true,
+      });
+      expect(walletFollowUp.success).toBe(true);
+      expect(walletFollowUp.persisted).toBe(true);
+      expect(walletFollowUp.reconciled).toBe(true);
+      expect(walletFollowUp.deduplicated).toBe(true);
       expect(notificationInMemoryDb.expenses).toHaveLength(1);
     });
   });

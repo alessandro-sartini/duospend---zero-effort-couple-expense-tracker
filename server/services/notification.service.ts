@@ -3,6 +3,9 @@ import { Type } from '@google/genai';
 import { Expense, Payer } from '../../src/types';
 import {
   applyMatchedCyclesToRecurring,
+  computeExpenseMatchScore,
+  mergeReconciledExpenses,
+  normalizeMerchantKey,
   reconcileIncomingExpenses,
 } from '../../src/services/reconciliation';
 import { insertExpenseRecord, readDatabase, writeDatabase } from '../database';
@@ -146,28 +149,112 @@ export function normalizeNotificationExpense(
   };
 }
 
+function extractNotificationIngestionTimestampMs(expense: Pick<Expense, 'id'>): number | null {
+  const match = /^exp-notif-(\d{12,14})\b/.exec(expense.id || '');
+  if (!match) return null;
+  const ts = Number(match[1]);
+  return Number.isFinite(ts) && ts > 0 ? ts : null;
+}
+
+function findRecentSemanticNotificationDuplicateIndex(
+  existingList: Expense[],
+  incoming: Expense,
+  nowMs: number,
+  recurringExpenses?: ReturnType<typeof readDatabase>['recurringExpenses']
+): number {
+  const incomingMerchantKey = normalizeMerchantKey(incoming.title);
+  const incomingHashPrefix =
+    incoming.sourceReference && /^notif:[a-f0-9]{16}:\d+$/.test(incoming.sourceReference)
+      ? incoming.sourceReference.slice(0, 'notif:'.length + 16 + 1)
+      : null;
+
+  for (let i = 0; i < existingList.length; i += 1) {
+    const existing = existingList[i]!;
+    if (existing.source !== 'notification' && !(existing.linkedSources ?? []).includes('notification')) {
+      continue;
+    }
+
+    const existingTs = extractNotificationIngestionTimestampMs(existing);
+    const isWithinSlidingWindow =
+      existingTs !== null && Math.abs(nowMs - existingTs) <= NOTIFICATION_IDEMPOTENCY_TTL_MS;
+
+    if (!isWithinSlidingWindow) {
+      continue;
+    }
+
+    // 1) Stesso hash testo/app/payer a cavallo del confine tra due bucket da 5 minuti
+    if (incomingHashPrefix) {
+      const allRefs = [existing.sourceReference, ...(existing.linkedReferences ?? [])].filter(
+        (ref): ref is string => Boolean(ref)
+      );
+      if (allRefs.some((ref) => ref.includes(incomingHashPrefix))) {
+        return i;
+      }
+    }
+
+    // 2) Notifica doppia multi-app per lo stesso pagamento (es. Google Wallet + SMS Banca entro 5 min)
+    if (
+      existing.payer === incoming.payer &&
+      existing.date === incoming.date &&
+      Math.abs(existing.amount - incoming.amount) < 0.01
+    ) {
+      const existingMerchantKey = normalizeMerchantKey(existing.title);
+      const sameNormalizedMerchant =
+        Boolean(incomingMerchantKey) &&
+        Boolean(existingMerchantKey) &&
+        incomingMerchantKey === existingMerchantKey;
+      const matchScore = computeExpenseMatchScore(incoming, existing, recurringExpenses);
+      if (sameNormalizedMerchant || (matchScore.kind === 'possible_duplicate' && matchScore.score >= 75)) {
+        return i;
+      }
+    }
+  }
+
+  return -1;
+}
+
 function persistIngestedExpenseIfNeeded(
   rawExpense: ReturnType<typeof parseNotificationHeuristically> & { sourceReference?: string },
-  shouldPersist: boolean
+  shouldPersist: boolean,
+  nowMs = Date.now()
 ) {
   const candidate: Expense = {
-    id: `exp-notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `exp-notif-${nowMs}-${Math.random().toString(36).slice(2, 6)}`,
     ...rawExpense,
   };
 
   if (!shouldPersist || !(candidate.amount > 0)) {
-    return { expense: candidate, persisted: false, reconciled: false };
+    return { expense: candidate, persisted: false, reconciled: false, deduplicated: false };
   }
 
   const sanitized = sanitizeExpenseRecord(candidate);
   if (!sanitized) {
-    return { expense: candidate, persisted: false, reconciled: false };
+    return { expense: candidate, persisted: false, reconciled: false, deduplicated: false };
   }
 
   const db = readDatabase();
   const existingList = db.expenses ?? [];
   const activeTrip = (db.trips ?? []).find((t) => t.isActive) ?? null;
   const recurringList = db.recurringExpenses ?? [];
+
+  const recentDupIdx = findRecentSemanticNotificationDuplicateIndex(
+    existingList,
+    sanitized,
+    nowMs,
+    recurringList
+  );
+  if (recentDupIdx >= 0) {
+    const merged = mergeReconciledExpenses(existingList[recentDupIdx]!, sanitized);
+    const updatedExpenses = [...existingList];
+    updatedExpenses[recentDupIdx] = merged;
+    writeDatabase({ expenses: updatedExpenses });
+    return {
+      expense: merged,
+      persisted: true,
+      reconciled: true,
+      deduplicated: true,
+    };
+  }
 
   const result = reconcileIncomingExpenses(existingList, [sanitized], {
     activeTrip,
@@ -194,12 +281,13 @@ function persistIngestedExpenseIfNeeded(
       expense: touched,
       persisted: true,
       reconciled: result.mergedCount > 0,
+      deduplicated: result.mergedCount > 0 && result.addedCount === 0,
     };
   }
 
   const created = result.expenses[0] ?? sanitized;
   insertExpenseRecord(created);
-  return { expense: created, persisted: true, reconciled: false };
+  return { expense: created, persisted: true, reconciled: false, deduplicated: false };
 }
 
 export async function ingestNotification(params: {
@@ -298,9 +386,10 @@ export async function ingestNotification(params: {
           deduplicated: false,
         };
       }
-      const { expense, persisted, reconciled } = persistIngestedExpenseIfNeeded(
+      const { expense, persisted, reconciled, deduplicated } = persistIngestedExpenseIfNeeded(
         { ...parsedFallback, sourceReference },
-        shouldPersist
+        shouldPersist,
+        nowMs
       );
       return {
         success: true,
@@ -311,7 +400,7 @@ export async function ingestNotification(params: {
         reconciled,
         modelUsed: 'fallback-euristico-locale',
         fallbackUsed: true,
-        deduplicated: false,
+        deduplicated,
       };
     }
 
@@ -409,9 +498,10 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         };
       }
 
-      const { expense, persisted, reconciled } = persistIngestedExpenseIfNeeded(
+      const { expense, persisted, reconciled, deduplicated } = persistIngestedExpenseIfNeeded(
         normalized,
-        shouldPersist
+        shouldPersist,
+        nowMs
       );
       return {
         success: true,
@@ -422,7 +512,7 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         reconciled,
         modelUsed,
         fallbackUsed: false,
-        deduplicated: false,
+        deduplicated,
       };
     } catch (error) {
       console.warn('Notification ingest AI error, using local heuristic fallback:', error);
@@ -441,9 +531,10 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
           deduplicated: false,
         };
       }
-      const { expense, persisted, reconciled } = persistIngestedExpenseIfNeeded(
+      const { expense, persisted, reconciled, deduplicated } = persistIngestedExpenseIfNeeded(
         { ...parsedFallback, sourceReference },
-        shouldPersist
+        shouldPersist,
+        nowMs
       );
       return {
         success: true,
@@ -454,7 +545,7 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         reconciled,
         modelUsed: 'fallback-euristico-locale',
         fallbackUsed: true,
-        deduplicated: false,
+        deduplicated,
       };
     }
   })();
