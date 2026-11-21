@@ -13,6 +13,7 @@ import { generateContentWithFallback, hasGeminiApiKey } from './gemini';
 import { HttpError } from '../utils/http-error';
 import {
   classifyNonExpenseNotification,
+  EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN,
   inferCategoryFromText,
   parseNotificationHeuristically,
   parseNotificationHistoryHeuristically,
@@ -412,7 +413,7 @@ Analizza questa notifica o SMS da "${safeAppName}":
 ${safePromptText}
 === FINE NOTIFICA ===
 Stabilisci prima di tutto se la notifica rappresenta una SPESA REALE in uscita:
-- isExpense: true SOLO per pagamenti effettuati, addebiti carta/POS/SDD, acquisti o invii di denaro in uscita. Imposta OBBLIGATORIAMENTE false per: promozioni, pubblicità, coupon o sconti (es. "10€ di sconto..."), codici OTP o di verifica, avvisi di sicurezza o login, accrediti o bonifici in entrata, rimborsi ricevuti o comunicazioni informative di saldo.
+- isExpense: true per pagamenti effettuati (inclusi testi brevi o sintetici come "pagamento 12 euro bar roma"), addebiti carta/POS/SDD, acquisti o invii di denaro in uscita. Imposta OBBLIGATORIAMENTE false per: promozioni, pubblicità, coupon o sconti (es. "10€ di sconto..."), codici OTP o di verifica, avvisi di sicurezza o login, accrediti o bonifici in entrata, rimborsi ricevuti o comunicazioni informative di saldo.
 - ignoreReason: se isExpense è false, indica brevemente il motivo (es. "Promozione/sconto", "Codice OTP", "Accredito in entrata", "Rimborso", "Avviso di sicurezza/saldo"); se isExpense è true restituisci "".
 - merchant: nome dell'esercente, negozio, bar, supermercato o servizio (es. "Esselunga", "Bar Roma", "Amazon", "Pizzeria Da Mario"); se isExpense è false restituisci "".
 - amount: importo numerico pagato (se espresso con virgola es. "14,50" converti in 14.50); se isExpense è false restituisci 0.
@@ -446,12 +447,19 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
 
       const parsed = JSON.parse(aiRes.text || '{}') as Record<string, unknown>;
       const rawAmount = Number(parsed.amount);
+      const heuristicCheck = parseNotificationHeuristically(notificationText, safeAppName, payer);
+      const hasExplicitOutgoingPaymentSignal =
+        heuristicCheck.isExpense !== false &&
+        heuristicCheck.amount > 0 &&
+        EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN.test(notificationText);
+
       const isExplicitNonExpense =
-        parsed.isExpense === false ||
-        (parsed.amount !== undefined &&
-          parsed.amount !== null &&
-          Number.isFinite(rawAmount) &&
-          rawAmount <= 0);
+        !hasExplicitOutgoingPaymentSignal &&
+        (parsed.isExpense === false ||
+          (parsed.amount !== undefined &&
+            parsed.amount !== null &&
+            Number.isFinite(rawAmount) &&
+            rawAmount <= 0));
 
       if (isExplicitNonExpense) {
         const reason = sanitizePlainText(
@@ -471,8 +479,13 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         };
       }
 
+      const effectiveParsed =
+        hasExplicitOutgoingPaymentSignal && !(rawAmount > 0)
+          ? { ...parsed, amount: heuristicCheck.amount }
+          : parsed;
+
       const normalized = normalizeNotificationExpense(
-        parsed,
+        effectiveParsed,
         notificationText,
         safeAppName,
         payer,

@@ -39,9 +39,15 @@ function normalizeDecimalNumber(rawNumber: string): number {
 
 function mapCurrencyToken(token?: string): string {
   const upper = (token || '').trim().toUpperCase();
-  if (!upper || upper === '€' || upper === 'EUR') return 'EUR';
-  if (upper === '$' || upper === 'USD') return 'USD';
-  if (upper === '£' || upper === 'GBP') return 'GBP';
+  if (!upper || upper === '€' || upper === 'EUR' || upper === 'EURO' || upper === 'EURI') {
+    return 'EUR';
+  }
+  if (upper === '$' || upper === 'USD' || upper === 'DOLLARI' || upper === 'DOLLARO') {
+    return 'USD';
+  }
+  if (upper === '£' || upper === 'GBP' || upper === 'STERLINE' || upper === 'STERLINA') {
+    return 'GBP';
+  }
   return /^[A-Z]{3}$/.test(upper) ? upper : 'EUR';
 }
 
@@ -49,10 +55,14 @@ export function extractAmountAndCurrency(
   text: string,
   defaultCurrency = 'EUR'
 ): { amount: number; currency: string } {
+  const currencyToken = '(?:€|\\$|£|EURO?|EURI|USD|DOLLAR[OI]|GBP|STERLIN[AE])';
   const patterns: RegExp[] = [
-    /(?:totale|total|importo|addebit[oa]|pagat[oa]|spes[oa]|amount|paid|charged)\s*[:=\-]?\s*(€|\$|£|EUR|USD|GBP)?\s*(\d[\d.,]{0,12})\s*(€|\$|£|EUR|USD|GBP)?/i,
-    /(€|\$|£|EUR|USD|GBP)\s*(\d[\d.,]{0,12})/i,
-    /(\d[\d.,]{0,12})\s*(€|\$|£|EUR|USD|GBP)\b/i,
+    new RegExp(
+      `(?:totale|total|importo|addebit[oa]|addebitati|pagament[oi]|pagat[oa]|spes[oa]|acquist[oi]|operazione|transazione|inviat[oa]|amount|paid|charged)(?:\\s+(?:pos|carta|online|contactless))?(?:\\s+(?:di|per|da))?\\s*[:=\\-]?\\s*(${currencyToken})?\\s*(\\d[\\d.,]{0,12})\\s*(${currencyToken})?`,
+      'i'
+    ),
+    new RegExp(`(${currencyToken})\\s*(\\d[\\d.,]{0,12})`, 'i'),
+    new RegExp(`(\\d[\\d.,]{0,12})\\s*(${currencyToken})(?:\\b|(?=\\s|[.,;!?)\\]]|$))`, 'i'),
   ];
 
   for (const pattern of patterns) {
@@ -292,6 +302,12 @@ function extractNotificationMerchant(text: string, fallback: string): string {
   if (patternMatch?.[1]) {
     return sanitizePlainText(patternMatch[1], 80, fallback);
   }
+  const afterAmountMatch = text.match(
+    /(?:\d[\d.,]{0,12}\s*(?:€|\$|£|euro?|euri|usd|dollar[oi]|gbp|sterlin[ae])\b|(?:€|\$|£|euro?|usd|gbp)\s*\d[\d.,]{0,12})\s+(?:presso|da|a|su|per|in|al|alla|allo)?\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+  );
+  if (afterAmountMatch?.[1]) {
+    return sanitizePlainText(afterAmountMatch[1], 80, fallback);
+  }
   const providerPrefix = text.match(/^([A-Za-zÀ-ÿ0-9 /._-]{2,25}):/);
   if (providerPrefix?.[1]) {
     return sanitizePlainText(providerPrefix[1], 60, fallback);
@@ -306,13 +322,13 @@ const PROMO_OR_DISCOUNT_NOTIFICATION_PATTERN =
   /\b(?:sconto|sconti|coupon|promo|promozione|promozionale|buono\s+(?:sconto|regalo|da|del)|codice\s+sconto|offerta\s+speciale|voucher|spesa\s+minima|risparmi(?:a|o)\s+fino|cashback\s+disponibile|regalo\s+per\s+te|fino\s+al?\s+\d+\s*%\s+di)\b/i;
 
 const INCOMING_CREDIT_OR_REFUND_NOTIFICATION_PATTERN =
-  /\b(?:accredito\s+(?:di|bonifico|stipendio|ricevuto|sul\s+conto)|bonifico\s+(?:ricevuto|in\s+entrata|a\s+tuo\s+favore|accreditato)|hai\s+ricevuto\s+(?:un\s+bonifico|un\s+accredito|un\s+rimborso|€|\$|£|eur\b|usd\b|gbp\b|\d)|ti\s+ha\s+inviato\s+(?:€|\$|£|eur\b|usd\b|gbp\b|\d)|rimborso\s+(?:di|ricevuto|accreditato|effettuato)|storno\s+(?:di|operazione|pagamento))\b/i;
+  /\b(?:accredito\s+(?:di|bonifico|stipendio|ricevuto|sul\s+conto)|bonifico\s+(?:ricevuto|in\s+entrata|a\s+tuo\s+favore|accreditato)|hai\s+ricevuto\s+(?:un\s+bonifico|un\s+accredito|un\s+rimborso|€|\$|£|euro?\b|usd\b|gbp\b|\d)|ti\s+ha\s+inviato\s+(?:€|\$|£|euro?\b|usd\b|gbp\b|\d)|rimborso\s+(?:di|ricevuto|accreditato|effettuato)|storno\s+(?:di|operazione|pagamento))\b/i;
 
 const BALANCE_INFO_ONLY_NOTIFICATION_PATTERN =
   /\bsaldo\s+(?:disponibile|contabile|attuale)\b/i;
 
-const EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN =
-  /\b(?:pagamento\s+(?:di|pos|effettuato|autorizzato|con\s+carta)|hai\s+(?:pagato|speso|inviato)|addebit(?:o|ati|ato)\b|operazione\s+di\s+\d|transazione\s+(?:di|autorizzata)|acquisto\s+(?:di|presso|autorizzato))\b/i;
+export const EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN =
+  /\b(?:pagament[oi]|pagat[oa]|hai\s+(?:pagato|speso|inviato)|addebit(?:o|ati|ato|ata)\b|operazione\s+(?:di|pos|carta)|transazione\s+(?:di|pos|carta|autorizzata)|acquist[oi])\b/i;
 
 export function classifyNonExpenseNotification(text: string): {
   isNonExpense: boolean;

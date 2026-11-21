@@ -7,7 +7,11 @@ export async function postIngestNotificationController(req: Request, res: Respon
   try {
     const { notificationText, appName, payer, persist, eventId } = req.body ?? {};
     const shouldPersist =
-      persist === true || hasValidWebhookSecret(req.get('x-duospend-secret'));
+      persist === true ||
+      persist === 'true' ||
+      persist === 1 ||
+      persist === '1' ||
+      hasValidWebhookSecret(req.get('x-duospend-secret'));
 
     const result = await ingestNotification({
       notificationText,

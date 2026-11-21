@@ -129,6 +129,20 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(normalized.amount).toBe(10);
       expect(normalized.title).toBe('Satispay');
     });
+
+    it('estrae correttamente importo con parola "euro" ed esercente successivo (es. " pagamento 12 euro bar roma ")', () => {
+      const parsed = parseNotificationHeuristically(
+        ' pagamento 12 euro bar roma ',
+        'App Bancaria / SMS',
+        'user'
+      );
+
+      expect(parsed.amount).toBe(12);
+      expect(parsed.currency).toBe('EUR');
+      expect(parsed.title.toLowerCase()).toBe('bar roma');
+      expect(parsed.category).toBe('Ristoranti e Bar');
+      expect(parsed.isExpense).not.toBe(false);
+    });
   });
 
   describe('Cronologia notifiche Android (parseNotificationHistoryHeuristically)', () => {

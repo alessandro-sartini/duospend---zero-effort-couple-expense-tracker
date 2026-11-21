@@ -70,8 +70,8 @@ export function parseNotificationLineLocally(
   if (!clean) return null;
 
   const amountMatch =
-    clean.match(/(?:€|eur)\s*([0-9]{1,6}(?:[.,][0-9]{1,2})?)/i) ||
-    clean.match(/([0-9]{1,6}(?:[.,][0-9]{1,2})?)\s*(?:€|eur)\b/i) ||
+    clean.match(/(?:€|euro?|euri)\s*([0-9]{1,6}(?:[.,][0-9]{1,2})?)/i) ||
+    clean.match(/([0-9]{1,6}(?:[.,][0-9]{1,2})?)\s*(?:€|euro?|euri)\b/i) ||
     clean.match(/([$£])\s*([0-9]{1,6}(?:[.,][0-9]{1,2})?)/i) ||
     clean.match(/\b(usd|gbp)\s*([0-9]{1,6}(?:[.,][0-9]{1,2})?)/i);
 
@@ -88,6 +88,7 @@ export function parseNotificationLineLocally(
 
   const merchantMatch =
     clean.match(/\b(?:presso|da|su|a|per)\s+([A-Za-z0-9À-ÖØ-öø-ÿ&'.\-\s]{2,42}?)(?:\s+(?:il|del|alle|di|con|€|\d{1,2}[/-]\d{1,2})|[.,;]|$)/i) ||
+    clean.match(/(?:\d[\d.,]{0,12}\s*(?:€|euro?|euri)\b|(?:€|euro?)\s*\d[\d.,]{0,12})\s+(?:presso|da|su|a|per|in|al)?\s*([A-Za-z0-9À-ÖØ-öø-ÿ&'.\-\s]{2,42}?)(?:[.,;]|$)/i) ||
     clean.match(/^([^:]{2,32}):/);
   const title = merchantMatch?.[1]?.trim() || clean.slice(0, 40) || 'Pagamento da Notifica';
 
