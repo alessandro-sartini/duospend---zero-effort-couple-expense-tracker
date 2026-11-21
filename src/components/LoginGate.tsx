@@ -91,9 +91,7 @@ export const LoginGate: React.FC<LoginGateProps> = ({
 
           <h1 className="text-xl font-bold tracking-tight">DuoSpend · Cassaforte Privata</h1>
           <p className="text-xs text-stone-400 mt-1 max-w-xs mx-auto">
-            Registro spese e pareggio conti riservato a{' '}
-            <strong className="text-stone-200">{profile.userName}</strong> &{' '}
-            <strong className="text-stone-200">{profile.partnerName}</strong>.
+            Registro spese e pareggio conti riservato alla coppia autorizzata.
           </p>
 
           <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-stone-300">
