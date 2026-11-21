@@ -178,8 +178,162 @@ export function resolveSafeChildPath(rootDir: string, relativeTarget: string): s
   return resolvedTarget;
 }
 
+const MAX_DECODED_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 8192;
+const MAX_IMAGE_PIXELS = 25_000_000;
+
 /**
- * Validates base64 image payloads for OCR upload by verifying MIME and binary magic bytes.
+ * Extracts pixel dimensions from PNG, JPEG, or WebP headers when present,
+ * returning null for truncated test fixtures without full dimension headers.
+ */
+export function extractRasterDimensions(
+  buffer: Buffer,
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+): { width: number; height: number } | null {
+  if (mimeType === 'image/png') {
+    if (buffer.length >= 24 && buffer.subarray(12, 16).toString('ascii') === 'IHDR') {
+      return {
+        width: buffer.readUInt32BE(16),
+        height: buffer.readUInt32BE(20),
+      };
+    }
+    return null;
+  }
+
+  if (mimeType === 'image/jpeg') {
+    let offset = 2;
+    while (offset + 1 < buffer.length) {
+      if (buffer[offset] !== 0xff) break;
+      while (offset < buffer.length && buffer[offset] === 0xff) {
+        offset += 1;
+      }
+      if (offset >= buffer.length) break;
+      const marker = buffer[offset];
+      offset += 1;
+
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+        if (marker === 0xd9) break;
+        continue;
+      }
+      if (marker === 0xda) break;
+      if (offset + 2 > buffer.length) break;
+      const segmentLength = buffer.readUInt16BE(offset);
+      if (segmentLength < 2 || offset + segmentLength > buffer.length) break;
+
+      const isSofMarker =
+        (marker >= 0xc0 && marker <= 0xc3) ||
+        (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) ||
+        (marker >= 0xcd && marker <= 0xcf);
+      if (isSofMarker && segmentLength >= 7 && offset + 7 <= buffer.length) {
+        return {
+          height: buffer.readUInt16BE(offset + 3),
+          width: buffer.readUInt16BE(offset + 5),
+        };
+      }
+      offset += segmentLength;
+    }
+    return null;
+  }
+
+  if (mimeType === 'image/webp' && buffer.length >= 30) {
+    const chunkId = buffer.subarray(12, 16).toString('ascii');
+    if (
+      chunkId === 'VP8 ' &&
+      buffer[23] === 0x9d &&
+      buffer[24] === 0x01 &&
+      buffer[25] === 0x2a
+    ) {
+      return {
+        width: buffer.readUInt16LE(26) & 0x3fff,
+        height: buffer.readUInt16LE(28) & 0x3fff,
+      };
+    }
+    if (chunkId === 'VP8L' && buffer[20] === 0x2f) {
+      const bits =
+        buffer[21] | (buffer[22] << 8) | (buffer[23] << 16) | (buffer[24] << 24);
+      return {
+        width: (bits & 0x3fff) + 1,
+        height: ((bits >> 14) & 0x3fff) + 1,
+      };
+    }
+    if (chunkId === 'VP8X') {
+      return {
+        width: (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16)) + 1,
+        height: (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16)) + 1,
+      };
+    }
+  }
+
+  return null;
+}
+
+function hasEmbeddedExecutableOrScriptContent(buffer: Buffer): boolean {
+  const head = buffer.subarray(0, Math.min(buffer.length, 65_536)).toString('latin1');
+  const tailStart = Math.max(0, buffer.length - 16_384);
+  const tail = tailStart > 0 ? buffer.subarray(tailStart).toString('latin1') : '';
+  const polyglotPattern =
+    /<script\b|<\?php\b|<!doctype\s+html\b|<html\b|<foreignObject\b|javascript:/i;
+  return polyglotPattern.test(head) || (tail ? polyglotPattern.test(tail) : false);
+}
+
+/**
+ * Strips JPEG APP1 (EXIF/XMP) and COM comment segments before storage or AI forwarding
+ * so camera/GPS metadata is not retained.
+ */
+export function stripJpegExifAndCommentSegments(buffer: Buffer): Buffer {
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) {
+    return buffer;
+  }
+  const chunks: Buffer[] = [buffer.subarray(0, 2)];
+  let offset = 2;
+  let modified = false;
+
+  while (offset + 1 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      return buffer;
+    }
+    const markerStart = offset;
+    while (offset < buffer.length && buffer[offset] === 0xff) {
+      offset += 1;
+    }
+    if (offset >= buffer.length) {
+      return buffer;
+    }
+    const marker = buffer[offset];
+    offset += 1;
+
+    if (marker === 0xda || marker === 0xd9) {
+      chunks.push(buffer.subarray(markerStart));
+      return modified ? Buffer.concat(chunks) : buffer;
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+      chunks.push(buffer.subarray(markerStart, offset));
+      continue;
+    }
+    if (offset + 2 > buffer.length) {
+      return buffer;
+    }
+    const segmentLength = buffer.readUInt16BE(offset);
+    if (segmentLength < 2 || offset + segmentLength > buffer.length) {
+      return buffer;
+    }
+    const segmentEnd = offset + segmentLength;
+
+    if (marker === 0xe1 || marker === 0xfe) {
+      modified = true;
+    } else {
+      chunks.push(buffer.subarray(markerStart, segmentEnd));
+    }
+    offset = segmentEnd;
+  }
+
+  return modified ? Buffer.concat(chunks) : buffer;
+}
+
+/**
+ * Validates base64 image payloads for OCR upload by verifying MIME, binary magic bytes,
+ * decoded size, image dimensions (decompression bomb guard), polyglot payloads, and EXIF stripping.
  */
 export function validateUploadedImagePayload(
   imageBase64: unknown,
@@ -217,6 +371,9 @@ export function validateUploadedImagePayload(
   if (buffer.length < 12) {
     return { valid: false, error: 'File immagine vuoto o corrotto.' };
   }
+  if (buffer.length > MAX_DECODED_IMAGE_BYTES) {
+    return { valid: false, error: 'Immagine dello scontrino troppo grande (massimo 10 MB).' };
+  }
 
   const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
   const isPng =
@@ -243,7 +400,34 @@ export function validateUploadedImagePayload(
     };
   }
 
-  return { valid: true, cleanBase64, mimeType: headerMime };
+  if (hasEmbeddedExecutableOrScriptContent(buffer)) {
+    return {
+      valid: false,
+      error: 'Il file immagine contiene codice eseguibile o script non consentito.',
+    };
+  }
+
+  const dimensions = extractRasterDimensions(buffer, headerMime);
+  if (
+    dimensions &&
+    (dimensions.width <= 0 ||
+      dimensions.height <= 0 ||
+      dimensions.width > MAX_IMAGE_DIMENSION ||
+      dimensions.height > MAX_IMAGE_DIMENSION ||
+      dimensions.width * dimensions.height > MAX_IMAGE_PIXELS)
+  ) {
+    return {
+      valid: false,
+      error: 'Dimensioni immagine non valide o eccessive (protezione decompression bomb).',
+    };
+  }
+
+  const sanitizedBuffer =
+    headerMime === 'image/jpeg' ? stripJpegExifAndCommentSegments(buffer) : buffer;
+  const sanitizedBase64 =
+    sanitizedBuffer === buffer ? cleanBase64 : sanitizedBuffer.toString('base64');
+
+  return { valid: true, cleanBase64: sanitizedBase64, mimeType: headerMime };
 }
 
 /**
@@ -354,7 +538,9 @@ export function sanitizeSafeImageUrl(value: unknown): string | undefined {
     }
 
     const rasterCheck = validateUploadedImagePayload(trimmed, `image/${kind}`);
-    return rasterCheck.valid ? trimmed : undefined;
+    return rasterCheck.valid && rasterCheck.cleanBase64 && rasterCheck.mimeType
+      ? `data:${rasterCheck.mimeType};base64,${rasterCheck.cleanBase64}`
+      : undefined;
   }
 
   return undefined;

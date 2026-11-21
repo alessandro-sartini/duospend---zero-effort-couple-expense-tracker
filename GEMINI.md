@@ -18,20 +18,21 @@ DuoSpend is a React 19, Vite 8, Express 4 and Node.js 22 SQLite personal-finance
 
 - Validate route, origin and authentication before reading or writing private data.
 - Reject cross-origin state-changing API requests and suspicious paths.
-- Apply image MIME and binary-signature validation plus size limits to all receipt uploads.
-- Prefer HttpOnly, Secure in production and SameSite=Strict cookies.
+- Apply image MIME, binary-signature, dimension/decompression-bomb, polyglot, and EXIF-stripping validation plus size limits to all receipt uploads.
+- Prefer HttpOnly, Secure in production and SameSite=Strict cookies, with bounded server-side session stores.
+- Reject cross-origin `Sec-Fetch-Site: cross-site` mutations (except secret-authenticated webhooks) and return structured JSON errors without stack traces in production.
 - Never add debug endpoints or developer bypasses to production.
-- Use dependency limits and bounded retry/timeout behavior for external services.
+- Use dependency limits and bounded retry/timeout behavior (including background worker timeouts) for external services.
 - Preserve CSRF, CORS, XSS, SQL-injection, path-traversal and SSRF protections.
 - Do not commit `.env*`, databases, logs, tokens or backup exports.
 
 ## PWA and UI requirements
 
 - Mobile-first, accessible and responsive: do not disable browser zoom.
-- Respect safe areas, keyboard input, camera capture, offline behavior and standalone mode.
-- Keep static asset caching separate from private API traffic.
+- Respect safe areas, keyboard input, camera capture, offline sync queue precedence, and standalone mode.
+- Keep static asset caching separate from private API traffic, serving `sw.js`, `index.html`, and `manifest.webmanifest` with `no-cache, no-store, must-revalidate`.
 - Preserve visible loading, empty, error and success states.
-- Support keyboard navigation, focus traps for dialogs and reduced-motion preferences.
+- Support keyboard navigation, `Escape` closing and focus traps for dialogs (`useFocusTrap`), and `prefers-reduced-motion` preferences.
 
 ## Verification rules
 

@@ -45,7 +45,7 @@ vi.mock('@google/genai', () => ({
   },
 }));
 
-import { saveExpenses } from '../src/services/storage';
+import { saveExpenses, syncWithServerDatabase } from '../src/services/storage';
 import {
   generateContentWithFallback,
   resetGeminiModelCachesForTests,
@@ -224,5 +224,116 @@ describe('Resilienza salvataggio OCR (localStorage quota) e cooldown modelli Gem
     expect(second.modelUsed).toBe('gemini-3.5-flash-lite');
     expect(generateContentMock).toHaveBeenCalledTimes(3);
     expect(generateContentMock.mock.calls[2]?.[0]?.model).toBe('gemini-3.5-flash-lite');
+  });
+
+  it('syncWithServerDatabase preserva le modifiche locali offline rispetto ai record server obsoleti mantenendo receiptUrl', async () => {
+    const store = new Map<string, string>();
+    const setItemMock = vi.fn((key: string, value: string) => {
+      if (value.includes('data:image/')) {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      store.set(key, value);
+    });
+
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: setItemMock,
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+    });
+
+    let phase: 'offline' | 'online' = 'offline';
+    const capturedMergePostBodies: Array<{ expenses?: Expense[] }> = [];
+    const serverReceiptUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/';
+
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url === '/api/data' && method === 'POST') {
+        if (phase === 'offline') {
+          return new Response(JSON.stringify({ error: 'Offline' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        capturedMergePostBodies.push(
+          JSON.parse(String(init?.body ?? '{}')) as { expenses?: Expense[] },
+        );
+        return new Response(JSON.stringify({ success: true, lastUpdated: '2026-11-15T19:00:00.000Z' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/data' && method === 'GET') {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            expenses: [
+              {
+                id: 'exp-1',
+                title: 'Titolo Vecchio Server',
+                amount: 20,
+                currency: 'EUR',
+                date: '2026-11-15',
+                category: 'Spesa',
+                payer: 'user',
+                splitType: '50_50',
+                source: 'camera',
+                receiptUrl: serverReceiptUrl,
+              },
+            ],
+            settlements: [],
+            goals: [],
+            profile: initialMockDb.profile,
+            lastUpdated: '2026-11-15T18:30:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    saveExpenses([
+      {
+        id: 'exp-1',
+        title: 'Modifica Locale Offline',
+        amount: 35.5,
+        currency: 'EUR',
+        date: '2026-11-15',
+        category: 'Spesa',
+        payer: 'user',
+        splitType: '50_50',
+        source: 'camera',
+        receiptUrl: serverReceiptUrl,
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(store.get('duospend_dirty_sync_v1')).toBe('1');
+
+    phase = 'online';
+    await syncWithServerDatabase();
+
+    await vi.waitFor(() => {
+      expect(capturedMergePostBodies.length).toBeGreaterThanOrEqual(1);
+    });
+
+    const latestBody = capturedMergePostBodies[capturedMergePostBodies.length - 1];
+    const syncedExp = latestBody?.expenses?.find((exp) => exp.id === 'exp-1');
+    expect(syncedExp?.title).toBe('Modifica Locale Offline');
+    expect(syncedExp?.amount).toBe(35.5);
+    expect(syncedExp?.receiptUrl).toBe(serverReceiptUrl);
+
+    await vi.waitFor(() => {
+      expect(store.has('duospend_dirty_sync_v1')).toBe(false);
+    });
   });
 });

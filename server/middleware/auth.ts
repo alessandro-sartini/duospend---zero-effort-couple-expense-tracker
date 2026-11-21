@@ -18,6 +18,7 @@ declare global {
 
 const sessions = new Map<string, number>();
 const DEV_SESSION_DURATION_MS = 15 * 60 * 1000;
+const MAX_DEV_SESSIONS = 50;
 
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
@@ -147,10 +148,20 @@ export function issueDeveloperSession(password: unknown, res: Response, req?: Re
     return false;
   }
 
+  const previousToken = req ? getDeveloperSessionToken(req) : undefined;
+  if (previousToken) sessions.delete(previousToken);
+
+  pruneExpiredDeveloperSessions();
+  while (sessions.size >= MAX_DEV_SESSIONS) {
+    const oldestToken = sessions.keys().next().value;
+    if (!oldestToken) break;
+    sessions.delete(oldestToken);
+  }
+
   const isSecure =
     process.env.NODE_ENV === 'production' ||
     Boolean(req?.secure) ||
-    req?.get?.('x-forwarded-proto') === 'https';
+    req?.get?.('x-forwarded-proto')?.split(',')[0]?.trim() === 'https';
 
   const token = randomBytes(32).toString('base64url');
   sessions.set(token, Date.now() + DEV_SESSION_DURATION_MS);

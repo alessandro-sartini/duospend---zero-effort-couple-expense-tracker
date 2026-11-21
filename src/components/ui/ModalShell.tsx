@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface ModalShellProps {
@@ -40,7 +41,10 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   closeOnBackdrop = false,
   children,
 }) => {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   useScrollLock(isOpen);
+  useFocusTrap(dialogRef, isOpen);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -153,6 +157,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
       }`}
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       onClick={
         closeOnBackdrop
           ? (event) => {
@@ -164,7 +169,8 @@ export const ModalShell: React.FC<ModalShellProps> = ({
       }
     >
       <div
-        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col transition-[max-height,height] duration-200 ease-out ${
+        ref={dialogRef}
+        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col outline-none transition-[max-height,height] duration-200 ease-out ${
           mobileBottomSheet
             ? mobileHeightClass
             : 'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
@@ -225,7 +231,10 @@ export const ModalShell: React.FC<ModalShellProps> = ({
               </div>
             )}
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-stone-900 font-display truncate">
+              <h3
+                id={titleId}
+                className="text-base font-bold text-stone-900 font-display truncate"
+              >
                 {title}
               </h3>
               {subtitle && (

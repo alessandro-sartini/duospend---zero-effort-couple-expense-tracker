@@ -40,6 +40,7 @@ import {
   sanitizeSafeImageUrl,
   sanitizeSettlementRecord,
   stripDangerousKeys,
+  stripJpegExifAndCommentSegments,
   validateUploadedImagePayload,
   validateUbuntuSyncTarget,
 } from '../server/utils/security';
@@ -450,6 +451,96 @@ describe('Sicurezza server, anti-traversal e sanitizzazione POST /api/data', () 
           size: 1024,
           type: 'image/webp',
         })
+      ).toEqual({ valid: true });
+    });
+
+    it('rifiuta decompression bomb PNG (> 8192px / 25MP) e payload poliglotti HTML/PHP', () => {
+      const pngBomb = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x4e, 0x20, // width = 20000
+        0x00, 0x00, 0x4e, 0x20, // height = 20000
+        0x08, 0x02, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+      ]);
+      expect(
+        validateUploadedImagePayload(`data:image/png;base64,${pngBomb.toString('base64')}`, 'image/png')
+      ).toMatchObject({ valid: false });
+
+      const validTinyPng = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x01,
+        0x08, 0x02, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+      ]);
+      const polyglotHtml = Buffer.concat([validTinyPng, Buffer.from('<script>alert(1)</script>')]);
+      expect(
+        validateUploadedImagePayload(`data:image/png;base64,${polyglotHtml.toString('base64')}`, 'image/png')
+      ).toMatchObject({ valid: false });
+
+      const polyglotPhp = Buffer.concat([
+        Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]),
+        Buffer.from('<?php echo 1; ?>'),
+      ]);
+      expect(
+        validateUploadedImagePayload(`data:image/jpeg;base64,${polyglotPhp.toString('base64')}`, 'image/jpeg')
+      ).toMatchObject({ valid: false });
+    });
+
+    it('rimuove segmenti EXIF APP1 e COM dai JPEG caricati mantenendo i dati immagine', () => {
+      const jpegWithExif = Buffer.concat([
+        Buffer.from([0xff, 0xd8]), // SOI
+        Buffer.from([0xff, 0xe1, 0x00, 0x0a]), // APP1 len=10
+        Buffer.from('Exif\0\0II', 'ascii'),
+        Buffer.from([0xff, 0xfe, 0x00, 0x06]), // COM len=6
+        Buffer.from('GPS1', 'ascii'),
+        Buffer.from([
+          0xff, 0xc0, 0x00, 0x11, 0x08,
+          0x00, 0x01, 0x00, 0x01, // height=1, width=1
+          0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+        ]), // SOF0
+        Buffer.from([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]), // SOS
+        Buffer.from([0xaa, 0xbb, 0xff, 0xd9]), // entropy + EOI
+      ]);
+
+      const stripped = stripJpegExifAndCommentSegments(jpegWithExif);
+      expect(stripped.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+      expect(stripped.includes(Buffer.from('Exif'))).toBe(false);
+      expect(stripped.includes(Buffer.from('GPS1'))).toBe(false);
+      expect(stripped.includes(Buffer.from([0xff, 0xc0]))).toBe(true);
+      expect(stripped.subarray(-2)).toEqual(Buffer.from([0xff, 0xd9]));
+
+      const rawDataUrl = `data:image/jpeg;base64,${jpegWithExif.toString('base64')}`;
+      const validated = validateUploadedImagePayload(rawDataUrl, 'image/jpeg');
+      expect(validated.valid).toBe(true);
+      expect(validated.mimeType).toBe('image/jpeg');
+      expect(validated.cleanBase64).toBeTruthy();
+      expect(
+        Buffer.from(validated.cleanBase64 ?? '', 'base64').includes(Buffer.from('Exif'))
+      ).toBe(false);
+
+      const safeStored = sanitizeSafeImageUrl(rawDataUrl) ?? '';
+      expect(safeStored.startsWith('data:image/jpeg;base64,')).toBe(true);
+      const storedBytes = Buffer.from(safeStored.replace('data:image/jpeg;base64,', ''), 'base64');
+      expect(storedBytes.includes(Buffer.from('GPS1'))).toBe(false);
+    });
+
+    it('rifiuta nomi file ricevuta con doppie estensioni eseguibili, traversal o estensione non coerente col MIME', () => {
+      expect(
+        validateReceiptFile({ name: 'evil.php.jpg', size: 1024, type: 'image/jpeg' })
+      ).toMatchObject({ valid: false });
+      expect(
+        validateReceiptFile({ name: 'photo.png', size: 1024, type: 'image/jpeg' })
+      ).toMatchObject({ valid: false });
+      expect(
+        validateReceiptFile({ name: '../secret.jpg', size: 1024, type: 'image/jpeg' })
+      ).toMatchObject({ valid: false });
+      expect(
+        validateReceiptFile({ name: 'scontrino-esselunga_01.jpg', size: 1024, type: 'image/jpeg' })
       ).toEqual({ valid: true });
     });
   });

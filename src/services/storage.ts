@@ -243,25 +243,46 @@ function notifyUnauthorizedIfNeeded(status: number): void {
   }
 }
 
-const syncPatchToServer = async (patch: Record<string, unknown>) => {
+let syncQueuePromise: Promise<void> = Promise.resolve();
+let pendingSyncCount = 0;
+let batchHadFailure = false;
+
+const syncPatchToServer = (patch: Record<string, unknown>): Promise<void> => {
   safeSetLocalStorageItem(STORAGE_KEYS.DIRTY_SYNC, '1');
-  try {
-    const response = await fetch('/api/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    if (response.ok) {
-      localStorage.removeItem(STORAGE_KEYS.DIRTY_SYNC);
-    } else {
-      notifyUnauthorizedIfNeeded(response.status);
-      console.warn('Background sync failed:', response.status);
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message !== 'Accedi con Google per continuare.') {
-      console.warn('Background sync error:', err);
-    }
+  if (pendingSyncCount === 0) {
+    batchHadFailure = false;
   }
+  pendingSyncCount += 1;
+
+  const run = async () => {
+    try {
+      const response = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (response.ok) {
+        if (pendingSyncCount <= 1 && !batchHadFailure) {
+          localStorage.removeItem(STORAGE_KEYS.DIRTY_SYNC);
+        }
+      } else {
+        batchHadFailure = true;
+        notifyUnauthorizedIfNeeded(response.status);
+        console.warn('Background sync failed:', response.status);
+      }
+    } catch (err) {
+      batchHadFailure = true;
+      if (err instanceof Error && err.message !== 'Accedi con Google per continuare.') {
+        console.warn('Background sync error:', err);
+      }
+    } finally {
+      pendingSyncCount = Math.max(0, pendingSyncCount - 1);
+    }
+  };
+
+  const next = syncQueuePromise.then(run, run);
+  syncQueuePromise = next.catch(() => {});
+  return next;
 };
 
 export const loadSettlements = (): Settlement[] => {
@@ -372,37 +393,45 @@ export const syncWithServerDatabase = async (): Promise<{
       };
     }
 
-    // Merge server expenses with local pending offline changes
+    // Merge server expenses with local pending offline changes (local edits take precedence)
     const localExps = loadExpenses();
     const expMap = new Map<string, Expense>();
-    localExps.forEach((e) => expMap.set(e.id, e));
     serverExps.forEach((e) => expMap.set(e.id, e));
+    localExps.forEach((e) => {
+      const serverMatch = expMap.get(e.id);
+      expMap.set(e.id, {
+        ...e,
+        ...(e.receiptUrl ? {} : serverMatch?.receiptUrl ? { receiptUrl: serverMatch.receiptUrl } : {}),
+      });
+    });
     const mergedExpenses = Array.from(expMap.values()).sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
-    // Merge settlements
+    // Merge settlements (local edits take precedence)
     const localStls = loadSettlements();
     const stlMap = new Map<string, Settlement>();
-    localStls.forEach((s) => stlMap.set(s.id, s));
     serverStls.forEach((s) => stlMap.set(s.id, s));
+    localStls.forEach((s) => stlMap.set(s.id, s));
     const mergedSettlements = Array.from(stlMap.values()).sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
-    // Merge goals
+    // Merge goals (local edits take precedence)
     const localGoals = loadGoals();
     const goalMap = new Map<string, SavingGoal>();
-    localGoals.forEach((g) => goalMap.set(g.id, g));
     serverGoals.forEach((g) => goalMap.set(g.id, g));
+    localGoals.forEach((g) => goalMap.set(g.id, g));
     const mergedGoals = Array.from(goalMap.values());
 
-    // Profile
+    // Profile (local edits take precedence while preserving server-verified couple emails)
     const localProfile = loadProfile();
     const mergedProfile = sanitizeAndMigrateProfile({
       ...defaultProfile,
-      ...localProfile,
       ...serverProfile,
+      ...localProfile,
+      userEmail: serverProfile.userEmail || localProfile.userEmail,
+      partnerEmail: serverProfile.partnerEmail || localProfile.partnerEmail,
     });
 
     // Save merged state locally
@@ -411,24 +440,16 @@ export const syncWithServerDatabase = async (): Promise<{
     safeSetLocalStorageItem(STORAGE_KEYS.GOALS, JSON.stringify(mergedGoals));
     safeSetLocalStorageItem(STORAGE_KEYS.PROFILE, JSON.stringify(mergedProfile));
 
-    // Send back unified data to server
-    void fetch('/api/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        expenses: mergedExpenses,
-        settlements: mergedSettlements,
-        goals: mergedGoals,
-        profile: mergedProfile,
-      }),
-    }).then((response) => {
-      if (response.ok) {
-        localStorage.removeItem(STORAGE_KEYS.DIRTY_SYNC);
-      } else {
-        notifyUnauthorizedIfNeeded(response.status);
-        console.warn('Server sync failed:', response.status);
-      }
-    }).catch((error) => console.warn('Server sync failed:', error));
+    // Send back unified data to server through the serialized queue
+    void syncPatchToServer({
+      expenses: mergedExpenses,
+      settlements: mergedSettlements,
+      goals: mergedGoals,
+      profile: {
+        ...mergedProfile,
+        trackingStartDate: mergedProfile.trackingStartDate ?? '',
+      },
+    });
 
     return {
       expenses: mergedExpenses,

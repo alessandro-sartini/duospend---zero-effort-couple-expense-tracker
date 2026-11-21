@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 const SESSION_COOKIE = 'duospend_google_session';
 const DEFAULT_SESSION_IDLE_MINUTES = 30;
 const DEFAULT_SESSION_MAX_HOURS = 4;
+const MAX_GOOGLE_SESSIONS = 200;
 
 function parseClampedEnvNumber(
   rawValue: string | undefined,
@@ -85,6 +86,15 @@ function getActiveSessionEntry(
   return { token, record };
 }
 
+function isSecureCookieRequest(req?: Request): boolean {
+  const forwardedProto = req?.get?.('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  return (
+    process.env.NODE_ENV === 'production' ||
+    Boolean(req?.secure) ||
+    forwardedProto === 'https'
+  );
+}
+
 export function createGoogleSession(
   email: string,
   res: Response,
@@ -94,6 +104,13 @@ export function createGoogleSession(
   // Rotazione dell'ID di sessione a ogni login (protezione da session fixation)
   const previousToken = previousReq ? getCookie(previousReq, SESSION_COOKIE) : undefined;
   if (previousToken) sessions.delete(previousToken);
+
+  pruneExpiredGoogleSessions();
+  while (sessions.size >= MAX_GOOGLE_SESSIONS) {
+    const oldestToken = sessions.keys().next().value;
+    if (!oldestToken) break;
+    sessions.delete(oldestToken);
+  }
 
   const now = Date.now();
   const maxDurationMs = getSessionMaxDurationMs();
@@ -112,7 +129,7 @@ export function createGoogleSession(
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookieRequest(previousReq),
     path: '/api',
     maxAge: maxDurationMs,
   });
@@ -209,7 +226,7 @@ export function revokeGoogleSession(req: Request, res: Response): GoogleOAuthTok
   res.clearCookie(SESSION_COOKIE, {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookieRequest(req),
     path: '/api',
   });
   return oauth;
