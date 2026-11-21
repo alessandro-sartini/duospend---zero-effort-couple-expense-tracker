@@ -203,6 +203,7 @@
 - **Offline multi-device edit collision**: Simultaneous offline edits by both partners on the *exact same transaction ID* resolve by last-reconnecting local-precedence overwrite. For savings challenges, mutations are server-authoritative (`expectedVersion` + `409 Conflict`) and blocked offline (read-only cached preview only).
 - **Savings challenge currency & PWA limits**: Challenges do not apply implicit FX conversion (foreign-currency expenses are excluded and flagged); Chrome PWAs cannot trigger silent end-of-month push notifications while closed.
 - **Webhook HTTPS requirement**: MacroDroid / external webhooks must travel over HTTPS (e.g., Cloudflare Tunnel / reverse proxy) so `x-duospend-secret` is encrypted in transit.
+- **MacroDroid setup**: The complete Android notification and SMS setup, server secret configuration, request payload, variables and verification procedure are documented in [MACRODROID_SETUP_IT.md](./MACRODROID_SETUP_IT.md).
 
 ### Automated Verification Suites (`npm test`, `npm run lint`, `npm run build`)
 - `tests/analytics-math.test.ts` (10 tests): category analytics, date filtering, budgets.

@@ -37,7 +37,8 @@ All 4 capture tools are reachable from the **floating `+` Quick Actions button**
 - **Option C — Android Notification History**:
   - Copy multiple lines from **Settings → Notifications → Notification History** (*Impostazioni → Notifiche → Cronologia Notifiche*) and paste them together for batch parsing.
 - **Option D — Hands-Free Webhook (MacroDroid / Tasker)**:
-  - Because Chrome PWAs cannot run Android's `NotificationListenerService` in the background while closed, configure an automation app like **MacroDroid** or **Tasker** on Android to forward bank notifications via HTTP `POST /api/notifications/ingest` with header `x-duospend-secret` configured on both device and server.
+  - Because Chrome PWAs cannot run Android's `NotificationListenerService` in the background while closed, configure an automation app like **MacroDroid** or **Tasker** on Android to forward bank notifications via HTTP `POST /api/notifications/ingest`.
+  - The complete Italian setup manual is in [MACRODROID_SETUP_IT.md](./MACRODROID_SETUP_IT.md).
 
 ### Method 2: Instant Camera Receipt Scan (Physical Receipts)
 1. Tap **`+` → Scansiona Scontrino OCR** (or the camera icon inside **Spese**).

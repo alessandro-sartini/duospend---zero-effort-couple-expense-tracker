@@ -36,7 +36,8 @@ Per notifiche push o SMS bancari (**Revolut, Google Pay/Wallet, Intesa Sanpaolo,
 - **C. Cronologia Notifiche Multi-Banca**:
   - Copia più righe da *Impostazioni → Notifiche → Cronologia Notifiche* su Android e incollale insieme per l'estrazione multipla in un solo passaggio.
 - **D. Automazione "Senza Mani" con Webhook (MacroDroid / Tasker)**:
-  - Poiché una PWA Chrome non può eseguire il servizio Android nativo `NotificationListenerService` ad app chiusa, puoi usare **MacroDroid** o **Tasker** su Android per inoltrare le notifiche via HTTP `POST /api/notifications/ingest` configurando sul dispositivo lo stesso header `x-duospend-secret` presente sul server.
+  - Poiché una PWA Chrome non può eseguire il servizio Android nativo `NotificationListenerService` ad app chiusa, puoi usare **MacroDroid** o **Tasker** su Android per inoltrare notifiche e SMS via HTTP `POST /api/notifications/ingest`.
+  - Segui la procedura completa con permessi Android, configurazione server, esempi MacroDroid per notifiche e SMS e test di verifica in [MACRODROID_SETUP_IT.md](./MACRODROID_SETUP_IT.md).
 
 ### Metodo 2: Scansione Fotocamera Scontrini Cartacei (OCR Gemini Vision)
 1. Tocca **`+` → Scansiona Scontrino OCR** (o l'icona fotocamera in **Spese**).
