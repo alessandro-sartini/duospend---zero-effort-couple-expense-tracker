@@ -218,3 +218,15 @@ export function revokeGoogleSession(req: Request, res: Response): GoogleOAuthTok
 export function resetGoogleSessionsForTests(): void {
   sessions.clear();
 }
+
+export function pruneExpiredGoogleSessions(): number {
+  const now = Date.now();
+  let removed = 0;
+  for (const [token, record] of sessions.entries()) {
+    if (record.absoluteExpiresAt <= now || record.idleExpiresAt <= now) {
+      sessions.delete(token);
+      removed += 1;
+    }
+  }
+  return removed;
+}

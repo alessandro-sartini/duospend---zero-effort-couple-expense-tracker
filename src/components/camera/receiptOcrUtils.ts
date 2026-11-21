@@ -14,6 +14,22 @@ export interface ExtractedReceiptDraft {
 
 const MAX_RECEIPT_IMAGE_DIMENSION = 1280;
 const RECEIPT_JPEG_QUALITY = 0.78;
+export const MAX_RECEIPT_FILE_BYTES = 12 * 1024 * 1024;
+
+export const validateReceiptFile = (file: Pick<File, 'name' | 'size' | 'type'>):
+  | { valid: true }
+  | { valid: false; error: string } => {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    return { valid: false, error: 'Seleziona una sola immagine JPEG, PNG o WebP.' };
+  }
+  if (file.size <= 0) {
+    return { valid: false, error: 'Il file immagine è vuoto.' };
+  }
+  if (file.size > MAX_RECEIPT_FILE_BYTES) {
+    return { valid: false, error: 'Il file immagine supera il limite di 12 MB.' };
+  }
+  return { valid: true };
+};
 
 export const compressReceiptImage = (
   dataUrl: string,
