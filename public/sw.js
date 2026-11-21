@@ -1,5 +1,14 @@
-const CACHE_NAME = 'duospend-shell-v2';
-const APP_SHELL_URLS = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'duospend-shell-v3';
+const APP_SHELL_URLS = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest',
+  '/icon.svg',
+  '/logo.svg',
+  '/favicon-32.png',
+  '/apple-touch-icon.png',
+  '/icon-192.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -53,6 +62,13 @@ self.addEventListener('fetch', (event) => {
   const isStaticAsset =
     url.pathname.startsWith('/assets/') ||
     url.pathname === '/icon.svg' ||
+    url.pathname === '/logo.svg' ||
+    url.pathname === '/og-image.svg' ||
+    url.pathname === '/favicon-32.png' ||
+    url.pathname === '/apple-touch-icon.png' ||
+    url.pathname === '/icon-192.png' ||
+    url.pathname === '/icon-512.png' ||
+    url.pathname === '/icon-maskable-512.png' ||
     url.pathname === '/manifest.webmanifest';
 
   if (isStaticAsset) {

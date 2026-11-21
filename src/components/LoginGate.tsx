@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Lock, ShieldCheck, AlertTriangle, Heart, RefreshCw, Terminal } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, RefreshCw, Terminal } from 'lucide-react';
 import { CoupleProfile } from '../types';
 import { googleSignIn, loginDeveloperSession, logoutDeveloperSession } from '../services/auth';
+import { DuoSpendLogo } from './ui/DuoSpendLogo';
 
 interface LoginGateProps {
   profile: CoupleProfile;
@@ -84,8 +85,8 @@ export const LoginGate: React.FC<LoginGateProps> = ({
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
 
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 text-orange-400 mb-3 border border-white/10">
-            <Lock className="w-6 h-6" />
+          <div className="inline-flex items-center justify-center mb-3 drop-shadow-md">
+            <DuoSpendLogo variant="mark" size="lg" title="DuoSpend" />
           </div>
 
           <h1 className="text-xl font-bold tracking-tight">DuoSpend · Cassaforte Privata</h1>

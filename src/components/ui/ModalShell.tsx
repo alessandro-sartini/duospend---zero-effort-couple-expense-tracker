@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 import { useScrollLock } from '../../hooks/useScrollLock';
 
@@ -42,6 +42,25 @@ export const ModalShell: React.FC<ModalShellProps> = ({
 }) => {
   useScrollLock(isOpen);
 
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{
+    y: number;
+    time: number;
+    pointerId: number;
+    fromHandle: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsExpanded(false);
+      setDragOffsetY(0);
+      setIsDragging(false);
+      dragStartRef.current = null;
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -54,6 +73,78 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const handleSheetPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    fromHandle: boolean
+  ) => {
+    if (!mobileBottomSheet) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (!fromHandle && (event.target as HTMLElement).closest('button, a, input, select, textarea')) {
+      return;
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragStartRef.current = {
+      y: event.clientY,
+      time: Date.now(),
+      pointerId: event.pointerId,
+      fromHandle,
+    };
+    setIsDragging(true);
+  };
+
+  const handleSheetPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current || dragStartRef.current.pointerId !== event.pointerId) return;
+    const deltaY = event.clientY - dragStartRef.current.y;
+    if (deltaY >= 0) {
+      setDragOffsetY(deltaY);
+    } else {
+      setDragOffsetY(Math.max(-32, deltaY * 0.35));
+    }
+  };
+
+  const handleSheetPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current || dragStartRef.current.pointerId !== event.pointerId) return;
+    const { y, time, fromHandle } = dragStartRef.current;
+    dragStartRef.current = null;
+    setIsDragging(false);
+
+    const deltaY = event.clientY - y;
+    const dt = Math.max(1, Date.now() - time);
+    const velocityY = deltaY / dt;
+
+    if (Math.abs(deltaY) < 6 && fromHandle) {
+      setIsExpanded((prev) => !prev);
+      setDragOffsetY(0);
+      return;
+    }
+
+    if (deltaY < -35 || velocityY < -0.4) {
+      setIsExpanded(true);
+      setDragOffsetY(0);
+      return;
+    }
+
+    if (deltaY > 0) {
+      if (isExpanded && deltaY >= 45 && deltaY < 160 && velocityY < 0.85) {
+        setIsExpanded(false);
+        setDragOffsetY(0);
+        return;
+      }
+      if (deltaY >= (isExpanded ? 160 : 75) || velocityY > 0.65) {
+        setDragOffsetY(0);
+        setIsExpanded(false);
+        onClose();
+        return;
+      }
+    }
+
+    setDragOffsetY(0);
+  };
+
+  const mobileHeightClass = isExpanded
+    ? 'rounded-t-3xl rounded-b-none sm:rounded-2xl h-[94dvh] max-h-[94dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)]'
+    : 'rounded-t-3xl rounded-b-none sm:rounded-2xl max-h-[78dvh] sm:max-h-[calc(100dvh-2rem)]';
 
   return (
     <div
@@ -73,21 +164,53 @@ export const ModalShell: React.FC<ModalShellProps> = ({
       }
     >
       <div
-        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col ${
+        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col transition-[max-height,height] duration-200 ease-out ${
           mobileBottomSheet
-            ? 'rounded-t-3xl rounded-b-none sm:rounded-2xl max-h-[88dvh] sm:max-h-[calc(100dvh-2rem)]'
+            ? mobileHeightClass
             : 'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
         }`}
+        style={
+          mobileBottomSheet && dragOffsetY !== 0
+            ? {
+                transform: `translateY(${Math.max(-24, dragOffsetY)}px)`,
+                transition: isDragging ? 'none' : 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+              }
+            : undefined
+        }
       >
         {mobileBottomSheet && (
           <div
-            className="pt-2.5 pb-0.5 flex justify-center bg-stone-50/60 shrink-0 sm:hidden"
-            aria-hidden="true"
+            role="button"
+            tabIndex={0}
+            aria-label={
+              isExpanded
+                ? 'Riduci pannello o trascina giù per chiudere'
+                : 'Espandi pannello o trascina giù per chiudere'
+            }
+            onPointerDown={(e) => handleSheetPointerDown(e, true)}
+            onPointerMove={handleSheetPointerMove}
+            onPointerUp={handleSheetPointerEnd}
+            onPointerCancel={handleSheetPointerEnd}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setIsExpanded((prev) => !prev);
+              }
+            }}
+            className="pt-3 pb-1.5 flex justify-center bg-stone-50/60 shrink-0 sm:hidden touch-none select-none cursor-grab active:cursor-grabbing"
           >
-            <span className="h-1 w-10 rounded-full bg-stone-300/80" />
+            <span className="h-1 w-10 rounded-full bg-stone-300/80" aria-hidden="true" />
           </div>
         )}
-        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-stone-100 bg-stone-50/60 shrink-0">
+        <div
+          onPointerDown={mobileBottomSheet ? (e) => handleSheetPointerDown(e, false) : undefined}
+          onPointerMove={mobileBottomSheet ? handleSheetPointerMove : undefined}
+          onPointerUp={mobileBottomSheet ? handleSheetPointerEnd : undefined}
+          onPointerCancel={mobileBottomSheet ? handleSheetPointerEnd : undefined}
+          className={`flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-stone-100 bg-stone-50/60 shrink-0 ${
+            mobileBottomSheet ? 'touch-none sm:touch-auto' : ''
+          }`}
+        >
           <div className="flex min-w-0 items-center gap-3">
             {Icon && (
               <div

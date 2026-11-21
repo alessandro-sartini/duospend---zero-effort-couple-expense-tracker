@@ -1,5 +1,6 @@
 import React from 'react';
 import { RefreshCw, ShieldCheck } from 'lucide-react';
+import { DuoSpendLogo } from './DuoSpendLogo';
 
 interface FullScreenLoaderProps {
   label?: string;
@@ -14,7 +15,7 @@ export const FullScreenLoader: React.FC<FullScreenLoaderProps> = ({
     <div
       role="status"
       aria-live="polite"
-      className="min-h-screen bg-[#FAFAF8] text-stone-900 flex flex-col items-center justify-center px-4 py-12"
+      className="min-h-[100dvh] bg-[#FAFAF8] text-stone-900 flex flex-col items-center justify-center px-4 py-12"
     >
       <div className="ds-card relative max-w-sm w-full p-8 text-center space-y-5 overflow-hidden shadow-xl">
         <div className="pointer-events-none absolute -top-16 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full bg-orange-500/15 blur-2xl" />
@@ -22,9 +23,7 @@ export const FullScreenLoader: React.FC<FullScreenLoaderProps> = ({
         <div className="relative mx-auto flex h-16 w-16 items-center justify-center">
           <div className="absolute inset-0 rounded-2xl border-2 border-orange-500/20" />
           <div className="absolute inset-0 rounded-2xl border-2 border-transparent border-t-orange-500 border-r-orange-500/60 animate-spin" />
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-700 font-display text-lg font-extrabold text-white shadow-sm">
-            D
-          </div>
+          <DuoSpendLogo variant="loader" size="lg" />
         </div>
 
         <div className="space-y-1.5">
@@ -66,6 +65,7 @@ export const InlineLoader: React.FC<InlineLoaderProps> = ({
       <div className="relative mx-auto flex h-10 w-10 items-center justify-center">
         <div className="absolute inset-0 rounded-full border-2 border-orange-500/20" />
         <div className="h-10 w-10 rounded-full border-2 border-transparent border-t-orange-600 animate-spin" />
+        <DuoSpendLogo variant="monochrome" size="xs" className="absolute text-orange-600" />
       </div>
       <div>
         <p className="text-xs font-semibold text-stone-800">{title}</p>

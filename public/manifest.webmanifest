@@ -19,9 +19,21 @@
       "purpose": "any"
     },
     {
-      "src": "/icon.svg",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ],
@@ -31,28 +43,40 @@
       "short_name": "Nuova Spesa",
       "description": "Inserisci una nuova spesa condivisa",
       "url": "/?action=add-expense",
-      "icons": [{ "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+      "icons": [
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+      ]
     },
     {
       "name": "Incolla Notifica / SMS",
       "short_name": "Notifiche",
       "description": "Decodifica una notifica o SMS bancario",
       "url": "/?action=paste-notification",
-      "icons": [{ "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+      "icons": [
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+      ]
     },
     {
       "name": "Scansiona Scontrino",
       "short_name": "Fotocamera",
       "description": "Acquisisci uno scontrino con OCR",
       "url": "/?action=scan-receipt",
-      "icons": [{ "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+      "icons": [
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+      ]
     },
     {
       "name": "Pareggio Saldo",
       "short_name": "Saldo",
       "description": "Controlla i conti e registra un rimborso",
       "url": "/saldo",
-      "icons": [{ "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+      "icons": [
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+      ]
     }
   ],
   "share_target": {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { CoupleProfile } from '../types';
 import type { Theme } from '../services/theme';
+import { DuoSpendLogo } from './ui/DuoSpendLogo';
 import { SyncStatusBadge } from './ui/Loader';
 
 interface NavbarProps {
@@ -169,9 +170,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={() => selectTab('dashboard')}
               aria-label="Vai alla Panoramica DuoSpend"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-700 font-display text-base font-extrabold text-white shadow-sm ring-1 ring-orange-400/30 transition-transform hover:scale-105 cursor-pointer"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform hover:scale-105 cursor-pointer"
             >
-              D
+              <DuoSpendLogo variant="mark" size="sm" />
             </button>
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
