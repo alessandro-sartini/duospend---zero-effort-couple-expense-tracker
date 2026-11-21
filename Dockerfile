@@ -29,7 +29,7 @@ RUN npm install --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.ts ./server.ts
 COPY --from=builder /app/server ./server
-COPY --from=builder /app/src/types ./src/types
+COPY --from=builder /app/src ./src
 
 RUN mkdir -p /app/data && chown -R 1000:1000 /app
 
