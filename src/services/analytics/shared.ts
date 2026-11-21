@@ -20,6 +20,8 @@ export interface ExpenseFilterCriteria {
   timeframe: AnalyticsTimeframe;
   splitFilter: SplitFilter;
   payerFilter?: PayerFilter;
+  selectedYear?: number | null;
+  selectedMonth?: number | null; // 1..12; null/undefined con selectedYear => intero anno
 }
 
 export interface PeriodComparisonResult {
@@ -254,14 +256,38 @@ export function matchesSplitAndPayer(
   return true;
 }
 
+export function resolveFilterYearMonth(
+  filters: Pick<ExpenseFilterCriteria, 'timeframe' | 'selectedYear' | 'selectedMonth'>,
+  now: Date = new Date()
+): { year: number; month: number | null } {
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1;
+  const year =
+    typeof filters.selectedYear === 'number' && Number.isFinite(filters.selectedYear)
+      ? filters.selectedYear
+      : nowYear;
+
+  if (filters.timeframe === 'year') {
+    return { year, month: null };
+  }
+
+  const month =
+    typeof filters.selectedMonth === 'number' &&
+    filters.selectedMonth >= 1 &&
+    filters.selectedMonth <= 12
+      ? filters.selectedMonth
+      : nowMonth;
+
+  return { year, month };
+}
+
 export function filterExpenses(
   expenses: Expense[],
   filters: ExpenseFilterCriteria,
   now: Date = new Date()
 ): Expense[] {
   const payerFilter = filters.payerFilter ?? 'all';
-  const nowYear = now.getFullYear();
-  const nowMonth = now.getMonth() + 1;
+  const { year: targetYear, month: targetMonth } = resolveFilterYearMonth(filters, now);
 
   return expenses.filter((expense) => {
     if (!matchesSplitAndPayer(expense, filters.splitFilter, payerFilter)) {
@@ -272,14 +298,15 @@ export function filterExpenses(
     const parts = parseIsoDateParts(expense.date);
     if (!parts) return false;
 
-    if (filters.timeframe === 'month') {
-      return parts.year === nowYear && parts.month === nowMonth;
-    }
-    if (filters.timeframe === 'year') {
-      return parts.year === nowYear;
+    if (filters.timeframe === 'year' || targetMonth === null) {
+      return parts.year === targetYear;
     }
 
-    const diffMonths = (nowYear - parts.year) * 12 + (nowMonth - parts.month);
+    if (filters.timeframe === 'month') {
+      return parts.year === targetYear && parts.month === targetMonth;
+    }
+
+    const diffMonths = (targetYear - parts.year) * 12 + (targetMonth - parts.month);
     return diffMonths >= 0 && diffMonths <= 2;
   });
 }
@@ -336,6 +363,7 @@ export function getPreviousPeriodComparison(
   const payerFilter = filters.payerFilter ?? 'all';
   const nowYear = now.getFullYear();
   const nowMonth = now.getMonth() + 1;
+  const { year: targetYear, month: targetMonth } = resolveFilterYearMonth(filters, now);
 
   const currentExpenses = filterExpenses(expenses, filters, now);
   const currentTotal = currentExpenses.reduce((sum, item) => sum + item.amount, 0);
@@ -343,12 +371,15 @@ export function getPreviousPeriodComparison(
   let previousTotal = 0;
   let comparisonLabel = '';
 
-  if (filters.timeframe === 'month') {
-    comparisonLabel = 'vs mese scorso';
-  } else if (filters.timeframe === 'quarter') {
-    comparisonLabel = 'vs 3 mesi prec.';
-  } else {
+  if (filters.timeframe === 'year' || targetMonth === null) {
     comparisonLabel = 'vs anno prec.';
+  } else if (filters.timeframe === 'month') {
+    comparisonLabel =
+      targetYear === nowYear && targetMonth === nowMonth
+        ? 'vs mese scorso'
+        : 'vs mese prec.';
+  } else {
+    comparisonLabel = 'vs 3 mesi prec.';
   }
 
   for (const expense of expenses) {
@@ -356,14 +387,14 @@ export function getPreviousPeriodComparison(
     const parts = parseIsoDateParts(expense.date);
     if (!parts) continue;
 
-    if (filters.timeframe === 'month') {
-      const diffMonths = (nowYear - parts.year) * 12 + (nowMonth - parts.month);
+    if (filters.timeframe === 'year' || targetMonth === null) {
+      if (parts.year === targetYear - 1) previousTotal += expense.amount;
+    } else if (filters.timeframe === 'month') {
+      const diffMonths = (targetYear - parts.year) * 12 + (targetMonth - parts.month);
       if (diffMonths === 1) previousTotal += expense.amount;
     } else if (filters.timeframe === 'quarter') {
-      const diffMonths = (nowYear - parts.year) * 12 + (nowMonth - parts.month);
+      const diffMonths = (targetYear - parts.year) * 12 + (targetMonth - parts.month);
       if (diffMonths >= 3 && diffMonths <= 5) previousTotal += expense.amount;
-    } else if (filters.timeframe === 'year') {
-      if (parts.year === nowYear - 1) previousTotal += expense.amount;
     }
   }
 
@@ -387,22 +418,43 @@ export function getPreviousPeriodComparison(
 export function getActiveDaysInPeriod(
   expenses: Expense[],
   timeframe: AnalyticsTimeframe,
-  now: Date = new Date()
+  now: Date = new Date(),
+  period?: { selectedYear?: number | null; selectedMonth?: number | null }
 ): number {
-  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  if (timeframe === 'month') {
-    return Math.max(1, now.getDate());
-  }
-
-  if (timeframe === 'quarter') {
-    const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    return Math.max(1, Math.round((todayLocal.getTime() - start.getTime()) / MS_PER_DAY) + 1);
-  }
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1;
+  const todayLocal = new Date(nowYear, now.getMonth(), now.getDate());
+  const { year: targetYear, month: targetMonth } = resolveFilterYearMonth(
+    {
+      timeframe,
+      selectedYear: period?.selectedYear,
+      selectedMonth: period?.selectedMonth,
+    },
+    now
+  );
 
   if (timeframe === 'year') {
-    const start = new Date(now.getFullYear(), 0, 1);
-    return Math.max(1, Math.round((todayLocal.getTime() - start.getTime()) / MS_PER_DAY) + 1);
+    const start = new Date(targetYear, 0, 1);
+    const end = targetYear === nowYear ? todayLocal : new Date(targetYear, 11, 31);
+    if (end.getTime() < start.getTime()) return 1;
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / MS_PER_DAY) + 1);
+  }
+
+  if (timeframe === 'month' && targetMonth !== null) {
+    if (targetYear === nowYear && targetMonth === nowMonth) {
+      return Math.max(1, now.getDate());
+    }
+    return new Date(targetYear, targetMonth, 0).getDate();
+  }
+
+  if (timeframe === 'quarter' && targetMonth !== null) {
+    const start = new Date(targetYear, targetMonth - 3, 1);
+    const end =
+      targetYear === nowYear && targetMonth === nowMonth
+        ? todayLocal
+        : new Date(targetYear, targetMonth, 0);
+    if (end.getTime() < start.getTime()) return 1;
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / MS_PER_DAY) + 1);
   }
 
   let earliestTime: number | null = null;

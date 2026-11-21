@@ -623,6 +623,28 @@ export function sanitizeCategoryBudgets(
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 
+function sanitizeTrackingStartDate(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return undefined;
+  }
+  const check = new Date(year, month - 1, day);
+  if (
+    check.getFullYear() !== year ||
+    check.getMonth() !== month - 1 ||
+    check.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 export function sanitizeProfileRecord(
   raw: Record<string, unknown>,
   currentProfile: CoupleProfile,
@@ -690,6 +712,21 @@ export function sanitizeProfileRecord(
     partnerEmail,
     categoryBudgets,
   };
+
+  if (raw.trackingStartDate === '' || raw.trackingStartDate === null) {
+    delete result.trackingStartDate;
+  } else if (raw.trackingStartDate !== undefined) {
+    const validStartDate = sanitizeTrackingStartDate(raw.trackingStartDate);
+    if (validStartDate) {
+      result.trackingStartDate = validStartDate;
+    } else if (currentProfile.trackingStartDate) {
+      result.trackingStartDate = currentProfile.trackingStartDate;
+    } else {
+      delete result.trackingStartDate;
+    }
+  } else if (currentProfile.trackingStartDate) {
+    result.trackingStartDate = currentProfile.trackingStartDate;
+  }
 
   if (customCategories && customCategories.length > 0) {
     result.customCategories = customCategories;

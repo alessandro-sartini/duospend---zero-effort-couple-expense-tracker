@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowRight, Calendar, ChevronLeft, ChevronRight, Flag, RotateCcw } from 'lucide-react';
 import {
   formatCurrency,
   formatSplitLabel,
@@ -35,10 +35,33 @@ interface DashboardOverviewProps {
   totalSharedSpend: number;
   userTotalPaid: number;
   partnerTotalPaid: number;
+  excludedBeforeStartCount?: number;
+  onOpenStartingPoint?: () => void;
   onOpenSettlement: () => void;
   onOpenSecurityModal?: () => void;
   onNavigateTab: (tab: string) => void;
   onSelectExpense: (expense: Expense) => void;
+}
+
+const DASHBOARD_MONTH_OPTIONS = [
+  { value: 1, label: 'Gennaio' },
+  { value: 2, label: 'Febbraio' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Aprile' },
+  { value: 5, label: 'Maggio' },
+  { value: 6, label: 'Giugno' },
+  { value: 7, label: 'Luglio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Settembre' },
+  { value: 10, label: 'Ottobre' },
+  { value: 11, label: 'Novembre' },
+  { value: 12, label: 'Dicembre' },
+];
+
+function formatDateItShort(iso?: string): string {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const [year, month, day] = iso.split('-');
+  return `${day}/${month}/${year}`;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -48,11 +71,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   totalSharedSpend,
   userTotalPaid,
   partnerTotalPaid,
+  excludedBeforeStartCount = 0,
+  onOpenStartingPoint,
   onOpenSettlement,
   onOpenSecurityModal,
   onNavigateTab,
   onSelectExpense,
 }) => {
+  const realToday = new Date();
+  const realYear = realToday.getFullYear();
+  const realMonth = realToday.getMonth() + 1;
+
+  const [selectedYear, setSelectedYear] = useState<number>(realYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(realMonth);
   const [splitFilter, setSplitFilter] = useState<SplitFilter>('all');
   const [selectedMonthCategory, setSelectedMonthCategory] = useState<
     string | null
@@ -62,9 +93,29 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   );
   const budgetGoal = profile.monthlyBudget || 2800;
 
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([realYear, selectedYear]);
+    for (const exp of expenses) {
+      const parts = parseIsoDateParts(exp.date);
+      if (parts) years.add(parts.year);
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [expenses, realYear, selectedYear]);
+
+  const isViewingCurrentMonth = selectedYear === realYear && selectedMonth === realMonth;
+
+  const burnReferenceDate = useMemo(() => {
+    if (isViewingCurrentMonth) return new Date();
+    const isPastMonth =
+      selectedYear < realYear || (selectedYear === realYear && selectedMonth < realMonth);
+    return isPastMonth
+      ? new Date(selectedYear, selectedMonth, 0, 12, 0, 0)
+      : new Date(selectedYear, selectedMonth - 1, 1, 12, 0, 0);
+  }, [isViewingCurrentMonth, selectedYear, selectedMonth, realYear, realMonth]);
+
   const burnRate = useMemo(
-    () => computeMonthlyBurnRate(expenses, budgetGoal, splitFilter),
-    [expenses, budgetGoal, splitFilter]
+    () => computeMonthlyBurnRate(expenses, budgetGoal, splitFilter, burnReferenceDate),
+    [expenses, budgetGoal, splitFilter, burnReferenceDate]
   );
 
   const {
@@ -76,9 +127,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     currentMonth,
     currentYm,
   } = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    const year = selectedYear;
+    const month = selectedMonth;
     const ym = `${year}-${String(month).padStart(2, '0')}`;
 
     const totals: Record<string, number> = {};
@@ -125,7 +175,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       currentMonth: month,
       currentYm: ym,
     };
-  }, [expenses, splitFilter]);
+  }, [expenses, splitFilter, selectedYear, selectedMonth]);
+
+  const stepDashboardMonth = (delta: -1 | 1) => {
+    const nextDate = new Date(selectedYear, selectedMonth - 1 + delta, 1);
+    setSelectedYear(nextDate.getFullYear());
+    setSelectedMonth(nextDate.getMonth() + 1);
+    setSelectedMonthCategory(null);
+  };
 
   const recentExpenses = useMemo(
     () =>
@@ -215,6 +272,138 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         onOpenSettlement={onOpenSettlement}
         onNavigateToSettlement={() => onNavigateTab('settlement')}
       />
+
+      {/* Modalità di Inizio / Punto Zero della Coppia */}
+      {onOpenStartingPoint && (
+        <div
+          className={`ds-card p-3.5 sm:px-5 sm:py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            !profile.trackingStartDate ? 'border-orange-300/70 bg-orange-50/40' : ''
+          }`}
+        >
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-xl bg-orange-500/12 border border-orange-500/25 text-orange-600 flex items-center justify-center shrink-0">
+              <Flag className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              {profile.trackingStartDate ? (
+                <>
+                  <div className="text-xs sm:text-sm font-bold text-stone-900">
+                    Punto di Partenza attivo dal{' '}
+                    <span className="font-mono text-orange-600">
+                      {formatDateItShort(profile.trackingStartDate)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    {excludedBeforeStartCount > 0
+                      ? `${excludedBeforeStartCount} spese antecedenti nascoste dai conteggi · Gmail cerca da questa data`
+                      : 'Saldo, grafici e scansioni Gmail partono puliti da questa data'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs sm:text-sm font-bold text-stone-900">
+                    Modalità di Inizio · Prepara la data di partenza
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    Scegli da quando far partire i conti (es. 1° del mese) così Gmail e grafici non mescolano mezzi periodi precedenti.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenStartingPoint}
+            className={`${
+              profile.trackingStartDate ? 'ds-btn-secondary' : 'ds-btn-primary'
+            } min-h-9 px-3.5 py-2 text-xs shrink-0 self-start sm:self-auto`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>
+              {profile.trackingStartDate ? 'Modifica data inizio' : 'Configura Punto Zero'}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Barra Selezione Mese & Anno per la Panoramica */}
+      <div className="ds-card px-4 py-3 sm:px-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-stone-800">
+          <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
+          <span>Periodo Panoramica:</span>
+          <span className="text-stone-500 font-normal hidden sm:inline">
+            {burnRate.monthLabel}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial justify-end">
+          <button
+            type="button"
+            onClick={() => stepDashboardMonth(-1)}
+            aria-label="Mese precedente"
+            className="ds-icon-btn h-9 w-9 shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <select
+            aria-label="Mese panoramica"
+            value={selectedMonth}
+            onChange={(e) => {
+              setSelectedMonth(Number(e.target.value));
+              setSelectedMonthCategory(null);
+            }}
+            className="ds-input px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
+          >
+            {DASHBOARD_MONTH_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="Anno panoramica"
+            value={selectedYear}
+            onChange={(e) => {
+              setSelectedYear(Number(e.target.value));
+              setSelectedMonthCategory(null);
+            }}
+            className="ds-input px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
+          >
+            {availableYears.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => stepDashboardMonth(1)}
+            aria-label="Mese successivo"
+            className="ds-icon-btn h-9 w-9 shrink-0"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          {!isViewingCurrentMonth && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedYear(realYear);
+                setSelectedMonth(realMonth);
+                setSelectedMonthCategory(null);
+              }}
+              className="ds-btn-secondary min-h-9 px-2.5 py-1 text-xs shrink-0"
+            >
+              <RotateCcw className="w-3 h-3 text-orange-600" />
+              <span>Attuale</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* 2. Dashboard Mensile: Ritmo di Spesa & Top Categorie */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">

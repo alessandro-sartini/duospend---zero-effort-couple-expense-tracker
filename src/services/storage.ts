@@ -49,6 +49,8 @@ export interface PersistedGmailDraft<TReceipt = unknown, TCandidate = unknown, T
   scanStatus: 'complete' | 'stopped' | 'error' | null;
   wasSyncing?: boolean;
   lookbackDays?: number;
+  searchMode?: 'tracking_start' | 'month_start' | 'prev_month_start' | 'year_start' | 'custom_date' | 'days';
+  customStartDate?: string;
 }
 
 // Local Storage Loaders & Savers with Central Server Database Sync
@@ -299,7 +301,13 @@ export const loadProfile = (): CoupleProfile => {
 export const saveProfile = (profile: CoupleProfile) => {
   const safeProfile = sanitizeAndMigrateProfile(profile as Partial<CoupleProfile> & Record<string, unknown>);
   safeSetLocalStorageItem(STORAGE_KEYS.PROFILE, JSON.stringify(safeProfile));
-  void syncPatchToServer({ profile: safeProfile });
+  void syncPatchToServer({
+    profile: {
+      ...safeProfile,
+      // Stringa vuota esplicita quando disattivata così il server rimuove il Punto Zero precedente
+      trackingStartDate: safeProfile.trackingStartDate ?? '',
+    },
+  });
 };
 
 export const loadGoals = (): SavingGoal[] => {

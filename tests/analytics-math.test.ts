@@ -12,6 +12,7 @@ import {
   filterExpensesByMonth,
   formatAxisCurrency,
   formatMonthYearIt,
+  getActiveDaysInPeriod,
   getPreviousPeriodComparison,
 } from '../src/services/analytics-math';
 import { computeSettlementBalance } from '../src/services/settlement-math';
@@ -297,5 +298,79 @@ describe('analytics-math (motore calcoli dashboard DuoSpend)', () => {
     expect(filterExpensesByDay(expenses, 2026, 11, 10, 'shared').map((e) => e.id)).toEqual([
       'd1',
     ]);
+  });
+
+  it('divide correttamente filtri, trend 12 mesi e confronti per Anno e Mese selezionati', () => {
+    const expenses: Expense[] = [
+      makeExpense({ id: 'y24', date: '2024-12-15', amount: 100 }),
+      makeExpense({ id: 'y25-jan', date: '2025-01-10', amount: 150, category: 'Spesa' }),
+      makeExpense({ id: 'y25-nov', date: '2025-11-18', amount: 250, category: 'Viaggi' }),
+      makeExpense({ id: 'y26-aug', date: '2026-08-12', amount: 80 }),
+      makeExpense({ id: 'y26-sep', date: '2026-09-09', amount: 160 }),
+    ];
+
+    const year2025 = filterExpenses(
+      expenses,
+      { timeframe: 'year', splitFilter: 'all', selectedYear: 2025, selectedMonth: null },
+      NOV_20
+    );
+    expect(year2025.map((e) => e.id)).toEqual(['y25-jan', 'y25-nov']);
+
+    const yearCmp = getPreviousPeriodComparison(
+      expenses,
+      { timeframe: 'year', splitFilter: 'all', selectedYear: 2025, selectedMonth: null },
+      NOV_20
+    );
+    expect(yearCmp.previousTotal).toBe(100);
+    expect(yearCmp.deltaPercent).toBe(300);
+    expect(yearCmp.comparisonLabel).toBe('vs anno prec.');
+
+    const sep2026 = filterExpenses(
+      expenses,
+      { timeframe: 'month', splitFilter: 'all', selectedYear: 2026, selectedMonth: 9 },
+      NOV_20
+    );
+    expect(sep2026.map((e) => e.id)).toEqual(['y26-sep']);
+
+    const sepCmp = getPreviousPeriodComparison(
+      expenses,
+      { timeframe: 'month', splitFilter: 'all', selectedYear: 2026, selectedMonth: 9 },
+      NOV_20
+    );
+    expect(sepCmp.previousTotal).toBe(80);
+    expect(sepCmp.deltaPercent).toBe(100);
+    expect(sepCmp.comparisonLabel).toBe('vs mese prec.');
+
+    expect(
+      getActiveDaysInPeriod([], 'year', NOV_20, { selectedYear: 2024, selectedMonth: null })
+    ).toBe(366);
+    expect(
+      getActiveDaysInPeriod([], 'month', NOV_20, { selectedYear: 2026, selectedMonth: 9 })
+    ).toBe(30);
+
+    const series2025 = computeMonthlyTrendSeries(
+      expenses,
+      { timeframe: 'year', splitFilter: 'all', selectedYear: 2025, selectedMonth: null },
+      ['Spesa', 'Viaggi'],
+      NOV_20
+    );
+    expect(series2025).toHaveLength(12);
+    expect(series2025[0].ym).toBe('2025-01');
+    expect(series2025[11].ym).toBe('2025-12');
+    expect(series2025.every((p) => p.inScope)).toBe(true);
+    expect(series2025[0].total).toBe(150);
+    expect(series2025[10].total).toBe(250);
+
+    // Mese passato concluso: usa tutti i giorni del mese senza proiettare oltre il consuntivo
+    const octClosed = computeMonthlyBurnRate(
+      [makeExpense({ id: 'oct-full', date: '2026-10-28', amount: 310 })],
+      2800,
+      'all',
+      new Date(2026, 9, 31, 12, 0, 0)
+    );
+    expect(octClosed.monthLabel).toBe('Ottobre 2026');
+    expect(octClosed.currentDay).toBe(31);
+    expect(octClosed.currentTotal).toBe(310);
+    expect(octClosed.projectedEndOfMonth).toBe(310);
   });
 });

@@ -80,7 +80,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   ) => {
     if (!mobileBottomSheet) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (!fromHandle && (event.target as HTMLElement).closest('button, a, input, select, textarea')) {
+    if (!fromHandle && event.target instanceof Element && event.target.closest('button, a, input, select, textarea')) {
       return;
     }
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -170,10 +170,15 @@ export const ModalShell: React.FC<ModalShellProps> = ({
             : 'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
         }`}
         style={
-          mobileBottomSheet && dragOffsetY !== 0
+          mobileBottomSheet
             ? {
-                transform: `translateY(${Math.max(-24, dragOffsetY)}px)`,
-                transition: isDragging ? 'none' : 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+                transform:
+                  dragOffsetY !== 0
+                    ? `translateY(${Math.max(-24, dragOffsetY)}px)`
+                    : 'translateY(0px)',
+                transition: isDragging
+                  ? 'none'
+                  : 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), max-height 200ms ease-out, height 200ms ease-out',
               }
             : undefined
         }

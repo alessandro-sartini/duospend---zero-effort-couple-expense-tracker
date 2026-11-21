@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { initAuth, logout } from '../services/auth';
 import {
   computeSettlementBalance,
@@ -370,8 +370,28 @@ export function useDuoSpendData() {
     };
   }, [isVaultUnlocked, authMethod, handleRefreshData]);
 
-  const balanceSummary = computeSettlementBalance(expenses, settlements);
-  const zeroAmountExpenses = expenses.filter((expense) => expense.amount <= 0);
+  const trackingStartDate = profile.trackingStartDate;
+
+  const activeExpenses = useMemo(() => {
+    if (!trackingStartDate) return expenses;
+    return expenses.filter((expense) => expense.date >= trackingStartDate);
+  }, [expenses, trackingStartDate]);
+
+  const activeSettlements = useMemo(() => {
+    if (!trackingStartDate) return settlements;
+    return settlements.filter((settlement) => settlement.date >= trackingStartDate);
+  }, [settlements, trackingStartDate]);
+
+  const excludedBeforeStartCount = expenses.length - activeExpenses.length;
+
+  const balanceSummary = useMemo(
+    () => computeSettlementBalance(activeExpenses, activeSettlements),
+    [activeExpenses, activeSettlements]
+  );
+  const zeroAmountExpenses = useMemo(
+    () => activeExpenses.filter((expense) => expense.amount <= 0),
+    [activeExpenses]
+  );
 
   const handleSaveExpense = useCallback(
     (newExpData: Omit<Expense, 'id'>, editingId?: string) => {
@@ -508,8 +528,11 @@ export function useDuoSpendData() {
   }, []);
 
   return {
-    expenses,
-    settlements,
+    expenses: activeExpenses,
+    allExpenses: expenses,
+    allExpensesCount: expenses.length,
+    excludedBeforeStartCount,
+    settlements: activeSettlements,
     goals,
     profile,
     ignoredGmailMessageIds,

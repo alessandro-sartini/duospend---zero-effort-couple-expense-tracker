@@ -6,6 +6,28 @@ const LEGACY_USER_NAMES = new Set(['utente 1', 'legacy_user']);
 const LEGACY_PARTNER_NAMES = new Set(['fidanzata']);
 const BUILTIN_LOWER_SET = new Set(EXPENSE_CATEGORIES.map((c) => c.toLowerCase()));
 
+export const sanitizeTrackingStartDate = (raw: unknown): string | undefined => {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return undefined;
+  }
+  const check = new Date(year, month - 1, day);
+  if (
+    check.getFullYear() !== year ||
+    check.getMonth() !== month - 1 ||
+    check.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return trimmed;
+};
+
 export const deriveNameFromEmail = (email?: string): string => {
   if (typeof email !== 'string') return '';
   const trimmed = email.trim();
@@ -113,6 +135,7 @@ export const sanitizeAndMigrateProfile = (
 
   const customCategories = sanitizeCustomCategories(raw.customCategories);
   const hiddenCategories = sanitizeHiddenCategories(raw.hiddenCategories);
+  const trackingStartDate = sanitizeTrackingStartDate(raw.trackingStartDate);
 
   return {
     userName,
@@ -122,6 +145,7 @@ export const sanitizeAndMigrateProfile = (
     weddingBudgetGoal,
     userEmail,
     partnerEmail,
+    ...(trackingStartDate ? { trackingStartDate } : {}),
     categoryBudgets: sanitizeCategoryBudgets(raw.categoryBudgets),
     ...(customCategories ? { customCategories } : {}),
     ...(hiddenCategories ? { hiddenCategories } : {}),

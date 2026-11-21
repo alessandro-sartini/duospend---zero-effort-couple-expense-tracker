@@ -24,6 +24,8 @@ export {
   getPreviousPeriodComparison,
   isSharedExpense,
   parseIsoDateParts,
+  resolveFilterYearMonth,
+  toYearMonth,
 } from './analytics/shared';
 export type {
   AnalyticsTimeframe,
