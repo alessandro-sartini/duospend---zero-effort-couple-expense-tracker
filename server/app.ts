@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'path';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -18,7 +18,7 @@ import devRoutes from './routes/dev';
 import authRoutes from './routes/auth';
 import { hasPathTraversalOrForbiddenRoute, stripDangerousKeys } from './utils/security';
 import { pruneExpiredGoogleSessions } from './services/google-auth';
-import { pruneExpiredDeveloperSessions } from './middleware/auth';
+import { hasValidWebhookSecret, pruneExpiredDeveloperSessions } from './middleware/auth';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -33,8 +33,9 @@ app.use(
             objectSrc: ["'none'"],
             frameAncestors: ["'none'"],
             scriptSrc: ["'self'", 'https://accounts.google.com'],
+            scriptSrcAttr: ["'none'"],
             styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-            fontSrc: ["'self'", 'https:', 'data:'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
             imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
             connectSrc: [
               "'self'",
@@ -74,13 +75,18 @@ app.use('/api', (_req, res, next) => {
 app.use('/api', (req, res, next) => {
   const method = req.method.toUpperCase();
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const hasWebhookSecret = hasValidWebhookSecret(req.get('x-duospend-secret'));
+    if (!hasWebhookSecret && (req.get('sec-fetch-site') || '').toLowerCase() === 'cross-site') {
+      return res.status(403).json({ error: 'Richiesta cross-site non consentita.' });
+    }
+
+    const expectedProtocol =
+      req.get('x-forwarded-proto')?.split(',')[0]?.trim() ||
+      (req.secure ? 'https:' : 'http:');
     const origin = req.get('origin');
     if (origin) {
       try {
         const parsed = new URL(origin);
-        const expectedProtocol =
-          req.get('x-forwarded-proto')?.split(',')[0]?.trim() ||
-          (req.secure ? 'https:' : 'http:');
         if (
           parsed.protocol !== expectedProtocol ||
           parsed.hostname.toLowerCase() !== req.hostname.toLowerCase()
@@ -89,6 +95,21 @@ app.use('/api', (req, res, next) => {
         }
       } catch {
         return res.status(403).json({ error: 'Origine della richiesta non valida.' });
+      }
+    } else if (!hasWebhookSecret) {
+      const referer = req.get('referer');
+      if (referer) {
+        try {
+          const parsedReferer = new URL(referer);
+          if (
+            parsedReferer.protocol !== expectedProtocol ||
+            parsedReferer.hostname.toLowerCase() !== req.hostname.toLowerCase()
+          ) {
+            return res.status(403).json({ error: 'Origine referer della richiesta non consentita.' });
+          }
+        } catch {
+          return res.status(403).json({ error: 'Origine referer della richiesta non valida.' });
+        }
       }
     }
   }
@@ -147,6 +168,24 @@ app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Endpoint API non trovato.' });
 });
 
+app.use(
+  (
+    err: { type?: string; status?: number; statusCode?: number } | null,
+    _req: Request,
+    res: Response,
+    _next: NextFunction
+  ) => {
+    if (err?.type === 'entity.too.large' || err?.status === 413 || err?.statusCode === 413) {
+      return res.status(413).json({ error: 'Payload della richiesta troppo grande.' });
+    }
+    if (err instanceof SyntaxError || err?.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'Corpo JSON della richiesta non valido.' });
+    }
+    console.error('[api-error]', err);
+    return res.status(500).json({ error: 'Errore interno del server.' });
+  }
+);
+
 export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -157,8 +196,24 @@ export async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(PROJECT_ROOT, 'dist');
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          const normalized = filePath.replace(/\\/g, '/');
+          if (
+            normalized.endsWith('/sw.js') ||
+            normalized.endsWith('/index.html') ||
+            normalized.endsWith('/manifest.webmanifest')
+          ) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          } else if (normalized.includes('/assets/')) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
     app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

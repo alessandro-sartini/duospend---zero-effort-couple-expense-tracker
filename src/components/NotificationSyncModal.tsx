@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { X, Bell, Sparkles, Check, RefreshCw, AlertCircle, Clipboard } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { Expense, CoupleProfile, Payer } from '../types';
 import {
@@ -28,7 +29,11 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
   canInstallPwa = false,
   onInstallPwa,
 }) => {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const pastedFeedbackTimeoutRef = useRef<number | null>(null);
   useScrollLock(isOpen);
+  useFocusTrap(dialogRef, isOpen);
   const [activeTab, setActiveTab] = useState<'paste' | 'webhook'>('paste');
   const [inputText, setInputText] = useState(initialNotificationText);
   const [payer, setPayer] = useState<Payer>('user');
@@ -139,16 +144,36 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
     }
   }, [initialNotificationText, isOpen, payer, runParseForText]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
     };
-  }, [isOpen]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    return () => {
+      if (pastedFeedbackTimeoutRef.current !== null) {
+        window.clearTimeout(pastedFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!isOpen) return null;
+
+  const scheduleFeedbackReset = (delayMs: number) => {
+    if (pastedFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(pastedFeedbackTimeoutRef.current);
+    }
+    pastedFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setPastedFeedback('idle');
+      pastedFeedbackTimeoutRef.current = null;
+    }, delayMs);
+  };
 
   const handlePasteFromClipboard = async () => {
     try {
@@ -156,12 +181,12 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
       if (text) {
         setInputText(text);
         setPastedFeedback('pasted');
-        window.setTimeout(() => setPastedFeedback('idle'), 1800);
+        scheduleFeedbackReset(1800);
       }
     } catch (err) {
       console.warn('Clipboard read permission denied', err);
       setPastedFeedback('denied');
-      window.setTimeout(() => setPastedFeedback('idle'), 2200);
+      scheduleFeedbackReset(2200);
     }
   };
 
@@ -189,8 +214,16 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain p-2 sm:p-4 bg-black/40 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl shadow-xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] max-w-lg w-full overflow-hidden border border-stone-200 flex flex-col">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] sm:p-4 bg-black/40 backdrop-blur-xs"
+    >
+      <div
+        ref={dialogRef}
+        className="bg-white rounded-2xl shadow-xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] max-w-lg w-full overflow-hidden border border-stone-200 flex flex-col outline-none"
+      >
         {/* Intestazione */}
         <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:px-6 sm:py-4 border-b border-stone-100 bg-stone-50/60">
           <div className="flex min-w-0 items-center gap-2">
@@ -198,7 +231,7 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
               <Bell className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-stone-900">
+              <h3 id={titleId} className="text-base font-bold text-stone-900">
                 <span className="sm:hidden">Notifiche e SMS</span>
                 <span className="hidden sm:inline">Notifiche Bancarie & SMS Android</span>
               </h3>

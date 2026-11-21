@@ -1,5 +1,6 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { AlertTriangle, Check, Download } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface DeveloperResetConfirmDialogProps {
@@ -36,7 +37,20 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
   onCancel,
 }) => {
   const resetDialogTitleId = useId();
+  const dialogRef = useRef<HTMLFormElement>(null);
   useScrollLock(isOpen);
+  useFocusTrap(dialogRef, isOpen);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onCancel();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
 
@@ -47,11 +61,12 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
       role="alertdialog"
       aria-modal="true"
       aria-labelledby={resetDialogTitleId}
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
     >
       <form
+        ref={dialogRef}
         onSubmit={onConfirm}
-        className="ds-card w-full max-w-md space-y-4 p-5 shadow-2xl"
+        className="ds-card w-full max-w-md space-y-4 p-5 shadow-2xl outline-none"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-rose-500/12 text-rose-600 border-rose-500/25">

@@ -119,9 +119,16 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
           onQuickAddGoal={handleQuickAdd}
           onEditGoal={(targetGoal) => {
             setEditingGoalId(targetGoal.id);
+            const prefersReducedMotion =
+              typeof window !== 'undefined' &&
+              typeof window.matchMedia === 'function' &&
+              window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             document
               .getElementById(`goal-card-${targetGoal.id}`)
-              ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              ?.scrollIntoView({
+                behavior: prefersReducedMotion ? 'auto' : 'smooth',
+                block: 'center',
+              });
           }}
         />
       )}

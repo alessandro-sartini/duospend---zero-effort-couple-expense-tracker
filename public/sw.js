@@ -1,4 +1,4 @@
-const CACHE_NAME = 'duospend-shell-v6';
+const CACHE_NAME = 'duospend-shell-v7';
 const APP_SHELL_URLS = [
   '/',
   '/index.html',
@@ -48,14 +48,25 @@ self.addEventListener('fetch', (event) => {
   // Navigazione HTML (incluse chiamate Share Target /?text=...): network-first, mai caching della query
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        return (
-          (await cache.match('/index.html')) ||
-          (await cache.match('/')) ||
-          Response.error()
-        );
-      })
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok && response.type === 'basic' && !url.search) {
+            const copy = response.clone();
+            caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put('/index.html', copy))
+              .catch(() => {});
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          return (
+            (await cache.match('/index.html')) ||
+            (await cache.match('/')) ||
+            Response.error()
+          );
+        })
     );
     return;
   }

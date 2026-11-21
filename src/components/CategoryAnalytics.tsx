@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
@@ -181,9 +181,25 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
     [profile.hiddenCategories]
   );
 
+  const savedBannerTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedBannerTimeoutRef.current !== null) {
+        window.clearTimeout(savedBannerTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const flashSaved = (message: string) => {
     setSavedBanner(message);
-    setTimeout(() => setSavedBanner(null), 2800);
+    if (savedBannerTimeoutRef.current !== null) {
+      window.clearTimeout(savedBannerTimeoutRef.current);
+    }
+    savedBannerTimeoutRef.current = window.setTimeout(() => {
+      setSavedBanner(null);
+      savedBannerTimeoutRef.current = null;
+    }, 2800);
   };
 
   const handleSelectTimeframe = (next: AnalyticsTimeframe) => {

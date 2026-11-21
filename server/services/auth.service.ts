@@ -75,10 +75,11 @@ async function verifyGoogleIdentity(accessToken: unknown): Promise<string> {
 /** Flusso legacy (GIS Token Model): usato solo se GOOGLE_CLIENT_SECRET non è configurato. */
 export async function verifyAndCreateGoogleSession(
   accessToken: unknown,
-  res: Response
+  res: Response,
+  req?: Request
 ): Promise<{ user: { email: string } }> {
   const email = await verifyGoogleIdentity(accessToken);
-  createGoogleSession(email, res);
+  createGoogleSession(email, res, undefined, req);
   return { user: { email } };
 }
 

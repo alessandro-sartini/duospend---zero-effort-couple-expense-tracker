@@ -368,4 +368,12 @@ export const logout = async () => {
   cachedAccessTokenExpiresAt = 0;
   gmailAccessGranted = false;
   persistGmailSessionToken();
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.removeItem('duospend_ocr_draft_v1');
+      sessionStorage.removeItem('duospend_dismissed_bg_notifications_v1');
+    } catch {
+      // Ignore sessionStorage cleanup errors
+    }
+  }
 };

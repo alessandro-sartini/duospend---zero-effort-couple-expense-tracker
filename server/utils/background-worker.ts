@@ -60,6 +60,8 @@ export function runInBackgroundThread<TInput, TResult>(
     }
   `;
 
+const WORKER_TIMEOUT_MS = 8_000;
+
   return new Promise((resolve, reject) => {
     let settled = false;
     let worker: Worker;
@@ -74,9 +76,18 @@ export function runInBackgroundThread<TInput, TResult>(
       return;
     }
 
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      void worker.terminate();
+      runInProcessViaSetImmediate(fn, input).then(resolve, reject);
+    }, WORKER_TIMEOUT_MS);
+    timeoutId.unref?.();
+
     worker.once('message', (message: WorkerResultMessage<TResult>) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeoutId);
       void worker.terminate();
 
       if (message.ok) {
@@ -95,6 +106,7 @@ export function runInBackgroundThread<TInput, TResult>(
     worker.once('error', () => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeoutId);
       void worker.terminate();
       runInProcessViaSetImmediate(fn, input).then(resolve, reject);
     });
@@ -102,6 +114,7 @@ export function runInBackgroundThread<TInput, TResult>(
     worker.once('exit', (code) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeoutId);
       if (code !== 0) {
         runInProcessViaSetImmediate(fn, input).then(resolve, reject);
       } else {

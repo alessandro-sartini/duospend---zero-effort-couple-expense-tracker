@@ -22,11 +22,12 @@ export function getDataController(_req: Request, res: Response) {
 export function postDataController(req: Request, res: Response) {
   try {
     const currentProfile = readDatabase().profile;
+    const ownerEmail = (currentProfile.userEmail || '').toLowerCase().trim();
+    const requesterEmail = (req.googleUser?.email || '').toLowerCase().trim();
     const isOwner =
       (process.env.NODE_ENV !== 'production' && hasDeveloperSession(req)) ||
       hasValidWebhookSecret(req.get('x-duospend-secret')) ||
-      req.googleUser?.email.toLowerCase().trim() ===
-        (currentProfile.userEmail || '').toLowerCase().trim();
+      Boolean(ownerEmail && requesterEmail && requesterEmail === ownerEmail);
 
     const result = saveSynchronizedData(req.body ?? {}, { isOwner });
     return res.json(result);

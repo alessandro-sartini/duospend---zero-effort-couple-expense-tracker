@@ -41,7 +41,7 @@ export async function postGoogleSessionController(req: Request, res: Response) {
     return res.status(410).json({ error: 'Usa il nuovo accesso Google sicuro (Authorization Code).' });
   }
   try {
-    const result = await verifyAndCreateGoogleSession(req.body?.accessToken, res);
+    const result = await verifyAndCreateGoogleSession(req.body?.accessToken, res, req);
     return res.json({ success: true, user: result.user });
   } catch (error) {
     return sendControllerError(

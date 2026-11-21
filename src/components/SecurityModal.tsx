@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Calendar, Check, Flag, Lock, Mail, ShieldCheck, Sparkles, Terminal, UserCheck, Users, Wallet } from 'lucide-react';
 import { deriveNameFromEmail } from '../services/storage';
 import { CoupleProfile } from '../types';
@@ -68,6 +68,16 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     setPartnerName('Partner 2');
   };
 
+  const savedTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimeoutRef.current !== null) {
+        window.clearTimeout(savedTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const parsedBudget = Number(monthlyBudget.replace(',', '.'));
@@ -84,7 +94,13 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
       ...(isOwner ? { partnerEmail: partnerEmail.trim().toLowerCase().slice(0, 254) } : {}),
     });
     setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2000);
+    if (savedTimeoutRef.current !== null) {
+      window.clearTimeout(savedTimeoutRef.current);
+    }
+    savedTimeoutRef.current = window.setTimeout(() => {
+      setSavedSuccess(false);
+      savedTimeoutRef.current = null;
+    }, 2000);
   };
 
   const sessionLabel = isDevelopmentSession

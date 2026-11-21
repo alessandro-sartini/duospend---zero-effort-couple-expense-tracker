@@ -13,8 +13,19 @@ export interface ExtractedReceiptDraft {
 }
 
 const MAX_RECEIPT_IMAGE_DIMENSION = 1280;
+const MAX_SOURCE_IMAGE_DIMENSION = 8192;
+const MAX_SOURCE_IMAGE_PIXELS = 25_000_000;
 const RECEIPT_JPEG_QUALITY = 0.78;
 export const MAX_RECEIPT_FILE_BYTES = 12 * 1024 * 1024;
+
+const ALLOWED_EXTENSION_BY_MIME: Record<string, string[]> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+};
+
+const DANGEROUS_DOUBLE_EXTENSION_PATTERN =
+  /\.(?:php|phtml|phar|exe|bat|cmd|sh|ps1|dll|js|mjs|cjs|html|htm|svg|xml|jsp|asp|aspx|py|rb|pl)\.(?:jpe?g|png|webp)$/i;
 
 export const validateReceiptFile = (file: Pick<File, 'name' | 'size' | 'type'>):
   | { valid: true }
@@ -27,6 +38,29 @@ export const validateReceiptFile = (file: Pick<File, 'name' | 'size' | 'type'>):
   }
   if (file.size > MAX_RECEIPT_FILE_BYTES) {
     return { valid: false, error: 'Il file immagine supera il limite di 12 MB.' };
+  }
+  if (typeof file.name === 'string' && file.name.trim()) {
+    const trimmedName = file.name.trim();
+    if (
+      /[\0\r\n\u0000-\u001f\u007f]/.test(trimmedName) ||
+      trimmedName.includes('/') ||
+      trimmedName.includes('\\') ||
+      trimmedName.includes('..')
+    ) {
+      return { valid: false, error: 'Nome file non valido.' };
+    }
+    if (DANGEROUS_DOUBLE_EXTENSION_PATTERN.test(trimmedName)) {
+      return { valid: false, error: 'Estensione del file non consentita.' };
+    }
+    const extMatch = /\.([a-z0-9]+)$/i.exec(trimmedName);
+    const ext = extMatch?.[1]?.toLowerCase() || '';
+    const allowedExts = ALLOWED_EXTENSION_BY_MIME[file.type] ?? [];
+    if (!ext || !allowedExts.includes(ext)) {
+      return {
+        valid: false,
+        error: 'Estensione del file non valida o non coerente con il formato immagine.',
+      };
+    }
   }
   return { valid: true };
 };
@@ -45,7 +79,13 @@ export const compressReceiptImage = (
       try {
         const width = img.naturalWidth || img.width;
         const height = img.naturalHeight || img.height;
-        if (!width || !height) {
+        if (
+          !width ||
+          !height ||
+          width > MAX_SOURCE_IMAGE_DIMENSION ||
+          height > MAX_SOURCE_IMAGE_DIMENSION ||
+          width * height > MAX_SOURCE_IMAGE_PIXELS
+        ) {
           resolve({ dataUrl, mimeType: fallbackMimeType });
           return;
         }
@@ -65,7 +105,7 @@ export const compressReceiptImage = (
 
         ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
         const compressed = canvas.toDataURL('image/jpeg', RECEIPT_JPEG_QUALITY);
-        if (compressed.startsWith('data:image/jpeg') && compressed.length < dataUrl.length) {
+        if (compressed.startsWith('data:image/jpeg') && compressed.length <= 14_000_000) {
           resolve({ dataUrl: compressed, mimeType: 'image/jpeg' });
         } else {
           resolve({ dataUrl, mimeType: fallbackMimeType });
