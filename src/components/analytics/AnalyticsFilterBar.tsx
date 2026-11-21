@@ -1,5 +1,5 @@
 import React from 'react';
-import { RotateCcw } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import type {
   AnalyticsTimeframe,
   PayerFilter,
@@ -16,6 +16,21 @@ const SPLIT_FILTERS: Array<{ id: SplitFilter; label: string }> = [
   { id: 'all', label: 'Tutte' },
   { id: 'shared', label: 'Condivise' },
   { id: 'personal', label: 'Personali' },
+];
+
+const MONTH_OPTIONS = [
+  { value: 1, label: 'Gennaio' },
+  { value: 2, label: 'Febbraio' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Aprile' },
+  { value: 5, label: 'Maggio' },
+  { value: 6, label: 'Giugno' },
+  { value: 7, label: 'Luglio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Settembre' },
+  { value: 10, label: 'Ottobre' },
+  { value: 11, label: 'Novembre' },
+  { value: 12, label: 'Dicembre' },
 ];
 
 const SEGMENT_LABEL_CLASS =
@@ -79,6 +94,12 @@ interface AnalyticsFilterBarProps {
   timeframes: AnalyticsTimeframeOption[];
   timeframe: AnalyticsTimeframe;
   onSelectTimeframe: (next: AnalyticsTimeframe) => void;
+  availableYears: number[];
+  selectedYear: number;
+  selectedMonth: number | null;
+  onSelectYear: (year: number) => void;
+  onSelectMonth: (month: number | null) => void;
+  onStepMonth: (delta: -1 | 1) => void;
   splitFilter: SplitFilter;
   onSelectSplitFilter: (next: SplitFilter) => void;
   payerFilters: Array<{ id: PayerFilter; label: string }>;
@@ -94,6 +115,12 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
   timeframes,
   timeframe,
   onSelectTimeframe,
+  availableYears,
+  selectedYear,
+  selectedMonth,
+  onSelectYear,
+  onSelectMonth,
+  onStepMonth,
   splitFilter,
   onSelectSplitFilter,
   payerFilters,
@@ -110,7 +137,7 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
         Statistiche e Trend per Categoria
       </h2>
       <p className="text-xs text-stone-500 mt-0.5">
-        Analisi delle uscite di coppia, categorie personalizzate, obiettivi collegati e soglie mensili
+        Analisi delle uscite di coppia divisa per anno e mese, categorie personalizzate e soglie
       </p>
     </div>
 
@@ -134,7 +161,67 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
         }))}
       />
 
-      {/* Riga 2: Natura Spesa + Pagato da allineati su 2 colonne */}
+      {/* Riga 2: Divisione puntuale per Anno e Mese */}
+      <div className="space-y-1">
+        <span className={SEGMENT_LABEL_CLASS}>Anno e Mese</span>
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onStepMonth(-1)}
+            disabled={timeframe === 'all'}
+            aria-label={selectedMonth === null ? 'Anno precedente' : 'Mese precedente'}
+            className="ds-icon-btn h-10 w-10 shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <div className="relative flex-1 min-w-[110px]">
+            <Calendar className="w-3.5 h-3.5 text-orange-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              aria-label="Seleziona anno"
+              value={selectedYear}
+              onChange={(e) => onSelectYear(Number(e.target.value))}
+              className="ds-input w-full pl-8 pr-2.5 py-2 text-xs font-semibold min-h-10 cursor-pointer"
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  Anno {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex-1 min-w-[150px]">
+            <select
+              aria-label="Seleziona mese"
+              value={selectedMonth ?? ''}
+              onChange={(e) =>
+                onSelectMonth(e.target.value === '' ? null : Number(e.target.value))
+              }
+              className="ds-input w-full px-3 py-2 text-xs font-semibold min-h-10 cursor-pointer"
+            >
+              <option value="">Tutti i mesi ({selectedYear})</option>
+              {MONTH_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onStepMonth(1)}
+            disabled={timeframe === 'all'}
+            aria-label={selectedMonth === null ? 'Anno successivo' : 'Mese successivo'}
+            className="ds-icon-btn h-10 w-10 shrink-0"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Riga 3: Natura Spesa + Pagato da allineati su 2 colonne */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FilterSegment
           title="Natura Spesa"

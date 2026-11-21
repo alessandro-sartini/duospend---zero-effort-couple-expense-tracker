@@ -21,8 +21,62 @@ const RECEIPT_ANALYSIS_MODELS = [
 const MAX_MESSAGES_PER_PAGE = 30;
 const MAX_EMAIL_BODY_LENGTH = 6000;
 const GMAIL_SCAN_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const ALLOWED_LOOKBACK_DAYS = [7, 30, 90];
+const ALLOWED_LOOKBACK_DAYS = [7, 30, 90, 180, 365];
 const SAFE_GMAIL_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+function sanitizeIsoStartDate(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  const check = new Date(year, month - 1, day);
+  if (
+    check.getFullYear() !== year ||
+    check.getMonth() !== month - 1 ||
+    check.getDate() !== day
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+function shiftIsoDateString(isoDate: string, deltaDays: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const shifted = new Date(y, m - 1, d + deltaDays);
+  const sy = shifted.getFullYear();
+  const sm = String(shifted.getMonth() + 1).padStart(2, '0');
+  const sd = String(shifted.getDate()).padStart(2, '0');
+  return `${sy}-${sm}-${sd}`;
+}
+
+function extractItemIsoDate(item: { date?: unknown; dateHeader?: unknown }): string | null {
+  if (typeof item.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(item.date.trim())) {
+    return item.date.trim().slice(0, 10);
+  }
+  if (typeof item.dateHeader === 'string' && item.dateHeader.trim()) {
+    const parsed = new Date(item.dateHeader);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+  }
+  return null;
+}
+
+function isOnOrAfterStartDate(
+  item: { date?: unknown; dateHeader?: unknown },
+  startDate: string | null
+): boolean {
+  if (!startDate) return true;
+  const itemDate = extractItemIsoDate(item);
+  if (!itemDate) return true;
+  return itemDate >= startDate;
+}
 const SAFE_BEARER_PATTERN = /^[^\s\r\n]{10,4096}$/;
 const AI_AUTO_RECEIPT_MIN_CONFIDENCE = 75;
 const AI_REVIEW_CANDIDATE_MIN_CONFIDENCE = 55;
@@ -296,9 +350,13 @@ export async function syncGmailReceipts(params: {
   const lookbackDays = ALLOWED_LOOKBACK_DAYS.includes(requestedLookbackDays)
     ? requestedLookbackDays
     : 30;
+  const startDate = sanitizeIsoStartDate(body.startDate);
+  const dateFilterClause = startDate
+    ? `after:${shiftIsoDateString(startDate, -1).replace(/-/g, '/')}`
+    : `newer_than:${lookbackDays}d`;
 
   const query = encodeURIComponent(
-    `newer_than:${lookbackDays}d -in:spam -in:trash -category:promotions -category:social -category:forums {receipt receipts invoice invoices "order confirmation" "conferma ordine" "conferma d'ordine" ricevuta ricevute fattura fatture scontrino scontrini bolletta bollette prenotazione biglietto addebito "pagamento effettuato" "hai inviato un pagamento" "hai pagato"}`
+    `${dateFilterClause} -in:spam -in:trash -category:promotions -category:social -category:forums {receipt receipts invoice invoices "order confirmation" "conferma ordine" "conferma d'ordine" ricevuta ricevute fattura fatture scontrino scontrini bolletta bollette prenotazione biglietto addebito "pagamento effettuato" "hai inviato un pagamento" "hai pagato"}`
   );
   const pageTokenQuery = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
   const searchUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${MAX_MESSAGES_PER_PAGE}${pageTokenQuery}`;
@@ -329,9 +387,19 @@ export async function syncGmailReceipts(params: {
     const cached = accountCache.get(message.id);
     return cached ? [cached] : [];
   });
-  const cachedReceipts = cachedEntries.flatMap((entry) => (entry.receipt ? [entry.receipt] : []));
+  const cachedReceipts = cachedEntries.flatMap((entry) =>
+    entry.receipt && isOnOrAfterStartDate(entry.receipt as { date?: unknown }, startDate)
+      ? [entry.receipt]
+      : []
+  );
   const cachedReviewCandidates = cachedEntries.flatMap((entry) =>
-    entry.reviewCandidate ? [entry.reviewCandidate] : []
+    entry.reviewCandidate &&
+    isOnOrAfterStartDate(
+      entry.reviewCandidate as { date?: unknown; dateHeader?: unknown },
+      startDate
+    )
+      ? [entry.reviewCandidate]
+      : []
   );
   const skippedScannedCount = cachedEntries.length;
   const cachedSuppressedLowConfidenceCount = cachedEntries.filter(
@@ -454,9 +522,11 @@ export async function syncGmailReceipts(params: {
         normalizeRuleValue(rule.sender) === normalizeRuleValue(message.sender) &&
         normalizeRuleValue(rule.subject) === normalizeRuleValue(message.subject)
     );
+  const startDateGraceFloor = startDate ? shiftIsoDateString(startDate, -1) : null;
   const validItems = readItems.filter(
     (message) =>
-      matchesRecurringRule(message) || !isLikelyPromotionalOrNonExpenseEmail(message)
+      isOnOrAfterStartDate({ dateHeader: message.dateHeader }, startDateGraceFloor) &&
+      (matchesRecurringRule(message) || !isLikelyPromotionalOrNonExpenseEmail(message))
   );
   const skippedNonTransactionalCount = readItems.length - validItems.length;
 
@@ -493,16 +563,20 @@ export async function syncGmailReceipts(params: {
     );
     if (!rule) return [];
     const parsedDate = message.dateHeader ? new Date(message.dateHeader) : null;
+    const resolvedDate =
+      parsedDate && !Number.isNaN(parsedDate.getTime())
+        ? parsedDate.toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+    if (!isOnOrAfterStartDate({ date: resolvedDate, dateHeader: message.dateHeader }, startDate)) {
+      return [];
+    }
     return [
       {
         id: message.id,
         merchant: rule.merchant,
         total: rule.amount,
         currency: rule.currency,
-        date:
-          parsedDate && !Number.isNaN(parsedDate.getTime())
-            ? parsedDate.toISOString().slice(0, 10)
-            : new Date().toISOString().slice(0, 10),
+        date: resolvedDate,
         category: rule.category,
         itemsDescription: 'Importo applicato dalla regola ricorrente impostata manualmente.',
         sourceEmailSubject: message.subject,
@@ -600,13 +674,19 @@ Use the email body to find the paid total, not just the subject or snippet, and 
     fallbackUsed = true;
     modelUsed = 'fallback-euristico-locale';
     const fallbackResult = extractReceiptsHeuristically(aiItems, 'EUR');
-    const enrichedFallbackReceipts = [...recurringReceipts, ...fallbackResult.receipts];
+    const filteredFallbackReceipts = fallbackResult.receipts.filter((receipt) =>
+      isOnOrAfterStartDate(receipt as { date?: unknown }, startDate)
+    );
+    const filteredFallbackReviews = fallbackResult.reviewCandidates.filter((candidate) =>
+      isOnOrAfterStartDate(candidate as { date?: unknown; dateHeader?: unknown }, startDate)
+    );
+    const enrichedFallbackReceipts = [...recurringReceipts, ...filteredFallbackReceipts];
     const aiMessageIds = new Set(aiItems.map((message) => message.id));
     const fallbackReceiptsById = new Map(
       enrichedFallbackReceipts.map((receipt) => [String((receipt as { id: string }).id), receipt])
     );
     const fallbackReviewById = new Map(
-      fallbackResult.reviewCandidates.map((candidate) => [
+      filteredFallbackReviews.map((candidate) => [
         String((candidate as { id: string }).id),
         candidate,
       ])
@@ -630,7 +710,7 @@ Use the email body to find the paid total, not just the subject or snippet, and 
       success: true,
       fallbackUsed,
       receipts: [...cachedReceipts, ...enrichedFallbackReceipts],
-      reviewCandidates: [...cachedReviewCandidates, ...fallbackResult.reviewCandidates],
+      reviewCandidates: [...cachedReviewCandidates, ...filteredFallbackReviews],
       suppressedLowConfidenceCount:
         cachedSuppressedLowConfidenceCount + fallbackResult.suppressedLowConfidenceCount,
       count: cachedReceipts.length + enrichedFallbackReceipts.length,
@@ -691,12 +771,14 @@ Use the email body to find the paid total, not just the subject or snippet, and 
     .filter((decision) => {
       const normalizedConfidence = Math.min(100, Math.max(0, Math.round(decision.confidence)));
       const total = Number(decision.total);
+      const source = messagesById.get(decision.id);
       return (
         decision.isExpense === true &&
         normalizedConfidence >= AI_AUTO_RECEIPT_MIN_CONFIDENCE &&
         Number.isFinite(total) &&
         total > 0 &&
-        total <= MAX_AI_RECEIPT_AMOUNT
+        total <= MAX_AI_RECEIPT_AMOUNT &&
+        isOnOrAfterStartDate({ date: decision.date, dateHeader: source?.dateHeader }, startDate)
       );
     })
     .map((receipt) => {
@@ -723,7 +805,8 @@ Use the email body to find the paid total, not just the subject or snippet, and 
       normalizedConfidence >= AI_AUTO_RECEIPT_MIN_CONFIDENCE ||
       !Number.isFinite(total) ||
       total <= 0 ||
-      total > MAX_AI_RECEIPT_AMOUNT
+      total > MAX_AI_RECEIPT_AMOUNT ||
+      !isOnOrAfterStartDate({ date: decision.date, dateHeader: message.dateHeader }, startDate)
     ) {
       return [];
     }

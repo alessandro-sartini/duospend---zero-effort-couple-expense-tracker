@@ -10,6 +10,7 @@ Welcome to **DuoSpend**, your automated couple expense tracker designed specific
 - **Idle & Absolute Session Timeouts (30 min / 4 hr cap)**: Sessions renew on active use and automatically expire after **30 minutes of inactivity** (`DUOSPEND_SESSION_IDLE_MINUTES`) or at the **4-hour maximum cap** (`DUOSPEND_SESSION_MAX_HOURS`), auto-locking the UI back to the login screen. Use **Lock / Logout** at any time to terminate and revoke the session immediately.
 - **Developer Console & Protected DB Reset (`DUOSPEND_DEV_PASSWORD`)**: Optional in `.env`. Disabled in production (`404`) unless configured; when set, requires both an active authorized couple Google session **and** the `.env` developer password. Resetting the database opens a **"Sei sicuro di voler procedere?"** confirmation modal with quick JSON backup export, `Empty (0 expenses)` vs `Restore Demo` selection (always preserving couple emails), and typed `RESET` verification enforced client-side and server-side.
 - **Webhook Secret**: External Android ingestion requires either an authenticated couple session or the server-side `x-duospend-secret` header (`DUOSPEND_WEBHOOK_SECRET`).
+- **Installable PWA**: DuoSpend can be installed from Chrome, but this is a web app rather than a native APK. Camera, notifications and offline capabilities therefore depend on browser/platform support. Private API responses are never cached.
 
 ---
 

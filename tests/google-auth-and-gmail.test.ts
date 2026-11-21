@@ -468,6 +468,68 @@ describe('Google Authentication & Gmail Sync Services', () => {
         vi.unstubAllEnvs();
       }
     });
+
+    it('rispetta startDate nella query Gmail (after:YYYY/MM/DD) ed esclude spese o bozze antecedenti', async () => {
+      inMemoryDb.gmailScanCache = [
+        {
+          accountEmail: 'owner@example.com',
+          messageId: 'msg-old-oct',
+          scannedAt: new Date().toISOString(),
+          receipt: {
+            id: 'msg-old-oct',
+            isExpense: true,
+            total: 42,
+            currency: 'EUR',
+            date: '2026-10-31',
+            merchant: 'Vecchio Acquisto Ottobre',
+            category: 'Shopping',
+          },
+        },
+        {
+          accountEmail: 'owner@example.com',
+          messageId: 'msg-nov-valid',
+          scannedAt: new Date().toISOString(),
+          receipt: {
+            id: 'msg-nov-valid',
+            isExpense: true,
+            total: 18.5,
+            currency: 'EUR',
+            date: '2026-11-01',
+            merchant: 'Acquisto Novembre',
+            category: 'Spesa',
+          },
+        },
+      ];
+
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ emailAddress: 'owner@example.com' }), { status: 200 })
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              messages: [{ id: 'msg-old-oct' }, { id: 'msg-nov-valid' }],
+              resultSizeEstimate: 2,
+            }),
+            { status: 200 }
+          )
+        );
+
+      const result = await syncGmailReceipts({
+        accessToken: 'ya29.test-mock-token-abc-123',
+        googleUserEmail: 'owner@example.com',
+        body: { lookbackDays: 30, startDate: '2026-11-01' },
+      });
+
+      const searchUrl = String(fetchSpy.mock.calls[1]?.[0] || '');
+      expect(decodeURIComponent(searchUrl)).toContain('after:2026/10/31');
+      expect(result.receipts).toHaveLength(1);
+      expect(result.receipts[0]).toMatchObject({
+        id: 'msg-nov-valid',
+        date: '2026-11-01',
+      });
+    });
   });
 
   describe('Validazione chiave API Gemini (hasGeminiApiKey)', () => {

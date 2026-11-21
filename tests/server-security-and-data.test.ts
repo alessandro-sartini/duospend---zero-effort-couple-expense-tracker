@@ -43,6 +43,7 @@ import {
   validateUploadedImagePayload,
   validateUbuntuSyncTarget,
 } from '../server/utils/security';
+import { validateReceiptFile } from '../src/components/camera/receiptOcrUtils';
 
 describe('Sicurezza server, anti-traversal e sanitizzazione POST /api/data', () => {
   beforeEach(() => {
@@ -427,6 +428,29 @@ describe('Sicurezza server, anti-traversal e sanitizzazione POST /api/data', () 
         vi.doUnmock('../server/config');
         vi.resetModules();
       }
+    });
+
+    it('rifiuta file ricevuti non JPEG/PNG/WebP, vuoti o superiori a 12 MB', () => {
+      expect(validateReceiptFile({ name: 'receipt.pdf', size: 100, type: 'application/pdf' })).toMatchObject({
+        valid: false,
+      });
+      expect(validateReceiptFile({ name: 'empty.jpg', size: 0, type: 'image/jpeg' })).toMatchObject({
+        valid: false,
+      });
+      expect(
+        validateReceiptFile({
+          name: 'huge.jpg',
+          size: 12 * 1024 * 1024 + 1,
+          type: 'image/jpeg',
+        })
+      ).toMatchObject({ valid: false });
+      expect(
+        validateReceiptFile({
+          name: 'receipt.webp',
+          size: 1024,
+          type: 'image/webp',
+        })
+      ).toEqual({ valid: true });
     });
   });
 });

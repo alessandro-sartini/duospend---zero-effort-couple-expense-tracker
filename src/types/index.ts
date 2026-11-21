@@ -77,6 +77,7 @@ export interface CoupleProfile {
   weddingBudgetGoal?: number;
   userEmail?: string;
   partnerEmail?: string;
+  trackingStartDate?: string; // YYYY-MM-DD ("Punto Zero" globale spese/Gmail)
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
   customCategories?: string[];
   hiddenCategories?: string[];

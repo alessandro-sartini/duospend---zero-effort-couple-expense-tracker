@@ -8,6 +8,7 @@ import { ReceiptDraftForm } from './camera/ReceiptDraftForm';
 import {
   buildEditableFallbackDraft,
   compressReceiptImage,
+  validateReceiptFile,
   type ExtractedReceiptDraft,
 } from './camera/receiptOcrUtils';
 
@@ -119,9 +120,14 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const mime = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-      ? file.type
-      : 'image/jpeg';
+    const validation = validateReceiptFile(file);
+    if (!validation.valid) {
+      setError(validation.error);
+      e.target.value = '';
+      return;
+    }
+
+    const mime = file.type;
     setError(null);
     setExtractedData(null);
 
@@ -261,7 +267,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
         <input
           type="file"
           ref={cameraInputRef}
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           capture="environment"
           onChange={handleFileChange}
           className="hidden"
@@ -269,7 +275,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
         <input
           type="file"
           ref={fileInputRef}
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           onChange={handleFileChange}
           className="hidden"
         />

@@ -51,6 +51,14 @@ docker compose up -d --build
 - **Gmail Sync:** Searches purchase-related keywords excluding promotions, social, and forums (`-category:promotions -category:social -category:forums`) and follows every results page in 30-message batches. Only candidate email text (never attachments) is analyzed by Gemini (trying Gemini 3.8 Flash, Gemini 3.6 Flash, and Gemini 3.1 Flash-Lite on transient errors), with a 30-day per-account SQLite scan cache.
 - **Quick Actions FAB & Swipeable Background Notifications:** The floating `+` button houses receipt OCR scanning, manual entry, SMS/notification paste, and Gmail sync. Both Gmail sync and receipt OCR continue in the background (surviving page reloads); floating notification pills can be dismissed with the `X` button or by **swiping/flinging right**, while keeping the saved scan results/drafts intact and accessible via badges in the `+` menu.
 
+### PWA install and security model
+
+- DuoSpend installs as a Chrome PWA through the browser menu. It is not a native APK and cannot access capabilities reserved to native Android/iOS apps (for example all notification permissions or hardware APIs vary by browser).
+- Browser camera/upload permissions are requested only in the relevant receipt flow. Receipt uploads are limited to JPEG, PNG or WebP, 12 MB before client-side compression, with server-side MIME and binary-signature validation.
+- `/api/*` responses and authentication cookies are never cached by the Service Worker. Static app-shell assets use a versioned cache and stale/offline fallback.
+- API mutations reject mismatched cross-origin `Origin` headers, private API responses use `no-store`, and production responses include HSTS and restrictive security headers.
+- Browser zoom is preserved for accessibility. Standalone PWA layout respects mobile safe areas and responsive viewport behavior.
+
 ---
 
 ## Developer Console (`DUOSPEND_DEV_PASSWORD`)

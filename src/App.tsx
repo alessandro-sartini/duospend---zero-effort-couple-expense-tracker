@@ -55,6 +55,11 @@ const SecurityModal = lazy(() =>
 const DeveloperModal = lazy(() =>
   import('./components/DeveloperModal').then((m) => ({ default: m.DeveloperModal }))
 );
+const StartingPointModal = lazy(() =>
+  import('./components/onboarding/StartingPointModal').then((m) => ({
+    default: m.StartingPointModal,
+  }))
+);
 
 const TAB_TO_PATH: Record<string, string> = {
   dashboard: '/',
@@ -103,6 +108,7 @@ export default function App() {
   const [isNotificationSyncOpen, setIsNotificationSyncOpen] = useState(false);
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isStartingPointOpen, setIsStartingPointOpen] = useState(false);
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
   const [isDevConsoleEnabled, setIsDevConsoleEnabled] = useState<boolean>(import.meta.env.DEV);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -132,6 +138,8 @@ export default function App() {
 
   const {
     expenses,
+    allExpenses,
+    excludedBeforeStartCount,
     settlements,
     goals,
     profile,
@@ -396,6 +404,8 @@ export default function App() {
             totalSharedSpend={balanceSummary.totalSharedSpend}
             userTotalPaid={balanceSummary.userTotalPaid}
             partnerTotalPaid={balanceSummary.partnerTotalPaid}
+            excludedBeforeStartCount={excludedBeforeStartCount}
+            onOpenStartingPoint={() => setIsStartingPointOpen(true)}
             onOpenSettlement={() => setIsSettlementOpen(true)}
             onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
             onNavigateTab={navigateToTab}
@@ -517,7 +527,7 @@ export default function App() {
             isOpen={isGmailSyncOpen}
             onClose={() => setIsGmailSyncOpen(false)}
             onImportExpenses={handleImportGmailExpenses}
-            existingGmailSourceReferences={expenses.flatMap((expense) =>
+            existingGmailSourceReferences={allExpenses.flatMap((expense) =>
               expense.source === 'gmail' && expense.sourceReference ? [expense.sourceReference] : []
             )}
             ignoredGmailSourceReferences={ignoredGmailMessageIds}
@@ -529,6 +539,7 @@ export default function App() {
             isSignedIn={isSignedIn}
             userEmail={userEmail}
             onAuthChanged={handleAuthChanged}
+            onOpenStartingPoint={() => setIsStartingPointOpen(true)}
             onBackgroundStateChange={setGmailBgState}
           />
         )}
@@ -568,6 +579,22 @@ export default function App() {
             currentUserEmail={userEmail}
             isDevelopmentSession={authMethod === 'development'}
             onOpenDevModal={isDevConsoleEnabled ? () => setIsDevModalOpen(true) : undefined}
+            onOpenStartingPoint={() => setIsStartingPointOpen(true)}
+          />
+        )}
+
+        {isStartingPointOpen && (
+          <StartingPointModal
+            isOpen={isStartingPointOpen}
+            onClose={() => setIsStartingPointOpen(false)}
+            profile={profile}
+            allExpenses={allExpenses}
+            onSaveProfile={handleUpdateProfile}
+            onSaveAndOpenGmail={(patch) => {
+              handleUpdateProfile(patch);
+              setIsStartingPointOpen(false);
+              setIsGmailSyncOpen(true);
+            }}
           />
         )}
 
@@ -593,6 +620,7 @@ export default function App() {
           isNotificationSyncOpen ||
           isSettlementOpen ||
           isSecurityModalOpen ||
+          isStartingPointOpen ||
           isDevModalOpen
         }
         isGmailSyncOpen={isGmailSyncOpen}

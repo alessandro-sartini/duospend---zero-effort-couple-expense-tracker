@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Lock, Mail, ShieldCheck, Sparkles, Terminal, UserCheck, Users, Wallet } from 'lucide-react';
+import { Calendar, Check, Flag, Lock, Mail, ShieldCheck, Sparkles, Terminal, UserCheck, Users, Wallet } from 'lucide-react';
 import { deriveNameFromEmail } from '../services/storage';
 import { CoupleProfile } from '../types';
 import { ModalShell } from './ui/ModalShell';
@@ -13,6 +13,7 @@ interface SecurityModalProps {
   currentUserEmail?: string;
   isDevelopmentSession?: boolean;
   onOpenDevModal?: () => void;
+  onOpenStartingPoint?: () => void;
 }
 
 export const SecurityModal: React.FC<SecurityModalProps> = ({
@@ -24,11 +25,13 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
   currentUserEmail,
   isDevelopmentSession = false,
   onOpenDevModal,
+  onOpenStartingPoint,
 }) => {
   const [userName, setUserName] = useState(profile.userName || 'Partner 1');
   const [partnerName, setPartnerName] = useState(profile.partnerName || 'Partner 2');
   const [monthlyBudget, setMonthlyBudget] = useState(String(profile.monthlyBudget || 2800));
   const [partnerEmail, setPartnerEmail] = useState(profile.partnerEmail || '');
+  const [trackingStartDate, setTrackingStartDate] = useState(profile.trackingStartDate || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const isOwner =
@@ -42,8 +45,16 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     setPartnerName(profile.partnerName || 'Partner 2');
     setMonthlyBudget(String(profile.monthlyBudget || 2800));
     setPartnerEmail(profile.partnerEmail || '');
+    setTrackingStartDate(profile.trackingStartDate || '');
     setSavedSuccess(false);
-  }, [isOpen, profile.userName, profile.partnerName, profile.monthlyBudget, profile.partnerEmail]);
+  }, [
+    isOpen,
+    profile.userName,
+    profile.partnerName,
+    profile.monthlyBudget,
+    profile.partnerEmail,
+    profile.trackingStartDate,
+  ]);
 
   const handleUseEmailNames = () => {
     const derivedUser = deriveNameFromEmail(currentUserEmail || profile.userEmail);
@@ -69,6 +80,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
       userName: userName.trim().slice(0, 100) || 'Partner 1',
       partnerName: partnerName.trim().slice(0, 100) || 'Partner 2',
       monthlyBudget: validBudget,
+      trackingStartDate: trackingStartDate.trim() ? trackingStartDate.trim() : undefined,
       ...(isOwner ? { partnerEmail: partnerEmail.trim().toLowerCase().slice(0, 254) } : {}),
     });
     setSavedSuccess(true);
@@ -195,6 +207,68 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
                 className="ds-input w-full pl-9 pr-3 py-2 text-xs font-mono min-h-10"
               />
             </div>
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+              <label htmlFor="security-tracking-start" className="font-bold text-stone-700 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-orange-600" />
+                Data di inizio tracciamento (Punto Zero)
+              </label>
+              {onOpenStartingPoint && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenStartingPoint();
+                  }}
+                  className="text-[11px] font-semibold text-orange-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Flag className="w-3 h-3" />
+                  <span>Setup guidato</span>
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                id="security-tracking-start"
+                type="date"
+                min="2000-01-01"
+                max="2100-12-31"
+                value={trackingStartDate}
+                onChange={(e) => setTrackingStartDate(e.target.value)}
+                className="ds-input flex-1 min-w-[150px] px-3 py-2 text-xs font-mono min-h-10"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  setTrackingStartDate(
+                    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+                  );
+                }}
+                className="ds-btn-secondary min-h-10 px-2.5 text-[11px]"
+              >
+                1° mese
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrackingStartDate(`${new Date().getFullYear()}-01-01`)}
+                className="ds-btn-secondary min-h-10 px-2.5 text-[11px]"
+              >
+                1° gen
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrackingStartDate('')}
+                className="ds-btn-secondary min-h-10 px-2.5 text-[11px]"
+              >
+                Tutto
+              </button>
+            </div>
+            <span className="text-[10px] text-stone-500 mt-1 block">
+              Le spese prima di questa data restano salvate ma vengono escluse da saldo, grafici e scansioni Gmail.
+            </span>
           </div>
 
           <div>

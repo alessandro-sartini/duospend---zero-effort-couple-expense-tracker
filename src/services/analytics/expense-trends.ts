@@ -6,6 +6,7 @@ import {
   formatShortMonthIt,
   matchesSplitAndPayer,
   parseIsoDateParts,
+  resolveFilterYearMonth,
   toYearMonth,
   WEEKDAYS_FULL_IT,
   WEEKDAYS_SHORT_IT,
@@ -106,6 +107,7 @@ export function computeMonthlyTrendSeries(
   const nowYear = now.getFullYear();
   const nowMonth = now.getMonth() + 1;
   const currentYm = toYearMonth(nowYear, nowMonth);
+  const { year: targetYear, month: targetMonth } = resolveFilterYearMonth(filters, now);
 
   let months: string[];
   if (filters.timeframe === 'all') {
@@ -125,25 +127,26 @@ export function computeMonthlyTrendSeries(
       const clampedCount = Math.min(12, Math.max(6, totalSpan));
       months = buildRecentMonths(now, clampedCount);
     }
-  } else if (filters.timeframe === 'year') {
-    const count = Math.max(6, nowMonth);
-    months = buildRecentMonths(now, count);
+  } else if (filters.timeframe === 'year' || targetMonth === null) {
+    months = Array.from({ length: 12 }, (_, idx) => toYearMonth(targetYear, idx + 1));
   } else {
-    months = buildRecentMonths(now, 6);
+    const anchorDate = new Date(targetYear, targetMonth - 1, 1);
+    months = buildRecentMonths(anchorDate, 6);
   }
 
   const scopeSet = new Set<string>();
-  if (filters.timeframe === 'month') {
-    scopeSet.add(currentYm);
-  } else if (filters.timeframe === 'quarter') {
-    for (const ym of buildRecentMonths(now, 3)) {
-      scopeSet.add(ym);
-    }
-  } else if (filters.timeframe === 'year') {
+  if (filters.timeframe === 'year' || targetMonth === null) {
     for (const ym of months) {
-      if (ym.startsWith(`${nowYear}-`)) {
+      if (ym.startsWith(`${targetYear}-`)) {
         scopeSet.add(ym);
       }
+    }
+  } else if (filters.timeframe === 'month') {
+    scopeSet.add(toYearMonth(targetYear, targetMonth));
+  } else if (filters.timeframe === 'quarter') {
+    const anchorDate = new Date(targetYear, targetMonth - 1, 1);
+    for (const ym of buildRecentMonths(anchorDate, 3)) {
+      scopeSet.add(ym);
     }
   } else {
     for (const ym of months) {

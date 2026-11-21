@@ -24,9 +24,11 @@ import {
   filterExpenses,
   filterExpensesByMonth,
   formatCompactCurrency,
+  formatFullMonthIt,
   getActiveDaysInPeriod,
   getPreviousPeriodComparison,
   parseIsoDateParts,
+  toYearMonth,
   type AnalyticsTimeframe,
   type MonthlyTrendPoint,
   type PayerFilter,
@@ -82,7 +84,13 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
   onSelectExpense,
   onNavigateTab,
 }) => {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
   const [timeframe, setTimeframe] = useState<AnalyticsTimeframe>('month');
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(currentMonth);
   const [splitFilter, setSplitFilter] = useState<SplitFilter>('all');
   const [payerFilter, setPayerFilter] = useState<PayerFilter>('all');
   const [barMode, setBarMode] = useState<'partner' | 'category'>('partner');
@@ -118,16 +126,32 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
   });
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
 
-  const currentYear = new Date().getFullYear();
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([currentYear, selectedYear]);
+    for (const exp of expenses) {
+      const parts = parseIsoDateParts(exp.date);
+      if (parts) years.add(parts.year);
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [expenses, currentYear, selectedYear]);
 
   const timeframes: AnalyticsTimeframeOption[] = useMemo(
     () => [
-      { id: 'month', shortLabel: 'Mese', fullLabel: 'Questo Mese' },
-      { id: 'quarter', shortLabel: '3M', fullLabel: 'Ultimi 3 Mesi' },
-      { id: 'year', shortLabel: 'Anno', fullLabel: `Anno ${currentYear} (YTD)` },
+      {
+        id: 'month',
+        shortLabel: 'Mese',
+        fullLabel:
+          selectedYear === currentYear && selectedMonth === currentMonth
+            ? 'Questo Mese'
+            : selectedMonth !== null
+              ? formatFullMonthIt(toYearMonth(selectedYear, selectedMonth))
+              : 'Singolo Mese',
+      },
+      { id: 'quarter', shortLabel: '3M', fullLabel: 'Trimestre (3M)' },
+      { id: 'year', shortLabel: String(selectedYear), fullLabel: `Anno ${selectedYear}` },
       { id: 'all', shortLabel: 'Tutto', fullLabel: 'Tutto lo Storico' },
     ],
-    [currentYear]
+    [currentYear, currentMonth, selectedYear, selectedMonth]
   );
 
   const payerFilters: Array<{ id: PayerFilter; label: string }> = useMemo(
@@ -164,6 +188,48 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
 
   const handleSelectTimeframe = (next: AnalyticsTimeframe) => {
     setTimeframe(next);
+    if (next === 'year') {
+      setSelectedMonth(null);
+    } else if (next === 'month' || next === 'quarter') {
+      if (selectedMonth === null) {
+        setSelectedMonth(selectedYear === currentYear ? currentMonth : 1);
+      }
+    }
+    setSelectedCategory(null);
+  };
+
+  const handleSelectYear = (year: number) => {
+    setSelectedYear(year);
+    if (timeframe === 'all') {
+      setTimeframe(selectedMonth === null ? 'year' : 'month');
+    }
+    setSelectedCategory(null);
+  };
+
+  const handleSelectMonth = (month: number | null) => {
+    setSelectedMonth(month);
+    if (month === null) {
+      setTimeframe('year');
+    } else if (timeframe === 'all' || timeframe === 'year') {
+      setTimeframe('month');
+    }
+    setSelectedCategory(null);
+  };
+
+  const handleStepMonth = (delta: -1 | 1) => {
+    if (selectedMonth === null || timeframe === 'year') {
+      setSelectedYear((y) => y + delta);
+      setTimeframe('year');
+      setSelectedMonth(null);
+      setSelectedCategory(null);
+      return;
+    }
+    const nextDate = new Date(selectedYear, selectedMonth - 1 + delta, 1);
+    setSelectedYear(nextDate.getFullYear());
+    setSelectedMonth(nextDate.getMonth() + 1);
+    if (timeframe === 'all') {
+      setTimeframe('month');
+    }
     setSelectedCategory(null);
   };
 
@@ -179,6 +245,8 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
 
   const handleResetAllFilters = () => {
     setTimeframe('month');
+    setSelectedYear(currentYear);
+    setSelectedMonth(currentMonth);
     setSplitFilter('all');
     setPayerFilter('all');
     setSelectedCategory(null);
@@ -360,24 +428,25 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
     );
   }, 0);
 
+  const filterCriteria = useMemo(
+    () => ({
+      timeframe,
+      splitFilter,
+      payerFilter,
+      selectedYear,
+      selectedMonth,
+    }),
+    [timeframe, splitFilter, payerFilter, selectedYear, selectedMonth]
+  );
+
   const filtered = useMemo(
-    () =>
-      filterExpenses(expenses, {
-        timeframe,
-        splitFilter,
-        payerFilter,
-      }),
-    [expenses, timeframe, splitFilter, payerFilter]
+    () => filterExpenses(expenses, filterCriteria),
+    [expenses, filterCriteria]
   );
 
   const comparison = useMemo(
-    () =>
-      getPreviousPeriodComparison(expenses, {
-        timeframe,
-        splitFilter,
-        payerFilter,
-      }),
-    [expenses, timeframe, splitFilter, payerFilter]
+    () => getPreviousPeriodComparison(expenses, filterCriteria),
+    [expenses, filterCriteria]
   );
 
   const totalSpent = useMemo(
@@ -386,8 +455,12 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
   );
 
   const activeDays = useMemo(
-    () => getActiveDaysInPeriod(filtered, timeframe),
-    [filtered, timeframe]
+    () =>
+      getActiveDaysInPeriod(filtered, timeframe, new Date(), {
+        selectedYear,
+        selectedMonth,
+      }),
+    [filtered, timeframe, selectedYear, selectedMonth]
   );
 
   const sortedCategories = useMemo(() => {
@@ -436,10 +509,10 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
     () =>
       computeMonthlyTrendSeries(
         expenses,
-        { timeframe, splitFilter, payerFilter },
+        filterCriteria,
         topCategoriesForTrend
       ),
-    [expenses, timeframe, splitFilter, payerFilter, topCategoriesForTrend]
+    [expenses, filterCriteria, topCategoriesForTrend]
   );
 
   const donutSlices: DonutSlice[] = useMemo(
@@ -486,7 +559,12 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
   const topCategoryPercent =
     totalSpent > 0 ? Math.round((topCategoryTotal / totalSpent) * 100) : 0;
   const hasSecondaryFilters =
-    splitFilter !== 'all' || payerFilter !== 'all' || selectedCategory !== null;
+    timeframe !== 'month' ||
+    selectedYear !== currentYear ||
+    selectedMonth !== currentMonth ||
+    splitFilter !== 'all' ||
+    payerFilter !== 'all' ||
+    selectedCategory !== null;
 
   const activePeriodLabel =
     timeframes.find((tf) => tf.id === timeframe)?.fullLabel ?? 'Periodo';
@@ -558,6 +636,12 @@ export const CategoryAnalytics: React.FC<CategoryAnalyticsProps> = ({
         timeframes={timeframes}
         timeframe={timeframe}
         onSelectTimeframe={handleSelectTimeframe}
+        availableYears={availableYears}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        onSelectYear={handleSelectYear}
+        onSelectMonth={handleSelectMonth}
+        onStepMonth={handleStepMonth}
         splitFilter={splitFilter}
         onSelectSplitFilter={handleSelectSplitFilter}
         payerFilters={payerFilters}

@@ -454,6 +454,7 @@ function initializeSchema(db: DatabaseSync): void {
       category_budgets_json TEXT,
       custom_categories_json TEXT,
       hidden_categories_json TEXT,
+      tracking_start_date TEXT,
       last_updated TEXT NOT NULL
     );
 
@@ -486,6 +487,9 @@ function initializeSchema(db: DatabaseSync): void {
   }
   if (!profileColNames.has('hidden_categories_json')) {
     db.exec('ALTER TABLE profile ADD COLUMN hidden_categories_json TEXT');
+  }
+  if (!profileColNames.has('tracking_start_date')) {
+    db.exec('ALTER TABLE profile ADD COLUMN tracking_start_date TEXT');
   }
 }
 
@@ -560,8 +564,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
     INSERT INTO profile (
       id, user_name, partner_name, monthly_budget, currency, wedding_budget_goal,
       user_email, partner_email, category_budgets_json, custom_categories_json,
-      hidden_categories_json, last_updated
-    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      hidden_categories_json, tracking_start_date, last_updated
+    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       user_name = excluded.user_name,
       partner_name = excluded.partner_name,
@@ -573,6 +577,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       category_budgets_json = excluded.category_budgets_json,
       custom_categories_json = excluded.custom_categories_json,
       hidden_categories_json = excluded.hidden_categories_json,
+      tracking_start_date = excluded.tracking_start_date,
       last_updated = excluded.last_updated
   `);
 
@@ -667,6 +672,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       categoryBudgetsJson,
       customCategoriesJson,
       hiddenCategoriesJson,
+      profile.trackingStartDate ?? null,
       lastUpdated
     );
   };
@@ -742,6 +748,14 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         profileRow?.hidden_categories_json
       );
 
+      const trackingStartDateRaw =
+        typeof profileRow?.tracking_start_date === 'string'
+          ? profileRow.tracking_start_date.trim()
+          : '';
+      const trackingStartDate = /^\d{4}-\d{2}-\d{2}$/.test(trackingStartDateRaw)
+        ? trackingStartDateRaw
+        : undefined;
+
       const profile: CoupleProfile = profileRow
         ? {
             userName: String(profileRow.user_name ?? fallbackProfile.userName),
@@ -753,6 +767,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
               : {}),
             userEmail: String(profileRow.user_email ?? ''),
             partnerEmail: String(profileRow.partner_email ?? ''),
+            ...(trackingStartDate ? { trackingStartDate } : {}),
             ...(categoryBudgets && Object.keys(categoryBudgets).length > 0
               ? { categoryBudgets }
               : {}),

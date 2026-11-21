@@ -8,6 +8,8 @@ import {
   getInitialDatabase,
   type SqliteDatabaseHandle,
 } from '../server/database';
+import { sanitizeProfileRecord } from '../server/utils/sanitizers';
+import { sanitizeAndMigrateProfile } from '../src/services/profile-sanitizer';
 
 describe('Persistenza SQLite (node:sqlite) e migrazione automatica da JSON', () => {
   const handlesToClose: SqliteDatabaseHandle[] = [];
@@ -558,5 +560,44 @@ describe('Persistenza SQLite (node:sqlite) e migrazione automatica da JSON', () 
       Spesa: 500,
       Animali: 120,
     });
+  });
+
+  it('persiste e rimuove correttamente trackingStartDate (Punto Zero) tra client, sanitizzatore server e SQLite', () => {
+    const db = trackHandle(createSqliteDatabase({ dbFile: ':memory:' }));
+    const initial = db.readDatabase();
+    expect(initial.profile.trackingStartDate).toBeUndefined();
+
+    const migrated = sanitizeAndMigrateProfile({
+      ...initial.profile,
+      trackingStartDate: '2026-11-01',
+    });
+    expect(migrated.trackingStartDate).toBe('2026-11-01');
+
+    // Rifiuta date inesistenti
+    expect(
+      sanitizeAndMigrateProfile({ ...initial.profile, trackingStartDate: '2026-02-30' })
+        .trackingStartDate
+    ).toBeUndefined();
+
+    db.writeDatabase({ profile: migrated });
+    expect(db.readDatabase().profile.trackingStartDate).toBe('2026-11-01');
+
+    // Sanitizzatore server: preserva su aggiornamenti parziali senza campo e cancella su stringa vuota
+    const preserved = sanitizeProfileRecord(
+      { monthlyBudget: 3200 },
+      db.readDatabase().profile,
+      ''
+    );
+    expect(preserved.trackingStartDate).toBe('2026-11-01');
+
+    const cleared = sanitizeProfileRecord(
+      { ...preserved, trackingStartDate: '' },
+      preserved,
+      ''
+    );
+    expect(cleared.trackingStartDate).toBeUndefined();
+
+    db.writeDatabase({ profile: cleared });
+    expect(db.readDatabase().profile.trackingStartDate).toBeUndefined();
   });
 });

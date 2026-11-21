@@ -129,6 +129,18 @@ export function resetDeveloperSessionsForTests(): void {
   sessions.clear();
 }
 
+export function pruneExpiredDeveloperSessions(): number {
+  const now = Date.now();
+  let removed = 0;
+  for (const [token, expiresAt] of sessions.entries()) {
+    if (expiresAt <= now) {
+      sessions.delete(token);
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 export function issueDeveloperSession(password: unknown, res: Response, req?: Request): boolean {
   const configuredPassword = getDeveloperPassword();
   if (!isDeveloperConsoleEnabled() || typeof password !== 'string' || !safeEqual(password, configuredPassword)) {
