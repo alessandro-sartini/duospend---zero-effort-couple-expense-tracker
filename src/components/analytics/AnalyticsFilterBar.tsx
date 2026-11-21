@@ -131,9 +131,9 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
   selectedCategory,
   onResetAllFilters,
 }) => (
-  <div className="ds-card p-4 sm:p-6 space-y-4">
+  <div className="ds-card p-4 space-y-4">
     <div>
-      <h2 className="text-lg sm:text-xl font-bold text-stone-900 font-display">
+      <h2 className="text-lg font-bold text-stone-900 font-display">
         Statistiche e Trend per Categoria
       </h2>
       <p className="text-xs text-stone-500 mt-0.5">
@@ -147,24 +147,19 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
         title="Periodo"
         ariaLabel="Filtra per periodo"
         gridColsClass="grid-cols-4"
-        buttonPaddingClass="px-2 sm:px-3"
+        buttonPaddingClass="px-2"
         value={timeframe}
         onSelect={onSelectTimeframe}
         options={timeframes.map((tf) => ({
           id: tf.id,
-          content: (
-            <>
-              <span className="sm:hidden">{tf.shortLabel}</span>
-              <span className="hidden sm:inline">{tf.fullLabel}</span>
-            </>
-          ),
+          content: tf.shortLabel,
         }))}
       />
 
       {/* Riga 2: Divisione puntuale per Anno e Mese */}
       <div className="space-y-1">
         <span className={SEGMENT_LABEL_CLASS}>Anno e Mese</span>
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+        <div className="grid grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
           <button
             type="button"
             onClick={() => onStepMonth(-1)}
@@ -175,7 +170,7 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <div className="relative flex-1 min-w-[110px]">
+          <div className="relative col-span-2 min-w-0">
             <Calendar className="w-3.5 h-3.5 text-orange-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
               aria-label="Seleziona anno"
@@ -191,7 +186,7 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
             </select>
           </div>
 
-          <div className="flex-1 min-w-[150px]">
+          <div className="col-span-2 min-w-0">
             <select
               aria-label="Seleziona mese"
               value={selectedMonth ?? ''}
@@ -222,7 +217,7 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
       </div>
 
       {/* Riga 3: Natura Spesa + Pagato da allineati su 2 colonne */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <FilterSegment
           title="Natura Spesa"
           ariaLabel="Filtra per natura della spesa"

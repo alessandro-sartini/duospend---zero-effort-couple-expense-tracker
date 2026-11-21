@@ -2,7 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import { DatabaseSync } from 'node:sqlite';
 import { LEGACY_JSON_DB_FILE, SQLITE_DB_FILE } from './config';
-import type { CoupleProfile, Expense, SavingGoal, Settlement } from '../src/types';
+import type {
+  CoupleProfile,
+  Expense,
+  RecurringExpenseItem,
+  SavingGoal,
+  Settlement,
+  TripProject,
+} from '../src/types';
 import {
   buildAllowedCategorySet,
   sanitizeCustomCategories,
@@ -10,7 +17,9 @@ import {
   sanitizeGoalRecord,
   sanitizePlainText,
   sanitizeProfileRecord,
+  sanitizeRecurringExpenseRecord,
   sanitizeSettlementRecord,
+  sanitizeTripRecord,
   stripDangerousKeys,
 } from './utils/security';
 
@@ -26,6 +35,8 @@ export interface ServerDatabase {
   profile: CoupleProfile;
   lastUpdated: string;
   gmailScanCache?: GmailScanCacheEntry[];
+  trips?: TripProject[];
+  recurringExpenses?: RecurringExpenseItem[];
 }
 
 export interface GmailScanCacheEntry {
@@ -354,6 +365,20 @@ function sanitizeLegacyDatabasePayload(raw: unknown): ServerDatabase {
         .filter((entry): entry is GmailScanCacheEntry => entry !== null)
     : undefined;
 
+  const trips = Array.isArray(candidate.trips)
+    ? candidate.trips
+        .slice(0, 500)
+        .map((item) => sanitizeTripRecord(item, legacyAllowedCategories))
+        .filter((trip): trip is TripProject => trip !== null)
+    : undefined;
+
+  const recurringExpenses = Array.isArray(candidate.recurringExpenses)
+    ? candidate.recurringExpenses
+        .slice(0, 500)
+        .map((item) => sanitizeRecurringExpenseRecord(item, legacyAllowedCategories))
+        .filter((item): item is RecurringExpenseItem => item !== null)
+    : undefined;
+
   return {
     expenses,
     settlements,
@@ -361,6 +386,8 @@ function sanitizeLegacyDatabasePayload(raw: unknown): ServerDatabase {
     profile,
     lastUpdated,
     ...(gmailScanCache ? { gmailScanCache } : {}),
+    ...(trips && trips.length > 0 ? { trips } : {}),
+    ...(recurringExpenses && recurringExpenses.length > 0 ? { recurringExpenses } : {}),
   };
 }
 
@@ -414,7 +441,12 @@ function initializeSchema(db: DatabaseSync): void {
       receipt_url TEXT,
       items_json TEXT,
       tax REAL,
-      position INTEGER NOT NULL DEFAULT 0
+      position INTEGER NOT NULL DEFAULT 0,
+      trip_id TEXT,
+      recurring_rule_id TEXT,
+      reconciliation_status TEXT,
+      linked_sources_json TEXT,
+      linked_references_json TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date DESC);
     CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses (category);
@@ -439,6 +471,37 @@ function initializeSchema(db: DatabaseSync): void {
       target_date TEXT,
       image_url TEXT,
       image_resolution TEXT,
+      position INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS trips (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT,
+      budget REAL,
+      default_category TEXT,
+      is_active INTEGER NOT NULL DEFAULT 0,
+      ai_summary TEXT,
+      position INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS recurring_expenses (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      merchant_aliases_json TEXT,
+      expected_amount REAL NOT NULL,
+      amount_tolerance_percent REAL,
+      currency TEXT NOT NULL,
+      category TEXT NOT NULL,
+      payer TEXT NOT NULL,
+      split_type TEXT NOT NULL,
+      custom_split_ratio REAL,
+      frequency TEXT NOT NULL,
+      day_of_month INTEGER NOT NULL DEFAULT 1,
+      auto_match_notifications INTEGER NOT NULL DEFAULT 1,
+      active INTEGER NOT NULL DEFAULT 1,
+      last_matched_cycle TEXT,
       position INTEGER NOT NULL DEFAULT 0
     );
 
@@ -480,6 +543,24 @@ function initializeSchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_ai_model_registry_expires_at ON ai_model_registry (expires_at);
   `);
 
+  const expenseCols = db.prepare('PRAGMA table_info(expenses)').all() as Array<{ name?: string }>;
+  const expenseColNames = new Set(expenseCols.map((col) => col.name));
+  if (!expenseColNames.has('trip_id')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN trip_id TEXT');
+  }
+  if (!expenseColNames.has('recurring_rule_id')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN recurring_rule_id TEXT');
+  }
+  if (!expenseColNames.has('reconciliation_status')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN reconciliation_status TEXT');
+  }
+  if (!expenseColNames.has('linked_sources_json')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN linked_sources_json TEXT');
+  }
+  if (!expenseColNames.has('linked_references_json')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN linked_references_json TEXT');
+  }
+
   const profileCols = db.prepare('PRAGMA table_info(profile)').all() as Array<{ name?: string }>;
   const profileColNames = new Set(profileCols.map((col) => col.name));
   if (!profileColNames.has('custom_categories_json')) {
@@ -513,8 +594,9 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
     INSERT INTO expenses (
       id, title, amount, currency, date, category, payer, split_type,
       custom_split_ratio, source, source_reference, notes, receipt_url,
-      items_json, tax, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      items_json, tax, position, trip_id, recurring_rule_id,
+      reconciliation_status, linked_sources_json, linked_references_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       amount = excluded.amount,
@@ -530,6 +612,50 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       receipt_url = excluded.receipt_url,
       items_json = excluded.items_json,
       tax = excluded.tax,
+      position = excluded.position,
+      trip_id = excluded.trip_id,
+      recurring_rule_id = excluded.recurring_rule_id,
+      reconciliation_status = excluded.reconciliation_status,
+      linked_sources_json = excluded.linked_sources_json,
+      linked_references_json = excluded.linked_references_json
+  `);
+
+  const insertTripStmt = db.prepare(`
+    INSERT INTO trips (
+      id, name, start_date, end_date, budget, default_category, is_active, ai_summary, position
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      budget = excluded.budget,
+      default_category = excluded.default_category,
+      is_active = excluded.is_active,
+      ai_summary = excluded.ai_summary,
+      position = excluded.position
+  `);
+
+  const insertRecurringStmt = db.prepare(`
+    INSERT INTO recurring_expenses (
+      id, title, merchant_aliases_json, expected_amount, amount_tolerance_percent,
+      currency, category, payer, split_type, custom_split_ratio,
+      frequency, day_of_month, auto_match_notifications, active, last_matched_cycle, position
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      merchant_aliases_json = excluded.merchant_aliases_json,
+      expected_amount = excluded.expected_amount,
+      amount_tolerance_percent = excluded.amount_tolerance_percent,
+      currency = excluded.currency,
+      category = excluded.category,
+      payer = excluded.payer,
+      split_type = excluded.split_type,
+      custom_split_ratio = excluded.custom_split_ratio,
+      frequency = excluded.frequency,
+      day_of_month = excluded.day_of_month,
+      auto_match_notifications = excluded.auto_match_notifications,
+      active = excluded.active,
+      last_matched_cycle = excluded.last_matched_cycle,
       position = excluded.position
   `);
 
@@ -611,6 +737,58 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         expense.receiptUrl ?? null,
         expense.items && expense.items.length > 0 ? JSON.stringify(expense.items) : null,
         expense.tax ?? null,
+        index,
+        expense.tripId ?? null,
+        expense.recurringRuleId ?? null,
+        expense.reconciliationStatus ?? null,
+        expense.linkedSources && expense.linkedSources.length > 0
+          ? JSON.stringify(expense.linkedSources)
+          : null,
+        expense.linkedReferences && expense.linkedReferences.length > 0
+          ? JSON.stringify(expense.linkedReferences)
+          : null
+      );
+    });
+  };
+
+  const replaceTrips = (trips: TripProject[]) => {
+    db.exec('DELETE FROM trips');
+    trips.forEach((trip, index) => {
+      insertTripStmt.run(
+        trip.id,
+        trip.name,
+        trip.startDate,
+        trip.endDate ?? null,
+        trip.budget ?? null,
+        trip.defaultCategory ?? null,
+        trip.isActive ? 1 : 0,
+        trip.aiSummary ?? null,
+        index
+      );
+    });
+  };
+
+  const replaceRecurringExpenses = (recurringList: RecurringExpenseItem[]) => {
+    db.exec('DELETE FROM recurring_expenses');
+    recurringList.forEach((item, index) => {
+      insertRecurringStmt.run(
+        item.id,
+        item.title,
+        item.merchantAliases && item.merchantAliases.length > 0
+          ? JSON.stringify(item.merchantAliases)
+          : null,
+        item.expectedAmount,
+        item.amountTolerancePercent ?? null,
+        item.currency,
+        item.category,
+        item.payer,
+        item.splitType,
+        item.customSplitRatio ?? null,
+        item.frequency,
+        item.dayOfMonth,
+        item.autoMatchNotifications ? 1 : 0,
+        item.active ? 1 : 0,
+        item.lastMatchedCycle ?? null,
         index
       );
     });
@@ -700,6 +878,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       replaceExpenses(seed.expenses);
       replaceSettlements(seed.settlements);
       replaceGoals(seed.goals);
+      replaceTrips(seed.trips ?? []);
+      replaceRecurringExpenses(seed.recurringExpenses ?? []);
       saveProfile(seed.profile, seed.lastUpdated);
       replaceGmailScanCache(seed.gmailScanCache ?? []);
     });
@@ -729,6 +909,12 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         .all() as Array<Record<string, unknown>>;
       const goalRows = db
         .prepare('SELECT * FROM goals ORDER BY position ASC')
+        .all() as Array<Record<string, unknown>>;
+      const tripRows = db
+        .prepare('SELECT * FROM trips ORDER BY position ASC')
+        .all() as Array<Record<string, unknown>>;
+      const recurringRows = db
+        .prepare('SELECT * FROM recurring_expenses ORDER BY position ASC')
         .all() as Array<Record<string, unknown>>;
       const profileRow = db
         .prepare('SELECT * FROM profile WHERE id = 1')
@@ -782,6 +968,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
 
       const expenses: Expense[] = expenseRows.map((row) => {
         const items = parseJsonSafe<Expense['items']>(row.items_json);
+        const linkedSources = parseJsonSafe<Expense['linkedSources']>(row.linked_sources_json);
+        const linkedReferences = parseJsonSafe<string[]>(row.linked_references_json);
         return {
           id: String(row.id),
           title: String(row.title),
@@ -800,6 +988,17 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
           ...(row.receipt_url ? { receiptUrl: String(row.receipt_url) } : {}),
           ...(items && items.length > 0 ? { items } : {}),
           ...(row.tax != null ? { tax: Number(row.tax) } : {}),
+          ...(row.trip_id ? { tripId: String(row.trip_id) } : {}),
+          ...(row.recurring_rule_id ? { recurringRuleId: String(row.recurring_rule_id) } : {}),
+          ...(row.reconciliation_status
+            ? { reconciliationStatus: row.reconciliation_status as Expense['reconciliationStatus'] }
+            : {}),
+          ...(Array.isArray(linkedSources) && linkedSources.length > 0
+            ? { linkedSources }
+            : {}),
+          ...(Array.isArray(linkedReferences) && linkedReferences.length > 0
+            ? { linkedReferences }
+            : {}),
         };
       });
 
@@ -822,6 +1021,44 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         ...(row.image_url ? { imageUrl: String(row.image_url) } : {}),
         ...(row.image_resolution ? { imageResolution: String(row.image_resolution) } : {}),
       }));
+
+      const trips: TripProject[] = tripRows.map((row) => ({
+        id: String(row.id),
+        name: String(row.name),
+        startDate: String(row.start_date),
+        ...(row.end_date ? { endDate: String(row.end_date) } : {}),
+        ...(row.budget != null ? { budget: Number(row.budget) } : {}),
+        ...(row.default_category ? { defaultCategory: String(row.default_category) } : {}),
+        isActive: Number(row.is_active) === 1,
+        ...(row.ai_summary ? { aiSummary: String(row.ai_summary) } : {}),
+      }));
+
+      const recurringExpenses: RecurringExpenseItem[] = recurringRows.map((row) => {
+        const aliases = parseJsonSafe<string[]>(row.merchant_aliases_json);
+        return {
+          id: String(row.id),
+          title: String(row.title),
+          ...(Array.isArray(aliases) && aliases.length > 0 ? { merchantAliases: aliases } : {}),
+          expectedAmount: Number(row.expected_amount),
+          ...(row.amount_tolerance_percent != null
+            ? { amountTolerancePercent: Number(row.amount_tolerance_percent) }
+            : {}),
+          currency: String(row.currency),
+          category: String(row.category),
+          payer: row.payer as RecurringExpenseItem['payer'],
+          splitType: row.split_type as RecurringExpenseItem['splitType'],
+          ...(row.custom_split_ratio != null
+            ? { customSplitRatio: Number(row.custom_split_ratio) }
+            : {}),
+          frequency: row.frequency as RecurringExpenseItem['frequency'],
+          dayOfMonth: Number(row.day_of_month ?? 1),
+          autoMatchNotifications: Number(row.auto_match_notifications) === 1,
+          active: Number(row.active) === 1,
+          ...(row.last_matched_cycle
+            ? { lastMatchedCycle: String(row.last_matched_cycle) }
+            : {}),
+        };
+      });
 
       const gmailScanCache: GmailScanCacheEntry[] = cacheRows.map((row) => {
         const receipt = parseJsonSafe<Record<string, unknown>>(row.receipt_json);
@@ -847,6 +1084,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         profile,
         lastUpdated: String(profileRow?.last_updated ?? new Date().toISOString()),
         ...(gmailScanCache.length > 0 ? { gmailScanCache } : {}),
+        ...(trips.length > 0 ? { trips } : {}),
+        ...(recurringExpenses.length > 0 ? { recurringExpenses } : {}),
       };
     } catch (err) {
       console.error('Error reading SQLite database:', err);
@@ -867,6 +1106,12 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       }
       if (patch.goals !== undefined) {
         replaceGoals(patch.goals);
+      }
+      if (patch.trips !== undefined) {
+        replaceTrips(patch.trips);
+      }
+      if (patch.recurringExpenses !== undefined) {
+        replaceRecurringExpenses(patch.recurringExpenses);
       }
       if (patch.gmailScanCache !== undefined) {
         replaceGmailScanCache(patch.gmailScanCache);
@@ -912,7 +1157,16 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         expense.receiptUrl ?? null,
         expense.items && expense.items.length > 0 ? JSON.stringify(expense.items) : null,
         expense.tax ?? null,
-        targetPosition
+        targetPosition,
+        expense.tripId ?? null,
+        expense.recurringRuleId ?? null,
+        expense.reconciliationStatus ?? null,
+        expense.linkedSources && expense.linkedSources.length > 0
+          ? JSON.stringify(expense.linkedSources)
+          : null,
+        expense.linkedReferences && expense.linkedReferences.length > 0
+          ? JSON.stringify(expense.linkedReferences)
+          : null
       );
       db.prepare('UPDATE profile SET last_updated = ? WHERE id = 1').run(timestamp);
     });

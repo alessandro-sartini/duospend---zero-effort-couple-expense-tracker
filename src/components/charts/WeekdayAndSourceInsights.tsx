@@ -21,6 +21,7 @@ const SOURCE_COLORS: Record<SourceStat['source'], string> = {
   camera: 'var(--chart-color-1)',
   notification: 'var(--chart-color-4)',
   manual: 'var(--chart-color-2)',
+  recurring: 'var(--chart-color-5, #10b981)',
 };
 
 export const WeekdayAndSourceInsights: React.FC<WeekdayAndSourceInsightsProps> = ({

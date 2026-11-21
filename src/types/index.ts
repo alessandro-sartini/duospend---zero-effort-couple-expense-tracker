@@ -27,6 +27,10 @@ export type BuiltinExpenseCategory =
 
 export type ExpenseCategory = string;
 
+export type ExpenseSource = 'gmail' | 'camera' | 'manual' | 'notification' | 'recurring';
+
+export type ReconciliationStatus = 'confirmed' | 'zero_quarantine' | 'pending_recurring';
+
 export interface ExpenseItem {
   name: string;
   price: number;
@@ -42,12 +46,46 @@ export interface Expense {
   payer: Payer;
   splitType: SplitType;
   customSplitRatio?: number; // e.g., 0.6 means user pays 60%, partner 40%
-  source: 'gmail' | 'camera' | 'manual' | 'notification';
+  source: ExpenseSource;
   sourceReference?: string;
   notes?: string;
   receiptUrl?: string;
   items?: ExpenseItem[];
   tax?: number;
+  tripId?: string;
+  recurringRuleId?: string;
+  reconciliationStatus?: ReconciliationStatus;
+  linkedSources?: ExpenseSource[];
+  linkedReferences?: string[];
+}
+
+export interface TripProject {
+  id: string;
+  name: string;
+  startDate: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  budget?: number;
+  defaultCategory?: ExpenseCategory;
+  isActive: boolean;
+  aiSummary?: string;
+}
+
+export interface RecurringExpenseItem {
+  id: string;
+  title: string;
+  merchantAliases?: string[];
+  expectedAmount: number; // 0 per bollette/importi variabili
+  amountTolerancePercent?: number; // default 5% fisso, 100% variabile
+  currency: string;
+  category: ExpenseCategory;
+  payer: Payer;
+  splitType: SplitType;
+  customSplitRatio?: number;
+  frequency: 'monthly' | 'bimonthly' | 'yearly';
+  dayOfMonth: number; // 1..31
+  autoMatchNotifications: boolean;
+  active: boolean;
+  lastMatchedCycle?: string; // YYYY-MM
 }
 
 export interface GmailRecurringRule {

@@ -8,6 +8,7 @@ import {
   Mail,
   PenLine,
   Plane,
+  RefreshCw,
   ShoppingBag,
   ShoppingCart,
   Tag,
@@ -333,6 +334,12 @@ export const SOURCE_META: Record<Expense['source'], SourceMeta> = {
     shortLabel: 'Manuale',
     icon: PenLine,
     badgeClass: 'bg-stone-500/10 text-stone-600 border-stone-500/20',
+  },
+  recurring: {
+    label: 'Spesa Ricorrente',
+    shortLabel: 'Ricorrente',
+    icon: RefreshCw,
+    badgeClass: 'bg-emerald-500/12 text-emerald-700 border-emerald-500/25',
   },
 };
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Calendar, ChevronLeft, ChevronRight, Flag, RotateCcw } from 'lucide-react';
+import { ArrowRight, Calendar, ChevronLeft, ChevronRight, Flag, Plane, RefreshCw, RotateCcw } from 'lucide-react';
 import {
   formatCurrency,
   formatSplitLabel,
@@ -14,6 +14,7 @@ import {
   parseIsoDateParts,
   type SplitFilter,
 } from '../services/analytics-math';
+import type { TripSummary } from '../services/reconciliation';
 import { CoupleProfile, Expense } from '../types';
 import { BurnRateAreaChart } from './charts/BurnRateAreaChart';
 import {
@@ -36,6 +37,11 @@ interface DashboardOverviewProps {
   userTotalPaid: number;
   partnerTotalPaid: number;
   excludedBeforeStartCount?: number;
+  activeTripSummary?: TripSummary | null;
+  recurringCount?: number;
+  recurringMonthlyTotal?: number;
+  onOpenTrips?: () => void;
+  onOpenRecurring?: () => void;
   onOpenStartingPoint?: () => void;
   onOpenSettlement: () => void;
   onOpenSecurityModal?: () => void;
@@ -72,6 +78,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   userTotalPaid,
   partnerTotalPaid,
   excludedBeforeStartCount = 0,
+  activeTripSummary = null,
+  recurringCount = 0,
+  recurringMonthlyTotal = 0,
+  onOpenTrips,
+  onOpenRecurring,
   onOpenStartingPoint,
   onOpenSettlement,
   onOpenSecurityModal,
@@ -324,6 +335,82 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               {profile.trackingStartDate ? 'Modifica data inizio' : 'Configura Punto Zero'}
             </span>
           </button>
+        </div>
+      )}
+
+      {/* Modalità Vacanza / Progetti & Spese Ricorrenti */}
+      {(onOpenTrips || onOpenRecurring) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {onOpenTrips && (
+            <div
+              className={`ds-card p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 ${
+                activeTripSummary ? 'border-orange-400/70 bg-orange-50/30' : ''
+              }`}
+            >
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-xl bg-orange-500/12 border border-orange-500/25 text-orange-600 flex items-center justify-center shrink-0">
+                  <Plane className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  {activeTripSummary ? (
+                    <>
+                      <div className="text-xs sm:text-sm font-bold text-stone-900 truncate">
+                        Vacanza Attiva: {activeTripSummary.trip.name}
+                      </div>
+                      <p className="text-[11px] text-stone-500 mt-0.5 font-mono">
+                        Totale {formatCurrency(activeTripSummary.totalSpend, profile.currency)} ·{' '}
+                        {activeTripSummary.expenseCount} spese · Saldo{' '}
+                        {formatCurrency(Math.abs(activeTripSummary.netBalance), profile.currency)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xs sm:text-sm font-bold text-stone-900">
+                        Modalità Vacanza & Progetti
+                      </div>
+                      <p className="text-[11px] text-stone-500 mt-0.5">
+                        Auto-etichetta viaggi o lavori con mini-saldo 50/50 isolato
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenTrips}
+                className="ds-btn-secondary min-h-9 px-3 py-1.5 text-xs shrink-0"
+              >
+                {activeTripSummary ? 'Riepilogo' : 'Gestisci'}
+              </button>
+            </div>
+          )}
+
+          {onOpenRecurring && (
+            <div className="ds-card p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-xl bg-emerald-500/12 border border-emerald-500/25 text-emerald-600 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-sm font-bold text-stone-900">
+                    Spese Ricorrenti & Abbonamenti
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    {recurringCount > 0
+                      ? `${recurringCount} attive · ~${formatCurrency(recurringMonthlyTotal, profile.currency)}/mese · Anti-doppione`
+                      : 'Riconcilia affitto, bollette e abbonamenti con Banca e Gmail'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenRecurring}
+                className="ds-btn-secondary min-h-9 px-3 py-1.5 text-xs shrink-0"
+              >
+                Apri
+              </button>
+            </div>
+          )}
         </div>
       )}
 

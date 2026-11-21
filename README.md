@@ -31,7 +31,7 @@ The interface opens in dark mode by default. Use the sun/moon control in the nav
    ```
 4. Verification commands:
    - `npm run lint` (`tsc --noEmit`)
-   - `npm test` (`vitest run` — 9 test files, 82 tests)
+   - `npm test` (`vitest run` — 10 test files, 90 tests)
    - `npm run build` (`vite build`)
 
 ---
@@ -63,7 +63,7 @@ cp .env.example .env && chmod 600 .env
 - **GIS Code Model BFF (`HttpOnly` Cookie):** When `GOOGLE_CLIENT_SECRET` is configured on the server, Google Sign-In uses `initCodeClient` (`ux_mode: 'popup'`), posts the code to `POST /api/auth/google-code` with `X-Requested-With: XMLHttpRequest`, exchanges it (`redirect_uri: 'postmessage'`), and keeps `access_token` and `refresh_token` exclusively in server RAM. When omitted, DuoSpend falls back automatically to the legacy GIS Token Model (`POST /api/auth/google-session`). `GET /api/auth/config` provides runtime client config.
 - **Session Lifetimes & Isolation:** Google sessions rotate upon login, are stored in bounded in-memory maps (`200` Google sessions, `50` dev sessions), and enforce a **30-minute sliding idle timeout** (`DUOSPEND_SESSION_IDLE_MINUTES`, `5–240`) plus a **4-hour maximum lifetime** (`DUOSPEND_SESSION_MAX_HOURS`, `1–12`). Passive status checks (`GET /api/auth/session`) do not reset inactivity. Logging out revokes the session token and clears `sessionStorage` OCR/notification drafts.
 - **Gmail Sync:** Searches purchase keywords excluding spam/trash/promotions/social/forums (`-category:promotions -category:social -category:forums`) and paginates all results in 30-message batches. Only candidate text (no attachments) is sent to Gemini (`gemini-3.8-flash` with fallback to `gemini-3.5-flash-lite`, `gemini-3.7-flash`, `gemini-3.1-flash-lite`), backed by a 30-day per-account SQLite scan cache.
-- **Quick Actions FAB & Offline Sync Queue:** The `+` FAB launches receipt OCR scanning, manual entry, SMS/notification paste, and Gmail sync. Both Gmail sync and OCR run in the background (with swipe-right notification pills). Offline writes set `duospend_dirty_sync_v1` and flush through a serialized queue; reconnect merges preserve pending local edits over stale server records while keeping server `receiptUrl` attachments if omitted from quota-constrained `localStorage`.
+- **Quick Actions FAB, Reconciliation (`±14d`), Trip Mode & Recurring Expenses:** The `+` FAB launches receipt OCR scanning, manual entry, SMS/notification paste, and Gmail sync. Incoming transactions run through a multi-channel reconciliation engine (`src/services/reconciliation.ts`, `±14` day window) that merges delayed Gmail receipts with earlier bank notifications without duplicates, isolates unverified `0 €` receipts in quarantine until completed, and tracks active Trip Mode (`trips`) and Recurring Subscriptions (`recurring_expenses`). Both Gmail sync and OCR run in the background (with swipe-right notification pills). Offline writes set `duospend_dirty_sync_v1` and flush through a serialized queue; reconnect merges preserve pending local edits over stale server records while keeping server `receiptUrl` attachments if omitted from quota-constrained `localStorage`.
 
 ---
 

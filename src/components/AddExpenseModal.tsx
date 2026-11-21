@@ -11,6 +11,7 @@ import {
   Payer,
   SavingGoal,
   SplitType,
+  TripProject,
 } from '../types';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { ModalShell } from './ui/ModalShell';
@@ -24,6 +25,7 @@ interface AddExpenseModalProps {
   onCreditGoal?: (goalId: string, delta: number) => void;
   profile: CoupleProfile;
   goals?: SavingGoal[];
+  trips?: TripProject[];
   initialData?: Partial<Expense>;
 }
 
@@ -35,6 +37,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   onCreditGoal,
   profile,
   goals = [],
+  trips = [],
   initialData,
 }) => {
   const categoryGroups = useMemo(
@@ -43,6 +46,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   );
 
   const fallbackCategory = categoryGroups.base[0] || 'Altro';
+  const activeTrip = useMemo(() => trips.find((t) => t.isActive) ?? null, [trips]);
 
   const [title, setTitle] = useState(initialData?.title || '');
   const [amount, setAmount] = useState(initialData?.amount?.toString() || '');
@@ -61,6 +65,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     initialData?.customSplitRatio ? Math.round(initialData.customSplitRatio * 100) : 50
   );
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [tripId, setTripId] = useState(initialData?.tripId ?? activeTrip?.id ?? '');
   const [creditGoalOnSave, setCreditGoalOnSave] = useState(true);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -72,7 +77,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     setAmount(initialData?.amount != null ? String(initialData.amount) : '');
     setCurrency(initialData?.currency || profile.currency);
     setDate(initialData?.date || new Date().toISOString().slice(0, 10));
-    setCategory(initialData?.category || fallbackCategory);
+    setCategory(
+      initialData?.category ||
+        (!initialData?.id && activeTrip?.defaultCategory ? activeTrip.defaultCategory : fallbackCategory)
+    );
     setPayer(initialData?.payer || 'user');
     setSplitType(initialData?.splitType || '50_50');
     setCustomRatio(
@@ -81,9 +89,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         : 50
     );
     setNotes(initialData?.notes || '');
+    setTripId(initialData?.id ? (initialData.tripId ?? '') : (activeTrip?.id ?? ''));
     setCreditGoalOnSave(true);
     setConfirmDeleteOpen(false);
-  }, [isOpen, initialData, profile.currency, fallbackCategory]);
+  }, [isOpen, initialData, profile.currency, fallbackCategory, activeTrip]);
 
   const allListedCategories = useMemo(
     () =>
@@ -122,6 +131,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       notes: notes.trim(),
       items: initialData?.items,
       tax: initialData?.tax,
+      ...(initialData?.receiptUrl ? { receiptUrl: initialData.receiptUrl } : {}),
+      ...(tripId ? { tripId } : {}),
+      ...(initialData?.recurringRuleId ? { recurringRuleId: initialData.recurringRuleId } : {}),
+      reconciliationStatus: parsedAmount > 0 ? 'confirmed' : initialData?.reconciliationStatus,
+      ...(initialData?.linkedSources ? { linkedSources: initialData.linkedSources } : {}),
+      ...(initialData?.linkedReferences ? { linkedReferences: initialData.linkedReferences } : {}),
     });
 
     if (!isEditing && matchedGoal && creditGoalOnSave && onCreditGoal) {
@@ -296,6 +311,27 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               </select>
             </div>
           </div>
+
+          {trips.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Viaggio / Progetto Speciale (opzionale)
+              </label>
+              <select
+                value={tripId}
+                onChange={(e) => setTripId(e.target.value)}
+                aria-label="Collega a viaggio o progetto"
+                className="ds-input w-full px-3 py-2 text-sm"
+              >
+                <option value="">Nessun viaggio / progetto</option>
+                {trips.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.name} {trip.isActive ? '(Attivo)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Collegamento automatico all'obiettivo selezionato */}
           {!isEditing && matchedGoal && (

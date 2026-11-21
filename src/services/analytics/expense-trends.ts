@@ -242,18 +242,20 @@ export function computeWeekdayDistribution(expenses: Expense[]): WeekdayStat[] {
 }
 
 export function computeSourceDistribution(expenses: Expense[]): SourceStat[] {
-  const sources: Expense['source'][] = ['gmail', 'camera', 'notification', 'manual'];
+  const sources: Expense['source'][] = ['gmail', 'camera', 'notification', 'manual', 'recurring'];
   const counts: Record<Expense['source'], number> = {
     gmail: 0,
     camera: 0,
     notification: 0,
     manual: 0,
+    recurring: 0,
   };
   const totals: Record<Expense['source'], number> = {
     gmail: 0,
     camera: 0,
     notification: 0,
     manual: 0,
+    recurring: 0,
   };
 
   for (const expense of expenses) {

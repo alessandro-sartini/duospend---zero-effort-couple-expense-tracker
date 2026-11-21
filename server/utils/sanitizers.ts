@@ -3,10 +3,14 @@ import type {
   CoupleProfile,
   Expense,
   ExpenseCategory,
+  ExpenseSource,
   Payer,
+  ReconciliationStatus,
+  RecurringExpenseItem,
   SavingGoal,
   Settlement,
   SplitType,
+  TripProject,
 } from '../../src/types';
 
 export const ALLOWED_EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -41,11 +45,22 @@ const ALLOWED_SPLIT_TYPES = new Set<SplitType>([
   '100_partner',
   'custom',
 ]);
-const ALLOWED_SOURCES = new Set<Expense['source']>([
+const ALLOWED_SOURCES = new Set<ExpenseSource>([
   'gmail',
   'camera',
   'manual',
   'notification',
+  'recurring',
+]);
+const ALLOWED_RECONCILIATION_STATUSES = new Set<ReconciliationStatus>([
+  'confirmed',
+  'zero_quarantine',
+  'pending_recurring',
+]);
+const ALLOWED_FREQUENCIES = new Set<RecurringExpenseItem['frequency']>([
+  'monthly',
+  'bimonthly',
+  'yearly',
 ]);
 const ALLOWED_IMAGE_SIZES = new Set(['1K', '2K', '4K']);
 const LEGACY_USER_NAMES = new Set(['utente 1', 'legacy_user']);
@@ -698,6 +713,31 @@ export function sanitizeExpenseRecord(
   const sourceReference = sanitizePlainText(record.sourceReference, 200);
   const notes = sanitizePlainText(record.notes, 1000);
   const rawTax = Number(record.tax);
+  const tripId = sanitizePlainText(record.tripId, 120);
+  const recurringRuleId = sanitizePlainText(record.recurringRuleId, 120);
+  const reconciliationStatus = ALLOWED_RECONCILIATION_STATUSES.has(
+    record.reconciliationStatus as ReconciliationStatus
+  )
+    ? (record.reconciliationStatus as ReconciliationStatus)
+    : undefined;
+  const linkedSources = Array.isArray(record.linkedSources)
+    ? Array.from(
+        new Set(
+          record.linkedSources.filter((src): src is ExpenseSource =>
+            ALLOWED_SOURCES.has(src as ExpenseSource)
+          )
+        )
+      ).slice(0, 6)
+    : undefined;
+  const linkedReferences = Array.isArray(record.linkedReferences)
+    ? Array.from(
+        new Set(
+          record.linkedReferences
+            .map((ref) => sanitizePlainText(ref, 220))
+            .filter(Boolean)
+        )
+      ).slice(0, 20)
+    : undefined;
 
   return {
     id,
@@ -709,14 +749,19 @@ export function sanitizeExpenseRecord(
     payer: ALLOWED_PAYERS.has(record.payer as Payer) ? (record.payer as Payer) : 'user',
     splitType,
     ...(customSplitRatio !== undefined ? { customSplitRatio } : {}),
-    source: ALLOWED_SOURCES.has(record.source as Expense['source'])
-      ? (record.source as Expense['source'])
+    source: ALLOWED_SOURCES.has(record.source as ExpenseSource)
+      ? (record.source as ExpenseSource)
       : 'manual',
     ...(sourceReference ? { sourceReference } : {}),
     ...(notes ? { notes } : {}),
     ...(receiptUrl ? { receiptUrl } : {}),
     ...(sanitizedItems && sanitizedItems.length > 0 ? { items: sanitizedItems } : {}),
     ...(Number.isFinite(rawTax) && rawTax > 0 ? { tax: Math.round(rawTax * 100) / 100 } : {}),
+    ...(tripId ? { tripId } : {}),
+    ...(recurringRuleId ? { recurringRuleId } : {}),
+    ...(reconciliationStatus ? { reconciliationStatus } : {}),
+    ...(linkedSources && linkedSources.length > 0 ? { linkedSources } : {}),
+    ...(linkedReferences && linkedReferences.length > 0 ? { linkedReferences } : {}),
   };
 }
 
@@ -785,6 +830,122 @@ export function sanitizeGoalRecord(raw: unknown): SavingGoal | null {
     ...(targetDate ? { targetDate } : {}),
     ...(imageUrl ? { imageUrl } : {}),
     ...(imageResolution ? { imageResolution } : {}),
+  };
+}
+
+export function sanitizeTripRecord(
+  raw: unknown,
+  allowedCategories?: Set<string>
+): TripProject | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const name = sanitizePlainText(record.name, 120);
+  const startDate = sanitizeTrackingStartDate(record.startDate);
+  if (!name || !startDate) return null;
+
+  const endDate = sanitizeTrackingStartDate(record.endDate);
+  const rawBudget = Number(record.budget);
+  const budget =
+    Number.isFinite(rawBudget) && rawBudget > 0 && rawBudget <= 10_000_000
+      ? Math.round(rawBudget * 100) / 100
+      : undefined;
+  const aiSummary = sanitizePlainText(record.aiSummary, 1500);
+
+  return {
+    id: sanitizePlainText(
+      record.id,
+      120,
+      `trip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    ),
+    name,
+    startDate,
+    ...(endDate && endDate >= startDate ? { endDate } : {}),
+    ...(budget !== undefined ? { budget } : {}),
+    defaultCategory: sanitizeExpenseCategory(
+      record.defaultCategory,
+      'Viaggi',
+      allowedCategories
+    ),
+    isActive: Boolean(record.isActive),
+    ...(aiSummary ? { aiSummary } : {}),
+  };
+}
+
+export function sanitizeRecurringExpenseRecord(
+  raw: unknown,
+  allowedCategories?: Set<string>
+): RecurringExpenseItem | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const title = sanitizePlainText(record.title, 140);
+  if (!title) return null;
+
+  const rawExpected = Number(record.expectedAmount);
+  const expectedAmount =
+    Number.isFinite(rawExpected) && rawExpected >= 0 && rawExpected <= 1_000_000
+      ? Math.round(rawExpected * 100) / 100
+      : 0;
+  const rawTolerance = Number(record.amountTolerancePercent);
+  const amountTolerancePercent =
+    Number.isFinite(rawTolerance) && rawTolerance >= 0 && rawTolerance <= 200
+      ? Math.round(rawTolerance * 10) / 10
+      : undefined;
+
+  const splitType: SplitType = ALLOWED_SPLIT_TYPES.has(record.splitType as SplitType)
+    ? (record.splitType as SplitType)
+    : '50_50';
+  const rawRatio = Number(record.customSplitRatio);
+  const normalizedRatio =
+    Number.isFinite(rawRatio) && rawRatio > 1 && rawRatio <= 100 ? rawRatio / 100 : rawRatio;
+  const customSplitRatio =
+    splitType === 'custom' &&
+    Number.isFinite(normalizedRatio) &&
+    normalizedRatio >= 0 &&
+    normalizedRatio <= 1
+      ? Math.round(normalizedRatio * 1000) / 1000
+      : undefined;
+
+  const rawDay = Math.round(Number(record.dayOfMonth));
+  const dayOfMonth = Number.isFinite(rawDay) ? Math.min(31, Math.max(1, rawDay)) : 1;
+
+  const merchantAliases = Array.isArray(record.merchantAliases)
+    ? Array.from(
+        new Set(
+          record.merchantAliases
+            .map((alias) => sanitizePlainText(alias, 80))
+            .filter((alias) => alias.length >= 2)
+        )
+      ).slice(0, 15)
+    : undefined;
+
+  const lastMatchedCycleRaw =
+    typeof record.lastMatchedCycle === 'string' ? record.lastMatchedCycle.trim() : '';
+  const lastMatchedCycle = /^\d{4}-\d{2}$/.test(lastMatchedCycleRaw)
+    ? lastMatchedCycleRaw
+    : undefined;
+
+  return {
+    id: sanitizePlainText(
+      record.id,
+      120,
+      `rec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    ),
+    title,
+    ...(merchantAliases && merchantAliases.length > 0 ? { merchantAliases } : {}),
+    expectedAmount,
+    ...(amountTolerancePercent !== undefined ? { amountTolerancePercent } : {}),
+    currency: sanitizeCurrency(record.currency),
+    category: sanitizeExpenseCategory(record.category, 'Altro', allowedCategories),
+    payer: ALLOWED_PAYERS.has(record.payer as Payer) ? (record.payer as Payer) : 'user',
+    splitType,
+    ...(customSplitRatio !== undefined ? { customSplitRatio } : {}),
+    frequency: ALLOWED_FREQUENCIES.has(record.frequency as RecurringExpenseItem['frequency'])
+      ? (record.frequency as RecurringExpenseItem['frequency'])
+      : 'monthly',
+    dayOfMonth,
+    autoMatchNotifications: record.autoMatchNotifications !== false,
+    active: record.active !== false,
+    ...(lastMatchedCycle ? { lastMatchedCycle } : {}),
   };
 }
 

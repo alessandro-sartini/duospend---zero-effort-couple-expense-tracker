@@ -10,6 +10,7 @@
 2. **Direct Gmail Receipt Synchronization** (Google OAuth 2.0 `gmail.readonly`, 30-message batch pagination, 30-day per-account SQLite scan cache).
 3. **Instant Camera / Gallery Receipt OCR** (client-side JPEG compression/EXIF stripping + server binary validation + Gemini Vision OCR).
 4. **Manual Entry, Custom Split Rules & Real-Time 50/50 Settlement** (including `trackingStartDate` / Starting Point, custom & hidden categories, CSV export).
+5. **Multi-Channel Reconciliation Engine (`±14d`), Zero-Amount Quarantine, Trip Mode & Recurring Tracker** (`src/services/reconciliation.ts`, SQLite `trips` & `recurring_expenses` tables, delayed Gmail/bank merge, `zero_quarantine` 1-tap resolution).
 
 ---
 
@@ -188,3 +189,4 @@
 - `tests/settlement.test.ts` (5 tests): 50/50, personal, custom split, and settlement balance math.
 - `tests/sqlite-database.test.ts` (10 tests): SQLite WAL persistence, schema migrations, ID deduplication, Gmail 30-day cache.
 - `tests/storage-and-gemini-resilience.test.ts` (4 tests): `QuotaExceededError` handling, Gemini transient cooldown/fallback, and offline dirty-sync local-precedence merge preserving `receiptUrl`.
+- `tests/reconciliation-and-trips.test.ts` (8 tests): elastic `±14 day` cross-channel reconciliation (delayed Gmail syncs after bank notifications), `0 €` quarantine completion (`zero_quarantine`), positive amount & cycle-separation guards, active `TripProject` auto-tagging + isolated 50/50 trip balance, `RecurringExpenseItem` cycle matching, and SQLite persistence for `trips` / `recurring_expenses` / reconciliation metadata.

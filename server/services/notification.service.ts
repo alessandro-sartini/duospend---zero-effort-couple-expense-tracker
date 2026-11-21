@@ -1,6 +1,10 @@
 import { Type } from '@google/genai';
 import { Payer } from '../../src/types';
-import { insertExpenseRecord } from '../database';
+import {
+  applyMatchedCyclesToRecurring,
+  reconcileIncomingExpenses,
+} from '../../src/services/reconciliation';
+import { insertExpenseRecord, readDatabase, writeDatabase } from '../database';
 import { generateContentWithFallback, hasGeminiApiKey } from './gemini';
 import { HttpError } from '../utils/http-error';
 import {
@@ -60,16 +64,50 @@ function persistIngestedExpenseIfNeeded(
   };
 
   if (!shouldPersist || !(candidate.amount > 0)) {
-    return { expense: candidate, persisted: false };
+    return { expense: candidate, persisted: false, reconciled: false };
   }
 
   const sanitized = sanitizeExpenseRecord(candidate);
   if (!sanitized) {
-    return { expense: candidate, persisted: false };
+    return { expense: candidate, persisted: false, reconciled: false };
   }
 
-  insertExpenseRecord(sanitized);
-  return { expense: sanitized, persisted: true };
+  const db = readDatabase();
+  const existingList = db.expenses ?? [];
+  const activeTrip = (db.trips ?? []).find((t) => t.isActive) ?? null;
+  const recurringList = db.recurringExpenses ?? [];
+
+  const result = reconcileIncomingExpenses(existingList, [sanitized], {
+    activeTrip,
+    recurringExpenses: recurringList,
+    idPrefix: 'exp-notif',
+  });
+
+  if (result.mergedCount > 0 || result.matchedRecurringCycles.length > 0) {
+    const updatedRecurring = applyMatchedCyclesToRecurring(
+      recurringList,
+      result.matchedRecurringCycles
+    );
+    writeDatabase({
+      expenses: result.expenses,
+      ...(result.matchedRecurringCycles.length > 0
+        ? { recurringExpenses: updatedRecurring }
+        : {}),
+    });
+    const touched =
+      result.expenses.find((exp, idx) => exp !== existingList[idx]) ??
+      result.expenses[0] ??
+      sanitized;
+    return {
+      expense: touched,
+      persisted: true,
+      reconciled: result.mergedCount > 0,
+    };
+  }
+
+  const created = result.expenses[0] ?? sanitized;
+  insertExpenseRecord(created);
+  return { expense: created, persisted: true, reconciled: false };
 }
 
 export async function ingestNotification(params: {

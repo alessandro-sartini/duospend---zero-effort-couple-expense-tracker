@@ -76,6 +76,15 @@ Per notifiche push o SMS bancari (**Revolut, Google Pay/Wallet, Intesa Sanpaolo,
 ### Punto Zero (`trackingStartDate`)
 - Puoi impostare una data di **Punto Zero** dalle Impostazioni (**Impostazioni → Punto Zero**) o dalla procedura dedicata per far sì che solo spese e pareggi a partire da quella data concorrano al saldo condiviso attuale. Svuotando la data, la rimozione viene sincronizzata anche sul server.
 
+### Riconciliazione Multi-Canale (±14 Giorni) & Quarantena Spese a `0 €`
+- Poiché le notifiche push/SMS arrivano al pagamento mentre la scansione Gmail può essere lanciata giorni o settimane dopo (con date fattura/spedizione sfasate), DuoSpend applica un motore di riconciliazione a finestra elastica (`±14 giorni`) basato su esercente normalizzato, importo e regole ricorrenti:
+  - **Unione su canali differiti**: una ricevuta Gmail acquisita 10 giorni dopo la notifica bancaria viene fusa nella spesa esistente (`linkedSources` + `linkedReferences`), conservando i dettagli ed evitando doppi import futuri.
+  - **Quarantena `0 €`**: le ricevute Gmail senza importo entrano in `zero_quarantine` con avviso dedicato (`ZeroAmountBanner`). Appena è presente o arriva la notifica bancaria reale entro ±14 giorni, l’importo reale viene agganciato automaticamente o con 1 tocco (**Unisci ed esci dalla quarantena**).
+
+### Modalità Vacanza / Progetti & Spese Ricorrenti
+- **Modalità Vacanza & Progetti (`TripModeModal`)**: crea e attiva un viaggio o evento speciale (es. *Weekend a Barcellona*) per assegnare automaticamente `tripId` alle spese del periodo e consultare un mini-saldo 50/50 isolato dal resto del registro.
+- **Spese Ricorrenti & Abbonamenti (`RecurringExpensesModal`)**: monitora uscite fisse o variabili (affitto, bollette, streaming) con alias esercente personalizzati, stato ciclo mensile (`YYYY-MM`), aggancio automatico con notifiche/Gmail e registrazione rata in 1 tocco senza duplicazioni.
+
 ---
 
 ## 3. Le Sezioni dell'Applicazione

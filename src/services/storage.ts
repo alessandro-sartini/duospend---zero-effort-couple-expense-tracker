@@ -1,4 +1,13 @@
-import type { Expense, Settlement, CoupleProfile, SavingGoal, GmailRecurringRule, ExpenseCategory } from '../types';
+import type {
+  Expense,
+  Settlement,
+  CoupleProfile,
+  SavingGoal,
+  GmailRecurringRule,
+  ExpenseCategory,
+  TripProject,
+  RecurringExpenseItem,
+} from '../types';
 import {
   defaultProfile,
   initialExpenses,
@@ -23,6 +32,8 @@ const STORAGE_KEYS = {
   SETTLEMENTS: 'duospend_settlements_v1',
   PROFILE: 'duospend_profile_v1',
   GOALS: 'duospend_goals_v1',
+  TRIPS: 'duospend_trips_v1',
+  RECURRING_EXPENSES: 'duospend_recurring_expenses_v1',
   GMAIL_IGNORED_MESSAGES: 'duospend_gmail_ignored_messages_v1',
   GMAIL_RECURRING_RULES: 'duospend_gmail_recurring_rules_v1',
   DIRTY_SYNC: 'duospend_dirty_sync_v1',
@@ -349,6 +360,38 @@ export const saveGoals = (goals: SavingGoal[]) => {
   void syncPatchToServer({ goals });
 };
 
+export const loadTrips = (): TripProject[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.TRIPS);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveTrips = (trips: TripProject[]) => {
+  safeSetLocalStorageItem(STORAGE_KEYS.TRIPS, JSON.stringify(trips));
+  void syncPatchToServer({ trips });
+};
+
+export const loadRecurringExpenses = (): RecurringExpenseItem[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.RECURRING_EXPENSES);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveRecurringExpenses = (recurringExpenses: RecurringExpenseItem[]) => {
+  safeSetLocalStorageItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(recurringExpenses));
+  void syncPatchToServer({ recurringExpenses });
+};
+
 /**
  * Synchronizes client data with the central server database.
  * Merges records to prevent data loss across devices.
@@ -358,6 +401,8 @@ export const syncWithServerDatabase = async (): Promise<{
   settlements: Settlement[];
   goals: SavingGoal[];
   profile: CoupleProfile;
+  trips: TripProject[];
+  recurringExpenses: RecurringExpenseItem[];
 } | null> => {
   try {
     const res = await fetch('/api/data');
@@ -373,6 +418,10 @@ export const syncWithServerDatabase = async (): Promise<{
     const serverExps: Expense[] = Array.isArray(json.expenses) ? json.expenses : [];
     const serverStls: Settlement[] = Array.isArray(json.settlements) ? json.settlements : [];
     const serverGoals: SavingGoal[] = Array.isArray(json.goals) ? json.goals : [];
+    const serverTrips: TripProject[] = Array.isArray(json.trips) ? json.trips : [];
+    const serverRecurring: RecurringExpenseItem[] = Array.isArray(json.recurringExpenses)
+      ? json.recurringExpenses
+      : [];
     const serverProfile = sanitizeAndMigrateProfile(
       (json.profile || {}) as Partial<CoupleProfile> & Record<string, unknown>
     );
@@ -383,6 +432,8 @@ export const syncWithServerDatabase = async (): Promise<{
       saveExpensesToLocalStorage(serverExps);
       safeSetLocalStorageItem(STORAGE_KEYS.SETTLEMENTS, JSON.stringify(serverStls));
       safeSetLocalStorageItem(STORAGE_KEYS.GOALS, JSON.stringify(serverGoals));
+      safeSetLocalStorageItem(STORAGE_KEYS.TRIPS, JSON.stringify(serverTrips));
+      safeSetLocalStorageItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(serverRecurring));
       safeSetLocalStorageItem(STORAGE_KEYS.PROFILE, JSON.stringify(serverProfile));
 
       return {
@@ -390,6 +441,8 @@ export const syncWithServerDatabase = async (): Promise<{
         settlements: serverStls,
         goals: serverGoals,
         profile: serverProfile,
+        trips: serverTrips,
+        recurringExpenses: serverRecurring,
       };
     }
 
@@ -424,6 +477,20 @@ export const syncWithServerDatabase = async (): Promise<{
     localGoals.forEach((g) => goalMap.set(g.id, g));
     const mergedGoals = Array.from(goalMap.values());
 
+    // Merge trips (local edits take precedence)
+    const localTrips = loadTrips();
+    const tripMap = new Map<string, TripProject>();
+    serverTrips.forEach((t) => tripMap.set(t.id, t));
+    localTrips.forEach((t) => tripMap.set(t.id, t));
+    const mergedTrips = Array.from(tripMap.values());
+
+    // Merge recurring expenses (local edits take precedence)
+    const localRecurring = loadRecurringExpenses();
+    const recMap = new Map<string, RecurringExpenseItem>();
+    serverRecurring.forEach((r) => recMap.set(r.id, r));
+    localRecurring.forEach((r) => recMap.set(r.id, r));
+    const mergedRecurring = Array.from(recMap.values());
+
     // Profile (local edits take precedence while preserving server-verified couple emails)
     const localProfile = loadProfile();
     const mergedProfile = sanitizeAndMigrateProfile({
@@ -438,6 +505,8 @@ export const syncWithServerDatabase = async (): Promise<{
     saveExpensesToLocalStorage(mergedExpenses);
     safeSetLocalStorageItem(STORAGE_KEYS.SETTLEMENTS, JSON.stringify(mergedSettlements));
     safeSetLocalStorageItem(STORAGE_KEYS.GOALS, JSON.stringify(mergedGoals));
+    safeSetLocalStorageItem(STORAGE_KEYS.TRIPS, JSON.stringify(mergedTrips));
+    safeSetLocalStorageItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(mergedRecurring));
     safeSetLocalStorageItem(STORAGE_KEYS.PROFILE, JSON.stringify(mergedProfile));
 
     // Send back unified data to server through the serialized queue
@@ -445,6 +514,8 @@ export const syncWithServerDatabase = async (): Promise<{
       expenses: mergedExpenses,
       settlements: mergedSettlements,
       goals: mergedGoals,
+      trips: mergedTrips,
+      recurringExpenses: mergedRecurring,
       profile: {
         ...mergedProfile,
         trackingStartDate: mergedProfile.trackingStartDate ?? '',
@@ -456,6 +527,8 @@ export const syncWithServerDatabase = async (): Promise<{
       settlements: mergedSettlements,
       goals: mergedGoals,
       profile: mergedProfile,
+      trips: mergedTrips,
+      recurringExpenses: mergedRecurring,
     };
   } catch (err) {
     console.warn('Sync with server database failed (using local cache):', err);

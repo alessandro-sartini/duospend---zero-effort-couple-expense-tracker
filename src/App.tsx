@@ -60,6 +60,16 @@ const StartingPointModal = lazy(() =>
     default: m.StartingPointModal,
   }))
 );
+const TripModeModal = lazy(() =>
+  import('./components/trips/TripModeModal').then((m) => ({
+    default: m.TripModeModal,
+  }))
+);
+const RecurringExpensesModal = lazy(() =>
+  import('./components/recurring/RecurringExpensesModal').then((m) => ({
+    default: m.RecurringExpensesModal,
+  }))
+);
 
 const TAB_TO_PATH: Record<string, string> = {
   dashboard: '/',
@@ -109,6 +119,8 @@ export default function App() {
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isStartingPointOpen, setIsStartingPointOpen] = useState(false);
+  const [isTripsModalOpen, setIsTripsModalOpen] = useState(false);
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
   const [isDevConsoleEnabled, setIsDevConsoleEnabled] = useState<boolean>(import.meta.env.DEV);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -142,6 +154,14 @@ export default function App() {
     excludedBeforeStartCount,
     settlements,
     goals,
+    trips,
+    activeTripSummary,
+    recurringExpenses,
+    recurringMonthlyTotal,
+    zeroQuarantineMatches,
+    knownGmailSourceReferences,
+    reconciliationNotice,
+    clearReconciliationNotice,
     profile,
     ignoredGmailMessageIds,
     gmailRecurringRules,
@@ -165,6 +185,13 @@ export default function App() {
     handleSaveExpense,
     handleDeleteExpense,
     handleImportGmailExpenses,
+    handleMergeZeroExpense,
+    handleSaveTrip,
+    handleToggleTripActive,
+    handleDeleteTrip,
+    handleSaveRecurringExpense,
+    handleDeleteRecurringExpense,
+    handleTriggerRecurringExpense,
     handleIgnoreGmailMessage,
     handleSaveGmailRecurringRule,
     handleConfirmSettlement,
@@ -379,8 +406,23 @@ export default function App() {
       />
 
       <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-[calc(7.25rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
+        {reconciliationNotice && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-950">
+            <span>{reconciliationNotice}</span>
+            <button
+              type="button"
+              onClick={clearReconciliationNotice}
+              className="shrink-0 font-bold text-emerald-800 hover:underline cursor-pointer"
+            >
+              Chiudi
+            </button>
+          </div>
+        )}
+
         <ZeroAmountBanner
           count={zeroAmountExpenses.length}
+          matches={zeroQuarantineMatches}
+          onMergeMatch={handleMergeZeroExpense}
           onGoToExpenses={() => {
             navigateToTab('expenses');
             if (zeroAmountExpenses.length === 1) {
@@ -405,6 +447,11 @@ export default function App() {
             userTotalPaid={balanceSummary.userTotalPaid}
             partnerTotalPaid={balanceSummary.partnerTotalPaid}
             excludedBeforeStartCount={excludedBeforeStartCount}
+            activeTripSummary={activeTripSummary}
+            recurringCount={recurringExpenses.filter((r) => r.active).length}
+            recurringMonthlyTotal={recurringMonthlyTotal}
+            onOpenTrips={() => setIsTripsModalOpen(true)}
+            onOpenRecurring={() => setIsRecurringModalOpen(true)}
             onOpenStartingPoint={() => setIsStartingPointOpen(true)}
             onOpenSettlement={() => setIsSettlementOpen(true)}
             onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
@@ -425,6 +472,7 @@ export default function App() {
               expenses={expenses}
               profile={profile}
               goals={goals}
+              trips={trips}
               onEditExpense={handleEditExpense}
               onDeleteExpense={handleDeleteExpense}
               onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
@@ -502,6 +550,7 @@ export default function App() {
             }}
             profile={profile}
             goals={goals}
+            trips={trips}
             initialData={editingExpense || undefined}
           />
         )}
@@ -527,9 +576,7 @@ export default function App() {
             isOpen={isGmailSyncOpen}
             onClose={() => setIsGmailSyncOpen(false)}
             onImportExpenses={handleImportGmailExpenses}
-            existingGmailSourceReferences={allExpenses.flatMap((expense) =>
-              expense.source === 'gmail' && expense.sourceReference ? [expense.sourceReference] : []
-            )}
+            existingGmailSourceReferences={knownGmailSourceReferences}
             ignoredGmailSourceReferences={ignoredGmailMessageIds}
             onIgnoreGmailMessage={handleIgnoreGmailMessage}
             gmailRecurringRules={gmailRecurringRules}
@@ -598,6 +645,33 @@ export default function App() {
           />
         )}
 
+        {isTripsModalOpen && (
+          <TripModeModal
+            isOpen={isTripsModalOpen}
+            onClose={() => setIsTripsModalOpen(false)}
+            trips={trips}
+            expenses={expenses}
+            profile={profile}
+            goals={goals}
+            onSaveTrip={handleSaveTrip}
+            onToggleTripActive={handleToggleTripActive}
+            onDeleteTrip={handleDeleteTrip}
+          />
+        )}
+
+        {isRecurringModalOpen && (
+          <RecurringExpensesModal
+            isOpen={isRecurringModalOpen}
+            onClose={() => setIsRecurringModalOpen(false)}
+            recurringExpenses={recurringExpenses}
+            profile={profile}
+            goals={goals}
+            onSaveRecurring={handleSaveRecurringExpense}
+            onDeleteRecurring={handleDeleteRecurringExpense}
+            onLogRecurringNow={handleTriggerRecurringExpense}
+          />
+        )}
+
         {isDevConsoleEnabled && isDevModalOpen && (
           <DeveloperModal
             isOpen={isDevModalOpen}
@@ -621,6 +695,8 @@ export default function App() {
           isSettlementOpen ||
           isSecurityModalOpen ||
           isStartingPointOpen ||
+          isTripsModalOpen ||
+          isRecurringModalOpen ||
           isDevModalOpen
         }
         isGmailSyncOpen={isGmailSyncOpen}

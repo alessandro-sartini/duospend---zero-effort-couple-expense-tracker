@@ -5,7 +5,10 @@ import {
   ChevronDown,
   Download,
   Edit3,
+  GitMerge,
+  Plane,
   Receipt,
+  RefreshCw,
   Search,
   Trash2,
 } from 'lucide-react';
@@ -14,7 +17,7 @@ import {
   formatSplitLabel,
   getActiveCategories,
 } from '../constants/categories';
-import { CoupleProfile, Expense, SavingGoal } from '../types';
+import { CoupleProfile, Expense, SavingGoal, TripProject } from '../types';
 import { CategoryBadge } from './ui/CategoryBadge';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { SourceBadge } from './ui/SourceBadge';
@@ -29,6 +32,7 @@ interface ExpenseListProps {
   expenses: Expense[];
   profile: CoupleProfile;
   goals?: SavingGoal[];
+  trips?: TripProject[];
   onEditExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
   onOpenScanReceipt: () => void;
@@ -40,12 +44,17 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   expenses,
   profile,
   goals = [],
+  trips = [],
   onEditExpense,
   onDeleteExpense,
   onOpenScanReceipt,
   onlyZeroAmount = false,
   onClearZeroAmountFilter,
 }) => {
+  const tripNameById = React.useMemo(
+    () => new Map(trips.map((trip) => [trip.id, trip.name])),
+    [trips]
+  );
   const filterCategories = React.useMemo(() => {
     const active = getActiveCategories(profile, goals);
     const seen = new Set(active);
@@ -269,10 +278,31 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                           {exp.source !== 'manual' && (
                             <SourceBadge source={exp.source} compact />
                           )}
-                          {exp.amount <= 0 && (
+                          {exp.linkedSources && exp.linkedSources.length > 1 && (
+                            <span
+                              title={`Riconciliata su ${exp.linkedSources.length} canali`}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                            >
+                              <GitMerge className="h-3 w-3" />
+                              {exp.linkedSources.length} fonti
+                            </span>
+                          )}
+                          {exp.recurringRuleId && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                              <RefreshCw className="h-2.5 w-2.5" />
+                              Fissa
+                            </span>
+                          )}
+                          {exp.tripId && tripNameById.get(exp.tripId) && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-500/25 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                              <Plane className="h-2.5 w-2.5" />
+                              {tripNameById.get(exp.tripId)}
+                            </span>
+                          )}
+                          {(exp.amount <= 0 || exp.reconciliationStatus === 'zero_quarantine') && (
                             <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/25 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
                               <AlertTriangle className="h-3 w-3" />
-                              Importo da verificare
+                              Quarantena 0 €
                             </span>
                           )}
                         </div>

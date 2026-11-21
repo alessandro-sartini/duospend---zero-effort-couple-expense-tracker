@@ -6,7 +6,9 @@ import {
   sanitizeExpenseRecord,
   sanitizeGoalRecord,
   sanitizeProfileRecord,
+  sanitizeRecurringExpenseRecord,
   sanitizeSettlementRecord,
+  sanitizeTripRecord,
 } from '../utils/security';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +26,8 @@ export interface SaveSynchronizedDataInput {
   settlements?: unknown;
   goals?: unknown;
   profile?: unknown;
+  trips?: unknown;
+  recurringExpenses?: unknown;
 }
 
 export function getSynchronizedData() {
@@ -34,6 +38,8 @@ export function getSynchronizedData() {
     settlements: db.settlements || [],
     goals: db.goals || [],
     profile: db.profile,
+    trips: db.trips || [],
+    recurringExpenses: db.recurringExpenses || [],
     lastUpdated: db.lastUpdated,
   };
 }
@@ -42,7 +48,7 @@ export function saveSynchronizedData(
   payload: SaveSynchronizedDataInput,
   options: { isOwner: boolean }
 ) {
-  const { expenses, settlements, goals, profile } = payload ?? {};
+  const { expenses, settlements, goals, profile, trips, recurringExpenses } = payload ?? {};
   const patch: Partial<ServerDatabase> = {};
   const currentDb = readDatabase();
 
@@ -129,6 +135,32 @@ export function saveSynchronizedData(
     patch.settlements = deduplicateById(sanitizedSettlements);
   }
 
+  if (trips !== undefined) {
+    if (!Array.isArray(trips) || trips.length > 500) {
+      throw new HttpError(400, 'Elenco viaggi non valido.');
+    }
+    const sanitizedTrips = trips
+      .map((item) => sanitizeTripRecord(item, allowedCategories))
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    if (trips.length > 0 && sanitizedTrips.length === 0) {
+      throw new HttpError(400, 'Formato dei viaggi non valido.');
+    }
+    patch.trips = deduplicateById(sanitizedTrips);
+  }
+
+  if (recurringExpenses !== undefined) {
+    if (!Array.isArray(recurringExpenses) || recurringExpenses.length > 500) {
+      throw new HttpError(400, 'Elenco spese ricorrenti non valido.');
+    }
+    const sanitizedRecurring = recurringExpenses
+      .map((item) => sanitizeRecurringExpenseRecord(item, allowedCategories))
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    if (recurringExpenses.length > 0 && sanitizedRecurring.length === 0) {
+      throw new HttpError(400, 'Formato delle spese ricorrenti non valido.');
+    }
+    patch.recurringExpenses = deduplicateById(sanitizedRecurring);
+  }
+
   const updated = writeDatabase(patch);
   return {
     success: true,
@@ -137,6 +169,8 @@ export function saveSynchronizedData(
       expenses: updated.expenses.length,
       settlements: updated.settlements.length,
       goals: updated.goals.length,
+      trips: updated.trips?.length ?? 0,
+      recurringExpenses: updated.recurringExpenses?.length ?? 0,
     },
   };
 }

@@ -7,22 +7,36 @@ import {
   loadGoals,
   loadIgnoredGmailMessageIds,
   loadProfile,
+  loadRecurringExpenses,
   loadSettlements,
+  loadTrips,
   saveExpenses,
   saveGmailRecurringRules,
   saveGoals,
   saveIgnoredGmailMessageIds,
   saveProfile,
+  saveRecurringExpenses,
   saveSettlements,
+  saveTrips,
   syncWithServerDatabase,
   UNAUTHORIZED_EVENT,
 } from '../services/storage';
+import {
+  applyMatchedCyclesToRecurring,
+  computeTripSummary,
+  extractGmailIdsFromExpense,
+  findZeroQuarantineMatches,
+  mergeReconciledExpenses,
+  reconcileIncomingExpenses,
+} from '../services/reconciliation';
 import type {
   CoupleProfile,
   Expense,
   GmailRecurringRule,
+  RecurringExpenseItem,
   SavingGoal,
   Settlement,
+  TripProject,
 } from '../types';
 
 const PENDING_SHARE_STORAGE_KEY = 'duospend_pending_share_v1';
@@ -41,9 +55,17 @@ export function useDuoSpendData() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [goals, setGoals] = useState<SavingGoal[]>([]);
+  const [trips, setTrips] = useState<TripProject[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpenseItem[]>([]);
   const [profile, setProfile] = useState<CoupleProfile>(() => loadProfile());
   const [ignoredGmailMessageIds, setIgnoredGmailMessageIds] = useState<string[]>([]);
   const [gmailRecurringRules, setGmailRecurringRules] = useState<GmailRecurringRule[]>([]);
+  const [reconciliationNotice, setReconciliationNotice] = useState<string | null>(null);
+
+  const activeTripRef = useRef<TripProject | null>(null);
+  const recurringExpensesRef = useRef<RecurringExpenseItem[]>([]);
+  activeTripRef.current = trips.find((t) => t.isActive) ?? null;
+  recurringExpensesRef.current = recurringExpenses;
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isSyncingData, setIsSyncingData] = useState(false);
@@ -90,6 +112,8 @@ export function useDuoSpendData() {
       setExpenses(synced.expenses);
       setSettlements(synced.settlements);
       setGoals(synced.goals);
+      setTrips(synced.trips);
+      setRecurringExpenses(synced.recurringExpenses);
       setProfile(synced.profile);
     } finally {
       setIsSyncingData(false);
@@ -110,6 +134,8 @@ export function useDuoSpendData() {
         setExpenses(synced.expenses);
         setSettlements(synced.settlements);
         setGoals(synced.goals);
+        setTrips(synced.trips);
+        setRecurringExpenses(synced.recurringExpenses);
         setProfile(synced.profile);
         return true;
       } finally {
@@ -154,6 +180,8 @@ export function useDuoSpendData() {
     setExpenses(loadExpenses());
     setSettlements(loadSettlements());
     setGoals(loadGoals());
+    setTrips(loadTrips());
+    setRecurringExpenses(loadRecurringExpenses());
     setIgnoredGmailMessageIds(loadIgnoredGmailMessageIds());
     setGmailRecurringRules(loadGmailRecurringRules());
 
@@ -389,27 +417,96 @@ export function useDuoSpendData() {
     [activeExpenses, activeSettlements]
   );
   const zeroAmountExpenses = useMemo(
-    () => activeExpenses.filter((expense) => expense.amount <= 0),
+    () =>
+      activeExpenses.filter(
+        (expense) => expense.amount <= 0 || expense.reconciliationStatus === 'zero_quarantine'
+      ),
     [activeExpenses]
   );
 
-  const handleSaveExpense = useCallback(
-    (newExpData: Omit<Expense, 'id'>, editingId?: string) => {
-      setExpenses((current) => {
-        const updated = editingId
-          ? current.map((e) => (e.id === editingId ? { ...newExpData, id: editingId } : e))
-          : [
-              {
-                ...newExpData,
-                id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              },
-              ...current,
-            ];
-        saveExpenses(updated);
+  const activeTrip = useMemo(() => trips.find((t) => t.isActive) ?? null, [trips]);
+
+  const activeTripSummary = useMemo(
+    () => (activeTrip ? computeTripSummary(activeTrip, activeExpenses) : null),
+    [activeTrip, activeExpenses]
+  );
+
+  const recurringMonthlyTotal = useMemo(
+    () =>
+      recurringExpenses.reduce((sum, rule) => {
+        if (!rule.active || rule.expectedAmount <= 0) return sum;
+        if (rule.frequency === 'yearly') return sum + rule.expectedAmount / 12;
+        if (rule.frequency === 'bimonthly') return sum + rule.expectedAmount / 2;
+        return sum + rule.expectedAmount;
+      }, 0),
+    [recurringExpenses]
+  );
+
+  const zeroQuarantineMatches = useMemo(
+    () => findZeroQuarantineMatches(activeExpenses, recurringExpenses),
+    [activeExpenses, recurringExpenses]
+  );
+
+  const knownGmailSourceReferences = useMemo(
+    () => Array.from(new Set(expenses.flatMap(extractGmailIdsFromExpense))),
+    [expenses]
+  );
+
+  const applyMatchedRecurringCycles = useCallback(
+    (matchedCycles: Array<{ ruleId: string; cycle: string }>) => {
+      if (matchedCycles.length === 0) return;
+      setRecurringExpenses((current) => {
+        const updated = applyMatchedCyclesToRecurring(current, matchedCycles);
+        saveRecurringExpenses(updated);
         return updated;
       });
     },
     []
+  );
+
+  const handleSaveExpense = useCallback(
+    (newExpData: Omit<Expense, 'id'>, editingId?: string) => {
+      if (editingId) {
+        setExpenses((current) => {
+          const updated = current.map((e) =>
+            e.id === editingId
+              ? {
+                  ...newExpData,
+                  id: editingId,
+                  reconciliationStatus:
+                    newExpData.amount > 0 ? ('confirmed' as const) : ('zero_quarantine' as const),
+                }
+              : e
+          );
+          saveExpenses(updated);
+          return updated;
+        });
+        return;
+      }
+
+      let matchedCycles: Array<{ ruleId: string; cycle: string }> = [];
+      let didMerge = false;
+      setExpenses((current) => {
+        const result = reconcileIncomingExpenses(current, [newExpData], {
+          activeTrip: activeTripRef.current,
+          recurringExpenses: recurringExpensesRef.current,
+          idPrefix: 'exp',
+        });
+        matchedCycles = result.matchedRecurringCycles;
+        didMerge = result.mergedCount > 0;
+        saveExpenses(result.expenses);
+        return result.expenses;
+      });
+      if (matchedCycles.length > 0) {
+        applyMatchedRecurringCycles(matchedCycles);
+      }
+      if (didMerge) {
+        setReconciliationNotice(
+          `Riconciliata "${newExpData.title}" con un movimento esistente (nessun doppione creato).`
+        );
+      }
+    },
+    [applyMatchedRecurringCycles]
   );
 
   const handleDeleteExpense = useCallback((id: string) => {
@@ -420,32 +517,144 @@ export function useDuoSpendData() {
     });
   }, []);
 
-  const handleImportGmailExpenses = useCallback((newItems: Omit<Expense, 'id'>[]) => {
-    setExpenses((current) => {
-      const knownGmailReferences = new Set(
-        current.flatMap((expense) =>
-          expense.source === 'gmail' && expense.sourceReference ? [expense.sourceReference] : []
-        )
-      );
-      const createdList: Expense[] = newItems
-        .filter((item) => {
-          if (item.source !== 'gmail') return true;
-          if (!item.sourceReference) return false;
-          if (knownGmailReferences.has(item.sourceReference)) return false;
-          knownGmailReferences.add(item.sourceReference);
-          return true;
-        })
-        .map((item, idx) => ({
-          ...item,
-          id: `exp-gmail-${Date.now()}-${idx}`,
-        }));
+  const handleImportGmailExpenses = useCallback(
+    (newItems: Omit<Expense, 'id'>[]) => {
+      let matchedCycles: Array<{ ruleId: string; cycle: string }> = [];
+      let mergedCount = 0;
+      let addedCount = 0;
+      let quarantinedZeroCount = 0;
 
-      if (createdList.length === 0) return current;
-      const updated = [...createdList, ...current];
-      saveExpenses(updated);
+      setExpenses((current) => {
+        const result = reconcileIncomingExpenses(current, newItems, {
+          activeTrip: activeTripRef.current,
+          recurringExpenses: recurringExpensesRef.current,
+        });
+        matchedCycles = result.matchedRecurringCycles;
+        mergedCount = result.mergedCount;
+        addedCount = result.addedCount;
+        quarantinedZeroCount = result.quarantinedZeroCount;
+        if (result.expenses !== current) {
+          saveExpenses(result.expenses);
+        }
+        return result.expenses;
+      });
+
+      if (matchedCycles.length > 0) {
+        applyMatchedRecurringCycles(matchedCycles);
+      }
+
+      if (mergedCount > 0 || quarantinedZeroCount > 0) {
+        const parts: string[] = [];
+        if (addedCount > 0) parts.push(`${addedCount} aggiunte`);
+        if (mergedCount > 0) parts.push(`${mergedCount} riconciliate senza doppioni`);
+        if (quarantinedZeroCount > 0) {
+          parts.push(`${quarantinedZeroCount} in quarantena 0 €`);
+        }
+        setReconciliationNotice(`Import completato: ${parts.join(' · ')}.`);
+      }
+    },
+    [applyMatchedRecurringCycles]
+  );
+
+  const handleMergeZeroExpense = useCallback(
+    (zeroExpenseId: string, candidateExpenseId: string) => {
+      setExpenses((current) => {
+        const zeroExp = current.find((e) => e.id === zeroExpenseId);
+        const candidateExp = current.find((e) => e.id === candidateExpenseId);
+        if (!zeroExp || !candidateExp) return current;
+
+        const merged = mergeReconciledExpenses(candidateExp, zeroExp);
+        const updated = current
+          .filter((e) => e.id !== zeroExpenseId)
+          .map((e) => (e.id === candidateExpenseId ? merged : e));
+        saveExpenses(updated);
+        setReconciliationNotice(
+          `Ricevuta a 0 € "${zeroExp.title}" unita a "${merged.title}" (${merged.currency} ${merged.amount.toFixed(2)}).`
+        );
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleSaveTrip = useCallback((trip: TripProject) => {
+    setTrips((current) => {
+      const normalized = trip.isActive
+        ? current.map((existing) =>
+            existing.id === trip.id ? trip : { ...existing, isActive: false }
+          )
+        : current.map((existing) => (existing.id === trip.id ? trip : existing));
+      const exists = normalized.some((existing) => existing.id === trip.id);
+      const updated = exists ? normalized : [trip, ...normalized];
+      saveTrips(updated);
       return updated;
     });
   }, []);
+
+  const handleToggleTripActive = useCallback((tripId: string) => {
+    setTrips((current) => {
+      const target = current.find((t) => t.id === tripId);
+      if (!target) return current;
+      const nextActive = !target.isActive;
+      const updated = current.map((t) =>
+        t.id === tripId
+          ? { ...t, isActive: nextActive }
+          : nextActive
+            ? { ...t, isActive: false }
+            : t
+      );
+      saveTrips(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleDeleteTrip = useCallback((tripId: string) => {
+    setTrips((current) => {
+      const updated = current.filter((t) => t.id !== tripId);
+      saveTrips(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleSaveRecurringExpense = useCallback((item: RecurringExpenseItem) => {
+    setRecurringExpenses((current) => {
+      const exists = current.some((existing) => existing.id === item.id);
+      const updated = exists
+        ? current.map((existing) => (existing.id === item.id ? item : existing))
+        : [item, ...current];
+      saveRecurringExpenses(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleDeleteRecurringExpense = useCallback((ruleId: string) => {
+    setRecurringExpenses((current) => {
+      const updated = current.filter((r) => r.id !== ruleId);
+      saveRecurringExpenses(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleTriggerRecurringExpense = useCallback(
+    (rule: RecurringExpenseItem) => {
+      if (rule.expectedAmount <= 0) return;
+      const today = new Date().toISOString().slice(0, 10);
+      handleSaveExpense({
+        title: rule.title,
+        amount: rule.expectedAmount,
+        currency: rule.currency,
+        date: today,
+        category: rule.category,
+        payer: rule.payer,
+        splitType: rule.splitType,
+        customSplitRatio: rule.customSplitRatio,
+        source: 'recurring',
+        recurringRuleId: rule.id,
+        notes: 'Rata registrata dal modulo Spese Ricorrenti',
+      });
+    },
+    [handleSaveExpense]
+  );
 
   const handleIgnoreGmailMessage = useCallback((messageId: string) => {
     setIgnoredGmailMessageIds((current) => {
@@ -534,6 +743,15 @@ export function useDuoSpendData() {
     excludedBeforeStartCount,
     settlements: activeSettlements,
     goals,
+    trips,
+    activeTrip,
+    activeTripSummary,
+    recurringExpenses,
+    recurringMonthlyTotal,
+    zeroQuarantineMatches,
+    knownGmailSourceReferences,
+    reconciliationNotice,
+    clearReconciliationNotice: () => setReconciliationNotice(null),
     profile,
     ignoredGmailMessageIds,
     gmailRecurringRules,
@@ -557,6 +775,13 @@ export function useDuoSpendData() {
     handleSaveExpense,
     handleDeleteExpense,
     handleImportGmailExpenses,
+    handleMergeZeroExpense,
+    handleSaveTrip,
+    handleToggleTripActive,
+    handleDeleteTrip,
+    handleSaveRecurringExpense,
+    handleDeleteRecurringExpense,
+    handleTriggerRecurringExpense,
     handleIgnoreGmailMessage,
     handleSaveGmailRecurringRule,
     handleConfirmSettlement,

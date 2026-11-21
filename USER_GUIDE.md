@@ -77,6 +77,15 @@ All 4 capture tools are reachable from the **floating `+` Quick Actions button**
 ### Starting Point / Punto Zero (`trackingStartDate`)
 - Configure a **Starting Point date** from Settings (**Impostazioni → Punto Zero**) or the Starting Point dialog if you want DuoSpend to count only expenses and settlements from that date forward in couple balance calculations. Clearing the field removes the cutoff cleanly on the server as well.
 
+### Multi-Channel Reconciliation (±14 Days) & Zero-Amount Quarantine (`0 €`)
+- Because bank push/SMS notifications arrive immediately while Gmail syncs may run days or weeks later (with invoice/shipping date offsets), DuoSpend runs a weighted reconciliation engine (`±14 days` window) matching canonical merchant names, exact/near amounts, and recurring rules:
+  - **Delayed Channel Merge**: A Gmail receipt scanned 10 days after a bank notification merges into the same expense (`linkedSources` + `linkedReferences`), preserving itemized items and preventing that Gmail `messageId` from being re-imported later.
+  - **Zero-Amount Quarantine (`0 €`)**: Gmail receipts detected without a price stay in `zero_quarantine` with an alert banner (`ZeroAmountBanner`). When a matching bank charge exists within ±14 days, DuoSpend either completes the real amount automatically or offers a 1-tap **Unisci ed esci dalla quarantena** action.
+
+### Trip / Event Mode & Recurring Expenses Tracker
+- **Modalità Vacanza & Progetti (`TripModeModal`)**: Create and activate a Trip or Special Project (e.g., *Weekend a Barcellona*) to auto-tag matching expenses with `tripId` and view an isolated 50/50 trip settlement and budget balance.
+- **Spese Ricorrenti & Abbonamenti (`RecurringExpensesModal`)**: Track fixed or variable recurring bills (rent, utilities, streaming) with custom merchant aliases, monthly cycle tracking (`YYYY-MM`), automatic matching against incoming bank alerts/Gmail invoices, and 1-tap manual installment logging without duplicating already-matched months.
+
 ---
 
 ## 3. Screen-by-Screen Guide
