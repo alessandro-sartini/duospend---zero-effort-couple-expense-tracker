@@ -343,21 +343,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {onOpenTrips && (
             <div
-              className={`ds-card p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 ${
-                activeTripSummary ? 'border-orange-400/70 bg-orange-50/30' : ''
+              className={`ds-card p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 transition-colors ${
+                activeTripSummary
+                  ? 'border-orange-500/60 bg-orange-50/50 dark:bg-orange-950/25 ring-1 ring-orange-500/25'
+                  : ''
               }`}
             >
               <div className="flex items-start gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-xl bg-orange-500/12 border border-orange-500/25 text-orange-600 flex items-center justify-center shrink-0">
+                <div className="h-9 w-9 rounded-xl bg-orange-500/15 border border-orange-500/25 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
                   <Plane className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
                   {activeTripSummary ? (
                     <>
-                      <div className="text-xs sm:text-sm font-bold text-stone-900 truncate">
+                      <div className="text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100 truncate">
                         Vacanza Attiva: {activeTripSummary.trip.name}
                       </div>
-                      <p className="text-[11px] text-stone-500 mt-0.5 font-mono">
+                      <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5 font-mono">
                         Totale {formatCurrency(activeTripSummary.totalSpend, profile.currency)} ·{' '}
                         {activeTripSummary.expenseCount} spese · Saldo{' '}
                         {formatCurrency(Math.abs(activeTripSummary.netBalance), profile.currency)}
@@ -365,10 +367,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     </>
                   ) : (
                     <>
-                      <div className="text-xs sm:text-sm font-bold text-stone-900">
+                      <div className="text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100">
                         Modalità Vacanza & Progetti
                       </div>
-                      <p className="text-[11px] text-stone-500 mt-0.5">
+                      <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
                         Auto-etichetta viaggi o lavori con mini-saldo 50/50 isolato
                       </p>
                     </>
@@ -388,14 +390,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           {onOpenRecurring && (
             <div className="ds-card p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-xl bg-emerald-500/12 border border-emerald-500/25 text-emerald-600 flex items-center justify-center shrink-0">
+                <div className="h-9 w-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                   <RefreshCw className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs sm:text-sm font-bold text-stone-900">
+                  <div className="text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100">
                     Spese Ricorrenti & Abbonamenti
                   </div>
-                  <p className="text-[11px] text-stone-500 mt-0.5">
+                  <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
                     {recurringCount > 0
                       ? `${recurringCount} attive · ~${formatCurrency(recurringMonthlyTotal, profile.currency)}/mese · Anti-doppione`
                       : 'Riconcilia affitto, bollette e abbonamenti con Banca e Gmail'}
@@ -415,7 +417,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       )}
 
       {/* Barra Selezione Mese & Anno per la Panoramica */}
-      <div className="ds-card px-4 py-3 sm:px-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="ds-card px-4 py-3 sm:px-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-bold text-stone-800">
           <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
           <span>Periodo Panoramica:</span>
@@ -424,12 +426,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial justify-end">
+        <div className="grid grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2 w-full sm:w-auto sm:flex sm:flex-wrap sm:flex-initial sm:justify-end">
           <button
             type="button"
             onClick={() => stepDashboardMonth(-1)}
             aria-label="Mese precedente"
-            className="ds-icon-btn h-9 w-9 shrink-0"
+            className="ds-icon-btn h-9 w-9 shrink-0 col-start-1 row-start-1"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -441,7 +443,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               setSelectedMonth(Number(e.target.value));
               setSelectedMonthCategory(null);
             }}
-            className="ds-input px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
+            className="ds-input col-start-2 row-start-1 w-full px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
           >
             {DASHBOARD_MONTH_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -457,7 +459,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               setSelectedYear(Number(e.target.value));
               setSelectedMonthCategory(null);
             }}
-            className="ds-input px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
+            className="ds-input col-start-2 row-start-2 w-full px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
           >
             {availableYears.map((y) => (
               <option key={y} value={y}>
@@ -470,7 +472,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             type="button"
             onClick={() => stepDashboardMonth(1)}
             aria-label="Mese successivo"
-            className="ds-icon-btn h-9 w-9 shrink-0"
+            className="ds-icon-btn h-9 w-9 shrink-0 col-start-3 row-start-1"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -483,7 +485,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 setSelectedMonth(realMonth);
                 setSelectedMonthCategory(null);
               }}
-              className="ds-btn-secondary min-h-9 px-2.5 py-1 text-xs shrink-0"
+                className="ds-btn-secondary col-span-3 min-h-9 px-2.5 py-1 text-xs justify-self-stretch sm:col-span-1 sm:justify-self-auto sm:w-auto"
             >
               <RotateCcw className="w-3 h-3 text-orange-600" />
               <span>Attuale</span>

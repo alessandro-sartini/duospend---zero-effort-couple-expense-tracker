@@ -107,21 +107,21 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
         <div className="space-y-6">
           <div className="ds-subcard p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-wider text-stone-500">
+              <div className="text-[11px] uppercase tracking-wider text-stone-500 dark:text-stone-400">
                 Impegno Fisso Mensile Stimato
               </div>
-              <div className="font-mono text-xl font-bold text-stone-900">
+              <div className="font-mono text-xl font-bold text-stone-900 dark:text-stone-100">
                 {formatCurrency(monthlyCommitment, profile.currency)} / mese
               </div>
             </div>
-            <div className="text-xs text-stone-500">
-              Ciclo attuale: <strong className="font-mono text-stone-800">{currentCycle}</strong>
+            <div className="text-xs text-stone-500 dark:text-stone-400">
+              Ciclo attuale: <strong className="font-mono text-stone-800 dark:text-stone-200">{currentCycle}</strong>
             </div>
           </div>
 
           {recurringExpenses.length > 0 && (
             <div className="space-y-2.5">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
                 Abbonamenti & Bollette Monitorate ({recurringExpenses.length})
               </h4>
               {recurringExpenses.map((rule) => {
@@ -133,12 +133,12 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                   >
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold text-stone-900">{rule.title}</span>
+                        <span className="text-sm font-bold text-stone-900 dark:text-stone-100">{rule.title}</span>
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                             isMatchedCurrentCycle
-                              ? 'bg-emerald-500/15 text-emerald-700'
-                              : 'bg-stone-500/10 text-stone-600'
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-stone-500/10 text-stone-600 dark:text-stone-300'
                           }`}
                         >
                           {isMatchedCurrentCycle ? (
@@ -155,8 +155,8 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
-                        <span className="font-mono font-semibold text-stone-700">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 dark:text-stone-400">
+                        <span className="font-mono font-semibold text-stone-700 dark:text-stone-300">
                           {rule.expectedAmount > 0
                             ? formatCurrency(rule.expectedAmount, rule.currency)
                             : 'Importo variabile'}
@@ -206,13 +206,13 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
 
           {/* Aggiungi Nuova Regola */}
           <form onSubmit={handleSubmit} className="ds-subcard p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">
               Aggiungi Abbonamento o Spesa Fissa
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                   Nome Servizio / Utenza
                 </label>
                 <input
@@ -226,7 +226,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                   Alias Banca / Email (separati da virgola)
                 </label>
                 <input
@@ -239,7 +239,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                   Importo Atteso ({profile.currency}) · 0 se variabile
                 </label>
                 <input
