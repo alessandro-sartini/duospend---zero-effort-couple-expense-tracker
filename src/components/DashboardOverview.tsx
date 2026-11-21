@@ -284,57 +284,38 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         onNavigateToSettlement={() => onNavigateTab('settlement')}
       />
 
-      {/* Modalità di Inizio / Punto Zero della Coppia */}
-      {onOpenStartingPoint && (
-        <div
-          className={`ds-card p-3.5 sm:px-5 sm:py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-            !profile.trackingStartDate ? 'border-orange-300/70 bg-orange-50/40' : ''
-          }`}
-        >
+      {/* Indicatore Punto Zero (visibile solo se impostato dalle Impostazioni) */}
+      {profile.trackingStartDate && (
+        <div className="ds-card p-3.5 sm:px-5 sm:py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
             <div className="h-9 w-9 rounded-xl bg-orange-500/12 border border-orange-500/25 text-orange-600 flex items-center justify-center shrink-0">
               <Flag className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              {profile.trackingStartDate ? (
-                <>
-                  <div className="text-xs sm:text-sm font-bold text-stone-900">
-                    Punto di Partenza attivo dal{' '}
-                    <span className="font-mono text-orange-600">
-                      {formatDateItShort(profile.trackingStartDate)}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-stone-500 mt-0.5">
-                    {excludedBeforeStartCount > 0
-                      ? `${excludedBeforeStartCount} spese antecedenti nascoste dai conteggi · Gmail cerca da questa data`
-                      : 'Saldo, grafici e scansioni Gmail partono puliti da questa data'}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="text-xs sm:text-sm font-bold text-stone-900">
-                    Modalità di Inizio · Prepara la data di partenza
-                  </div>
-                  <p className="text-[11px] text-stone-500 mt-0.5">
-                    Scegli da quando far partire i conti (es. 1° del mese) così Gmail e grafici non mescolano mezzi periodi precedenti.
-                  </p>
-                </>
-              )}
+              <div className="text-xs sm:text-sm font-bold text-stone-900">
+                Punto Zero attivo dal{' '}
+                <span className="font-mono text-orange-600">
+                  {formatDateItShort(profile.trackingStartDate)}
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-500 mt-0.5">
+                {excludedBeforeStartCount > 0
+                  ? `${excludedBeforeStartCount} spese antecedenti nascoste dai conteggi · Gmail cerca da questa data`
+                  : 'Saldo, grafici e scansioni Gmail partono da questa data'}
+              </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenStartingPoint}
-            className={`${
-              profile.trackingStartDate ? 'ds-btn-secondary' : 'ds-btn-primary'
-            } min-h-9 px-3.5 py-2 text-xs shrink-0 self-start sm:self-auto`}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>
-              {profile.trackingStartDate ? 'Modifica data inizio' : 'Configura Punto Zero'}
-            </span>
-          </button>
+          {onOpenStartingPoint && (
+            <button
+              type="button"
+              onClick={onOpenStartingPoint}
+              className="ds-btn-secondary min-h-9 px-3.5 py-2 text-xs shrink-0 self-start sm:self-auto"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Modifica</span>
+            </button>
+          )}
         </div>
       )}
 

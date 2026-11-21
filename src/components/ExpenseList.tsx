@@ -40,6 +40,21 @@ interface ExpenseListProps {
   onClearZeroAmountFilter?: () => void;
 }
 
+const EXPENSE_MONTH_OPTIONS = [
+  { value: 1, label: 'Gennaio' },
+  { value: 2, label: 'Febbraio' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Aprile' },
+  { value: 5, label: 'Maggio' },
+  { value: 6, label: 'Giugno' },
+  { value: 7, label: 'Luglio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Settembre' },
+  { value: 10, label: 'Ottobre' },
+  { value: 11, label: 'Novembre' },
+  { value: 12, label: 'Dicembre' },
+];
+
 export const ExpenseList: React.FC<ExpenseListProps> = ({
   expenses,
   profile,
@@ -51,10 +66,21 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   onlyZeroAmount = false,
   onClearZeroAmountFilter,
 }) => {
+  const currentYear = new Date().getFullYear();
   const tripNameById = React.useMemo(
     () => new Map(trips.map((trip) => [trip.id, trip.name])),
     [trips]
   );
+  const availableYears = React.useMemo(() => {
+    const years = new Set<number>([currentYear]);
+    for (const exp of expenses) {
+      const y = Number(exp.date.slice(0, 4));
+      if (Number.isInteger(y) && y >= 2000 && y <= 2100) {
+        years.add(y);
+      }
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [expenses, currentYear]);
   const filterCategories = React.useMemo(() => {
     const active = getActiveCategories(profile, goals);
     const seen = new Set(active);
@@ -68,12 +94,18 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     return [...active, ...extraFromHistory];
   }, [profile, goals, expenses]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPayer, setSelectedPayer] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expensePendingDelete, setExpensePendingDelete] = useState<Expense | null>(null);
 
   const filteredExpenses = expenses.filter((exp) => {
+    const expYear = Number(exp.date.slice(0, 4));
+    const expMonth = Number(exp.date.slice(5, 7));
+    const matchesYear = selectedYear === 'all' || expYear === selectedYear;
+    const matchesMonth = selectedMonth === 'all' || expMonth === selectedMonth;
     const matchesSearch =
       exp.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (exp.notes && exp.notes.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -82,7 +114,14 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     const matchesPayer =
       selectedPayer === 'all' || exp.payer === selectedPayer;
     const matchesZeroAmount = !onlyZeroAmount || exp.amount <= 0;
-    return matchesSearch && matchesCategory && matchesPayer && matchesZeroAmount;
+    return (
+      matchesYear &&
+      matchesMonth &&
+      matchesSearch &&
+      matchesCategory &&
+      matchesPayer &&
+      matchesZeroAmount
+    );
   });
 
   const totalFiltered = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -163,8 +202,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
         </div>
 
         {/* Barre di filtro */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-          <div className="relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+          <div className="relative sm:col-span-2 lg:col-span-1">
             <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
             <input
               type="text"
@@ -174,6 +213,41 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               className="ds-input w-full pl-9 pr-3 py-2 text-xs"
             />
           </div>
+
+          <select
+            value={selectedYear === 'all' ? 'all' : String(selectedYear)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedYear(val === 'all' ? 'all' : Number(val));
+              if (val === 'all') setSelectedMonth('all');
+            }}
+            aria-label="Filtra per anno"
+            className="ds-input w-full px-3 py-2 text-xs"
+          >
+            <option value="all">Tutti gli anni</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>
+                Anno {y}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedMonth === 'all' ? 'all' : String(selectedMonth)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedMonth(val === 'all' ? 'all' : Number(val));
+            }}
+            aria-label="Filtra per mese"
+            className="ds-input w-full px-3 py-2 text-xs"
+          >
+            <option value="all">Tutti i mesi</option>
+            {EXPENSE_MONTH_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
 
           <select
             value={selectedCategory}
@@ -200,6 +274,24 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             <option value="partner">Pagato da {profile.partnerName}</option>
           </select>
         </div>
+
+        {filteredExpenses.length === 0 && expenses.length > 0 && selectedYear !== 'all' && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200/80 bg-stone-50/70 px-3 py-2 text-xs text-stone-700">
+            <span>
+              Nessuna spesa visibile per l&apos;anno <strong>{selectedYear}</strong> con i filtri attuali.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedYear('all');
+                setSelectedMonth('all');
+              }}
+              className="font-semibold text-orange-600 hover:underline cursor-pointer"
+            >
+              Mostra tutti gli anni
+            </button>
+          </div>
+        )}
 
         {onlyZeroAmount && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">

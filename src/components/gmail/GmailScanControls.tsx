@@ -100,8 +100,28 @@ export const GmailScanControls: React.FC<GmailScanControlsProps> = ({
       </div>
 
       {/* Periodo di ricerca / Data di inizio */}
-      <div className="space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 text-xs">
+      <div className="ds-subcard p-3 space-y-2.5">
+        {trackingStartDate && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-500/25 bg-orange-50/50 px-2.5 py-1.5 text-[11px]">
+            <span className="font-semibold text-stone-800 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span>
+                Punto Zero attivo dal <strong className="font-mono">{formatDateItShort(trackingStartDate)}</strong>
+              </span>
+            </span>
+            {onOpenStartingPoint && (
+              <button
+                type="button"
+                onClick={onOpenStartingPoint}
+                className="text-orange-600 hover:underline font-semibold shrink-0 cursor-pointer"
+              >
+                Modifica
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
           <label htmlFor="gmail-lookback-days" className="font-medium text-stone-600 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-orange-600" />
             <span>Periodo di ricerca</span>
@@ -126,18 +146,19 @@ export const GmailScanControls: React.FC<GmailScanControlsProps> = ({
             <option value="days:30">Ultimi 30 giorni</option>
             <option value="days:90">Ultimi 90 giorni</option>
             <option value="days:180">Ultimi 180 giorni</option>
+            <option value="days:365">Ultimo anno (365 giorni)</option>
           </select>
         </div>
 
         {searchMode === 'custom_date' && (
-          <div className="flex items-center justify-between gap-3 px-1 text-xs">
+          <div className="flex items-center justify-between gap-3 text-xs">
             <label htmlFor="gmail-custom-start-date" className="font-medium text-stone-600">
               Inizia dalle ricevute dal:
             </label>
             <input
               id="gmail-custom-start-date"
               type="date"
-              min="2000-01-01"
+              min={trackingStartDate || '2000-01-01'}
               max="2100-12-31"
               value={customStartDate}
               disabled={isSyncing}
@@ -147,22 +168,15 @@ export const GmailScanControls: React.FC<GmailScanControlsProps> = ({
           </div>
         )}
 
-        <div className="px-1 flex flex-wrap items-center justify-between gap-2 text-[10px] text-stone-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-stone-500 leading-relaxed">
           <span>
             {effectiveStartDate
-              ? `Verranno incluse solo le email e ricevute dal ${formatDateItShort(effectiveStartDate)} in poi, evitando acquisti dei mesi precedenti.`
+              ? trackingStartDate
+                ? `Scansione effettiva dal ${formatDateItShort(effectiveStartDate)}: le email precedenti al Punto Zero (${formatDateItShort(trackingStartDate)}) restano sempre escluse.`
+                : `Verranno incluse solo le email e ricevute dal ${formatDateItShort(effectiveStartDate)} in poi, evitando acquisti dei mesi precedenti.`
               : 'Cerca tutte le email con parole chiave negli ultimi giorni selezionati.'}{' '}
             A Gemini invia solo il testo delle candidate, mai gli allegati.
           </span>
-          {onOpenStartingPoint && (
-            <button
-              type="button"
-              onClick={onOpenStartingPoint}
-              className="text-orange-600 hover:underline font-semibold shrink-0 cursor-pointer"
-            >
-              {trackingStartDate ? 'Cambia Punto Zero' : 'Imposta Punto di Partenza'}
-            </button>
-          )}
         </div>
       </div>
     </>

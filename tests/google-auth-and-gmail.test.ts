@@ -530,6 +530,73 @@ describe('Google Authentication & Gmail Sync Services', () => {
         date: '2026-11-01',
       });
     });
+
+    it('applica sempre profile.trackingStartDate come limite minimo anche con lookbackDays=2000 o startDate antecedente', async () => {
+      inMemoryDb.profile.trackingStartDate = '2026-11-01';
+      inMemoryDb.gmailScanCache = [
+        {
+          accountEmail: 'owner@example.com',
+          messageId: 'msg-old-oct-2',
+          scannedAt: new Date().toISOString(),
+          receipt: {
+            id: 'msg-old-oct-2',
+            isExpense: true,
+            total: 99,
+            currency: 'EUR',
+            date: '2026-10-15',
+            merchant: 'Vecchio Acquisto Pre-Punto-Zero',
+            category: 'Shopping',
+          },
+        },
+        {
+          accountEmail: 'owner@example.com',
+          messageId: 'msg-nov-ok-2',
+          scannedAt: new Date().toISOString(),
+          receipt: {
+            id: 'msg-nov-ok-2',
+            isExpense: true,
+            total: 24,
+            currency: 'EUR',
+            date: '2026-11-10',
+            merchant: 'Acquisto Valido Novembre',
+            category: 'Spesa',
+          },
+        },
+      ];
+
+      try {
+        const fetchSpy = vi
+          .spyOn(globalThis, 'fetch')
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ emailAddress: 'owner@example.com' }), { status: 200 })
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                messages: [{ id: 'msg-old-oct-2' }, { id: 'msg-nov-ok-2' }],
+                resultSizeEstimate: 2,
+              }),
+              { status: 200 }
+            )
+          );
+
+        const result = await syncGmailReceipts({
+          accessToken: 'ya29.test-mock-token-abc-123',
+          googleUserEmail: 'owner@example.com',
+          body: { lookbackDays: 2000, startDate: '2026-01-01' },
+        });
+
+        const searchUrl = String(fetchSpy.mock.calls[1]?.[0] || '');
+        expect(decodeURIComponent(searchUrl)).toContain('after:2026/10/31');
+        expect(result.receipts).toHaveLength(1);
+        expect(result.receipts[0]).toMatchObject({
+          id: 'msg-nov-ok-2',
+          date: '2026-11-10',
+        });
+      } finally {
+        delete inMemoryDb.profile.trackingStartDate;
+      }
+    });
   });
 
   describe('Validazione chiave API Gemini (hasGeminiApiKey)', () => {

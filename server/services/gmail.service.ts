@@ -350,7 +350,14 @@ export async function syncGmailReceipts(params: {
   const lookbackDays = ALLOWED_LOOKBACK_DAYS.includes(requestedLookbackDays)
     ? requestedLookbackDays
     : 30;
-  const startDate = sanitizeIsoStartDate(body.startDate);
+  const profileStartDate = sanitizeIsoStartDate(readDatabase().profile?.trackingStartDate);
+  const clientStartDate = sanitizeIsoStartDate(body.startDate);
+  const startDate =
+    clientStartDate && profileStartDate
+      ? clientStartDate >= profileStartDate
+        ? clientStartDate
+        : profileStartDate
+      : clientStartDate || profileStartDate;
   const dateFilterClause = startDate
     ? `after:${shiftIsoDateString(startDate, -1).replace(/-/g, '/')}`
     : `newer_than:${lookbackDays}d`;

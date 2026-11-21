@@ -107,27 +107,47 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
   );
 
   const effectiveStartDate = React.useMemo(() => {
+    const maxIsoDate = (candidate?: string, floor?: string): string | undefined => {
+      if (!candidate) return floor;
+      if (!floor) return candidate;
+      return candidate >= floor ? candidate : floor;
+    };
+
     const now = new Date();
     const y = now.getFullYear();
     const m = now.getMonth() + 1;
+    const floorDate =
+      profile.trackingStartDate && /^\d{4}-\d{2}-\d{2}$/.test(profile.trackingStartDate)
+        ? profile.trackingStartDate
+        : undefined;
+
     if (searchMode === 'tracking_start') {
-      return profile.trackingStartDate || `${y}-${String(m).padStart(2, '0')}-01`;
+      return floorDate || `${y}-${String(m).padStart(2, '0')}-01`;
     }
     if (searchMode === 'month_start') {
-      return `${y}-${String(m).padStart(2, '0')}-01`;
+      return maxIsoDate(`${y}-${String(m).padStart(2, '0')}-01`, floorDate);
     }
     if (searchMode === 'prev_month_start') {
       const prev = new Date(y, m - 2, 1);
-      return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`;
+      return maxIsoDate(
+        `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`,
+        floorDate
+      );
     }
     if (searchMode === 'year_start') {
-      return `${y}-01-01`;
+      return maxIsoDate(`${y}-01-01`, floorDate);
     }
     if (searchMode === 'custom_date') {
-      return /^\d{4}-\d{2}-\d{2}$/.test(customStartDate) ? customStartDate : undefined;
+      const cleanCustom = /^\d{4}-\d{2}-\d{2}$/.test(customStartDate) ? customStartDate : undefined;
+      return maxIsoDate(cleanCustom, floorDate);
+    }
+    if (floorDate) {
+      const lookbackStart = new Date(y, m - 1, now.getDate() - Math.max(0, lookbackDays));
+      const lookbackIso = `${lookbackStart.getFullYear()}-${String(lookbackStart.getMonth() + 1).padStart(2, '0')}-${String(lookbackStart.getDate()).padStart(2, '0')}`;
+      return maxIsoDate(lookbackIso, floorDate);
     }
     return undefined;
-  }, [searchMode, customStartDate, profile.trackingStartDate]);
+  }, [searchMode, customStartDate, lookbackDays, profile.trackingStartDate]);
   const [scanStats, setScanStats] = useState<GmailScanStats | null>(
     () => initialGmailDraft?.scanStats ?? null,
   );

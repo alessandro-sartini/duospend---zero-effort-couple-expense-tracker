@@ -74,7 +74,14 @@ export const StartingPointModal: React.FC<StartingPointModalProps> = ({
   }, [startDateDraft, currentYear, currentMonth]);
 
   const selectableYears = useMemo(() => {
-    const set = new Set<number>([currentYear, currentYear - 1, currentYear - 2]);
+    const set = new Set<number>([
+      currentYear + 1,
+      currentYear,
+      currentYear - 1,
+      currentYear - 2,
+      currentYear - 3,
+      currentYear - 4,
+    ]);
     for (const exp of allExpenses) {
       const y = Number(exp.date.slice(0, 4));
       if (Number.isInteger(y) && y >= 2000 && y <= 2100) set.add(y);
