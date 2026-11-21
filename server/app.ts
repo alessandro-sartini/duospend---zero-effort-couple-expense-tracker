@@ -16,6 +16,7 @@ import notificationRoutes from './routes/notifications';
 import dataRoutes from './routes/data';
 import devRoutes from './routes/dev';
 import authRoutes from './routes/auth';
+import savingsChallengesRoutes from './routes/savings-challenges';
 import { hasPathTraversalOrForbiddenRoute, stripDangerousKeys } from './utils/security';
 import { pruneExpiredGoogleSessions } from './services/google-auth';
 import { hasValidWebhookSecret, pruneExpiredDeveloperSessions } from './middleware/auth';
@@ -156,10 +157,12 @@ app.use('/api/gemini', rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standard
 app.use('/api/gmail/sync', rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/notifications', rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/data', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
+app.use('/api/savings-challenges', rateLimit({ windowMs: 15 * 60 * 1000, limit: 80, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use(aiRoutes);
 app.use(gmailRoutes);
 app.use(notificationRoutes);
 app.use(dataRoutes);
+app.use(savingsChallengesRoutes);
 app.use('/api/dev', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use(
   '/api/auth/dev-login',

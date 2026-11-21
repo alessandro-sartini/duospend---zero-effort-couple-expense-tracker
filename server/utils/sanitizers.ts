@@ -1089,3 +1089,103 @@ export function sanitizeProfileRecord(
 
   return result;
 }
+
+const SAFE_ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{3,80}$/;
+const YEAR_MONTH_PATTERN = /^(\d{4})-(\d{2})$/;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_.:-]{8,128}$/;
+
+export function isValidSafeEntityId(value: unknown): value is string {
+  return typeof value === 'string' && SAFE_ENTITY_ID_PATTERN.test(value);
+}
+
+export function sanitizeYearMonth(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  const match = YEAR_MONTH_PATTERN.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month)) return null;
+  if (year < 2000 || year > 2100 || month < 1 || month > 12) return null;
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+export function isValidIanaTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length < 2 || trimmed.length > 64 || /\s/.test(trimmed)) {
+    return false;
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: trimmed });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function sanitizeIanaTimeZone(value: unknown, fallback = 'Europe/Rome'): string {
+  if (isValidIanaTimeZone(value)) {
+    return value.trim();
+  }
+  return isValidIanaTimeZone(fallback) ? fallback.trim() : 'Europe/Rome';
+}
+
+export function sanitizeChallengeCategories(
+  raw: unknown,
+  allowedCategories?: Set<string>
+): string[] {
+  if (!Array.isArray(raw)) return [];
+  const allowedByLower = allowedCategories
+    ? new Map(Array.from(allowedCategories).map((entry) => [entry.trim().toLowerCase(), entry.trim()]))
+    : null;
+
+  const cleaned: string[] = [];
+  const seenLower = new Set<string>();
+  for (const item of raw) {
+    const clean = sanitizePlainText(item, 60);
+    if (!clean) continue;
+    const lower = clean.toLowerCase();
+    if (seenLower.has(lower)) continue;
+
+    if (allowedByLower) {
+      const canonical = allowedByLower.get(lower);
+      if (!canonical) continue;
+      seenLower.add(lower);
+      cleaned.push(canonical);
+    } else {
+      seenLower.add(lower);
+      cleaned.push(clean);
+    }
+
+    if (cleaned.length >= 20) break;
+  }
+  return cleaned;
+}
+
+export function sanitizeChallengeLimit(raw: unknown): number | null {
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  if (typeof raw === 'string' && !raw.trim()) return null;
+  const numeric = typeof raw === 'number' ? raw : Number(raw.trim().replace(',', '.'));
+  if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 1_000_000) {
+    return null;
+  }
+  const rounded = Math.round(numeric * 100) / 100;
+  return rounded > 0 ? rounded : null;
+}
+
+export function sanitizeDurationMonths(raw: unknown): number | null {
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  if (typeof raw === 'string' && !/^\d+$/.test(raw.trim())) return null;
+  const numeric = typeof raw === 'number' ? raw : Number(raw.trim());
+  if (!Number.isInteger(numeric) || numeric < 1 || numeric > 12) {
+    return null;
+  }
+  return numeric;
+}
+
+export function sanitizeIdempotencyKey(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return IDEMPOTENCY_KEY_PATTERN.test(trimmed) ? trimmed : null;
+}

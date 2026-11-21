@@ -94,7 +94,23 @@ Per notifiche push o SMS bancari (**Revolut, Google Pay/Wallet, Intesa Sanpaolo,
 - **3. Categorie e Trend**: Grafici e metriche per **Mese**, **Trimestre**, **Anno** e **Tutto lo storico**; creazione di **Categorie Personalizzate** con budget mensile dedicato, modifica massiva dei budget e possibilità di nascondere categorie non usate (proteggendo sempre `Altro`).
 - **4. Pareggio Saldo**: Dettaglio matematico completo dei totali, quota equa 50%, saldo netto e cronologia storica dei rimborsi.
 - **5. Consulente AI**: Chat finanziaria Gemini collegata ai dati del registro comune. Modelli supportati: **Flash** (`gemini-3.8-flash` con fallback su `gemini-3.5-flash-lite`, `gemini-3.7-flash`, `gemini-3.1-flash-lite`), **Carbon** (`gemini-4-carbon`, audit approfondito), **Argon** (`gemini-4-argon`, scenari e matrimonio), **Hydrogen** (`gemini-4-hydrogen`) e **Flash-Lite** (`gemini-3.1-flash-lite`).
-- **6. Bacheca Obiettivi (Vision Board)**: Schede obiettivi di risparmio e generatore immagini **1K / 2K / 4K** (`gemini-3.1-flash-image` con fallback su `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`).
+- **6. Bacheca Obiettivi (Vision Board) & Sfide di Risparmio**: Schede obiettivi di risparmio, generatore immagini **1K / 2K / 4K** (`gemini-3.1-flash-image` con fallback su `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`) e sezione integrata **Sfide di Risparmio di Coppia**.
+
+### Sfide di Risparmio di Coppia (Risparmio Virtuale)
+- **Cos’è il Risparmio Virtuale**: Una sfida di risparmio definisce un limite mensile condiviso su una o più categorie collegato a un obiettivo esistente della Vision Board. Il risparmio virtuale è calcolato lato server come `max(0, limite mensile - spese considerate valide)`. **Nessun conto bancario reale viene modificato, non esistono classifiche né competizione tra partner e nessun denaro viene spostato automaticamente.** L’importo sull’obiettivo cambia solo dopo conferma esplicita e resta sempre reversibile.
+- **Come creare una sfida**:
+  1. Apri **Obiettivi (Vision Board)** e tocca **Nuova sfida** (oppure tocca **Sfida** direttamente su una card obiettivo).
+  2. Scegli l’obiettivo collegato, inserisci il nome della sfida, seleziona una o più categorie (anche personalizzate), imposta il limite mensile (`> 0`), il mese iniziale (`YYYY-MM`), la durata (`1–12` mesi), l’ambito spese (*tutte* o *solo condivise 50/50 e %*) e il fuso orario.
+  3. Controlla la stima live dal server (spesa media dei 3 mesi precedenti, limite proposto e avviso di risparmio virtuale) e tocca **Attiva sfida**.
+- **Modifica, pausa e modifiche retroattive**: Puoi modificare, mettere in pausa, riattivare, terminare, ricalcolare o eliminare una sfida. Le modifiche retroattive su sfide già avviate richiedono conferma esplicita prima del ricalcolo; per cambiare obiettivo quando esistono contributi già applicati occorre prima annullarli.
+- **Come confermare o annullare un contributo virtuale**:
+  1. Seleziona una sfida con risparmio virtuale disponibile e tocca **Prepara contributo virtuale**.
+  2. Verifica l’anteprima server (`Anteprima`), l’importo e il nuovo totale dell’obiettivo, spunta la conferma esplicita e tocca **Conferma contributo virtuale** (protetto da doppio clic e replay).
+  3. Per annullare in qualsiasi momento, apri il dettaglio della sfida e tocca **Rimuovi ultimo contributo** (oppure **Annulla** accanto a un contributo nello storico): l’importo virtuale viene stornato atomicamente dall’obiettivo Vision Board.
+- **Limiti di valuta, calcolo e uso offline**:
+  - **Valuta**: Nessuna conversione valutaria implicita — concorrono solo le spese nella valuta della sfida (`EUR` di default); le spese in valuta estera vengono escluse e segnalate.
+  - **Voci escluse**: Sono sempre esclusi spese cancellate, ricevute in quarantena `0 €`, importi negativi/rimborsi, spese future nella timezone della sfida e i pareggi (`settlements`).
+  - **Offline e limiti PWA**: Offline puoi consultare l’ultima istantanea salvata in sola lettura, mentre creazione, modifica, conferma e annullamento contributi richiedono la connessione al server SQLite. Essendo una PWA Chrome, non invia notifiche push silenziose automatiche a fine mese ad app chiusa.
 
 ---
 
@@ -106,7 +122,7 @@ Per notifiche push o SMS bancari (**Revolut, Google Pay/Wallet, Intesa Sanpaolo,
 - **Accessibilità & UX Mobile**: apertura in modalità standalone rispettando le safe area (`env(safe-area-inset-*)`), zoom del browser sempre preservato, navigazione da tastiera con focus trap nei modali (`useFocusTrap`), chiusura con `Escape` e supporto a `prefers-reduced-motion`.
 
 ### Comportamento Offline & Recupero Sincronizzazione
-- Il Service Worker (`duospend-shell-v7`) salva nella cache solo le risorse statiche dell'interfaccia (e il server serve `/sw.js`, `/index.html`, `/manifest.webmanifest` senza cache per garantire gli aggiornamenti); `/api/*` e i dati privati non entrano mai nella cache del Service Worker.
+- Il Service Worker (`duospend-shell-v8`) salva nella cache solo le risorse statiche dell'interfaccia (e il server serve `/sw.js`, `/index.html`, `/manifest.webmanifest` senza cache per garantire gli aggiornamenti); `/api/*` (incluse `/api/savings-challenges*`) e i dati privati non entrano mai nella cache del Service Worker.
 - Le modifiche effettuate offline restano in `localStorage` con stato `duospend_dirty_sync_v1`; al ritorno della rete vengono inviate tramite coda serializzata dove le modifiche locali pendenti prevalgono sui record server obsoleti, preservando comunque eventuali foto `receiptUrl` dal server se rimosse localmente per `QuotaExceededError`.
 
 ### Supporto Browser & Funzioni che Richiedono un APK Nativo

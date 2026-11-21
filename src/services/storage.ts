@@ -355,8 +355,12 @@ export const loadGoals = (): SavingGoal[] => {
   }
 };
 
-export const saveGoals = (goals: SavingGoal[]) => {
+export const saveGoalsLocalOnly = (goals: SavingGoal[]) => {
   safeSetLocalStorageItem(STORAGE_KEYS.GOALS, JSON.stringify(goals));
+};
+
+export const saveGoals = (goals: SavingGoal[]) => {
+  saveGoalsLocalOnly(goals);
   void syncPatchToServer({ goals });
 };
 

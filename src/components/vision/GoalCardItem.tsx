@@ -1,28 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Image as ImageIcon, Pencil, Trash2 } from 'lucide-react';
+import { Check, Image as ImageIcon, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../../constants/categories';
-import { SavingGoal } from '../../types';
+import type { GoalVirtualSavingsSummary, SavingGoal } from '../../types';
 
 interface GoalCardItemProps {
   goal: SavingGoal;
   currency: string;
   isEditing: boolean;
+  virtualSummary?: GoalVirtualSavingsSummary;
   onStartEdit: (goal: SavingGoal) => void;
   onCancelEdit: () => void;
   onSaveEdit: (updatedGoal: SavingGoal) => void;
   onQuickAdd: (goal: SavingGoal, delta: number) => void;
   onRequestDelete: (goal: SavingGoal) => void;
+  onCreateChallenge?: (goalId: string) => void;
 }
 
 export const GoalCardItem: React.FC<GoalCardItemProps> = ({
   goal,
   currency,
   isEditing,
+  virtualSummary,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
   onQuickAdd,
   onRequestDelete,
+  onCreateChallenge,
 }) => {
   const [editTitle, setEditTitle] = useState(goal.title);
   const [editCurrentAmount, setEditCurrentAmount] = useState(String(goal.currentAmount));
@@ -208,7 +212,7 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
                 ></div>
               </div>
               <div className="flex items-center justify-between gap-2 pt-1">
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => onQuickAdd(goal, 50)}
@@ -223,11 +227,51 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
                   >
                     +€100
                   </button>
+                  {onCreateChallenge && (
+                    <button
+                      type="button"
+                      onClick={() => onCreateChallenge(goal.id)}
+                      className="ds-btn-secondary min-h-8 px-2 py-0.5 text-[11px]"
+                      title={`Crea sfida di risparmio per ${goal.title}`}
+                    >
+                      <Sparkles className="w-3 h-3 text-orange-600" aria-hidden="true" />
+                      <span>Sfida</span>
+                    </button>
+                  )}
                 </div>
-                <span className="text-[11px] text-stone-500 font-mono font-semibold">
+                <span className="text-[11px] text-stone-500 font-mono font-semibold shrink-0">
                   {percent}%
                 </span>
               </div>
+
+              {virtualSummary &&
+                (virtualSummary.totalVirtualApplied > 0 ||
+                  virtualSummary.activeChallengesCount > 0 ||
+                  virtualSummary.lastCompletedChallengeTitle) && (
+                  <div className="pt-2 border-t border-stone-200/70 text-[10px] text-stone-500 space-y-0.5">
+                    {virtualSummary.totalVirtualApplied > 0 && (
+                      <div className="font-mono text-emerald-700 font-semibold">
+                        Contributo virtuale sfide: +
+                        {formatCurrency(virtualSummary.totalVirtualApplied, currency)}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-x-2">
+                      {virtualSummary.activeChallengesCount > 0 && (
+                        <span>
+                          {virtualSummary.activeChallengesCount}{' '}
+                          {virtualSummary.activeChallengesCount === 1
+                            ? 'sfida attiva'
+                            : 'sfide attive'}
+                        </span>
+                      )}
+                      {virtualSummary.lastCompletedChallengeTitle && (
+                        <span className="truncate">
+                          Ultima completata: {virtualSummary.lastCompletedChallengeTitle}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
             </div>
           </>
         )}

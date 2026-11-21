@@ -11,6 +11,7 @@
 3. **Instant Camera / Gallery Receipt OCR** (client-side JPEG compression/EXIF stripping + server binary validation + Gemini Vision OCR).
 4. **Manual Entry, Custom Split Rules & Real-Time 50/50 Settlement** (including `trackingStartDate` / Starting Point, custom & hidden categories, CSV export).
 5. **Multi-Channel Reconciliation Engine (`±14d`), Zero-Amount Quarantine, Trip Mode & Recurring Tracker** (`src/services/reconciliation.ts`, SQLite `trips` & `recurring_expenses` tables, delayed Gmail/bank merge, `zero_quarantine` 1-tap resolution).
+6. **Couple Savings Challenges (Virtual Savings Engine)** (`server/services/savings-challenge-engine.ts`, `server/services/savings-challenges.service.ts`, integrated into Vision Board with server-authoritative calculation, optimistic version concurrency, idempotency keys, and atomic SQLite transactions).
 
 ---
 
@@ -21,7 +22,7 @@
 │                   CLIENT LAYER (Installable Chrome PWA)                    │
 │                                                                            │
 │  - React 19 SPA + Vite 8 + Tailwind CSS v4 (dark-mode default, CSS tokens) │
-│  - Service Worker (public/sw.js, shell cache 'duospend-shell-v7')          │
+│  - Service Worker (public/sw.js, shell cache 'duospend-shell-v8')          │
 │  - Installable Manifest (display: standalone, shortcuts, share_target GET) │
 │  - Accessibility: preserved browser zoom, safe-area insets, useFocusTrap,  │
 │    Escape modal dismissal, prefers-reduced-motion support                  │
@@ -46,6 +47,9 @@
 │  • POST /api/auth/google-session           (Token fallback when no secret) │
 │  • GET  /api/auth/session · POST /api/auth/logout                          │
 │  • GET  / POST /api/data                   (Couple SQLite ledger sync)     │
+│  • GET  / POST /api/savings-challenges     (List, estimate, create)        │
+│  • PATCH / DELETE /api/savings-challenges/:id · pause/resume/complete/recalc│
+│  • POST /api/savings-challenges/:id/confirm-contribution · revert · history│
 │  • POST /api/notifications/ingest          (MacroDroid/Tasker webhook)     │
 │  • POST /api/notifications/parse-history   (Batch alert extraction)        │
 │  • POST /api/gemini/parse-receipt          (Image validation + Vision OCR) │
@@ -84,10 +88,10 @@
 ### Chrome PWA Capabilities
 - **Installability & Manifest (`public/manifest.webmanifest`)**: `display: "standalone"` with `"minimal-ui"` fallback, `192x192` / `512x512` / maskable icons, 4 launcher shortcuts (`/?action=add-expense`, `/?action=paste-notification`, `/?action=scan-receipt`, `/saldo`), and Android Chrome `share_target` (`GET /?title=&text=&url=`).
 - **Service Worker & Cache Headers (`public/sw.js` & `server/app.ts`)**:
-  - `CACHE_NAME = 'duospend-shell-v7'`.
+  - `CACHE_NAME = 'duospend-shell-v8'`.
   - `/sw.js`, `/index.html`, and `/manifest.webmanifest` are served with `Cache-Control: no-cache, no-store, must-revalidate` so browser update checks always observe new deployments promptly.
   - `/assets/*` are served with `Cache-Control: public, max-age=31536000, immutable`.
-  - Navigation (`request.mode === 'navigate'`) uses network-first and refreshes `/index.html` cleanly in cache only for clean non-query navigation requests; `/api/*` responses are bypassed and never stored in Cache Storage.
+  - Navigation (`request.mode === 'navigate'`) uses network-first and refreshes `/index.html` cleanly in cache only for clean non-query navigation requests; `/api/*` responses (including `/api/savings-challenges*`) are bypassed and never stored in Cache Storage.
 - **Mobile Viewport, Safe Areas & Accessibility**:
   - `viewport` meta preserves user zoom (no `user-scalable=no`).
   - Layout, floating quick actions, bottom sheets, and alert dialogs include `env(safe-area-inset-*)` spacing and `100dvh` sizing.
@@ -121,11 +125,31 @@
    - Path inspection rejects encoded traversal, dotfiles (`.env`), SQLite files (`.sqlite*`), and backend routes; SSRF checks (`validateUbuntuSyncTarget`) block loopback/private targets except configured routes.
    - Global Express JSON error handler catches `entity.too.large` (`413`), malformed JSON (`400`), and unexpected errors (`500`) without exposing stack traces.
 3. **Rate Limiting (`server/app.ts`, 15-minute windows)**:
-   - Global `/api`: `300` | `/api/data`: `120` | `/api/gmail/sync`: `60` | `/api/gemini`: `40` | `/api/notifications`: `40` | `/api/dev`: `30` | `/api/auth/google-code`: `15` | `/api/auth/google-session`: `10` | `/api/auth/dev-login`: `5`.
-4. **Receipt Image & Upload Hardening (`src/components/camera/receiptOcrUtils.ts`, `server/utils/sanitizers.ts`)**:
+   - Global `/api`: `300` | `/api/data`: `120` | `/api/savings-challenges`: `80` | `/api/gmail/sync`: `60` | `/api/gemini`: `40` | `/api/notifications`: `40` | `/api/dev`: `30` | `/api/auth/google-code`: `15` | `/api/auth/google-session`: `10` | `/api/auth/dev-login`: `5`.
+4. **Couple Savings Challenges SQLite Schema & Guarantees (`server/database.ts`, `server/services/savings-challenges.service.ts`)**:
+   - **Additive tables**: `savings_challenges`, `savings_challenge_categories` (`FK CASCADE`), `savings_challenge_periods` (`UNIQUE(challenge_id, period_ym)`), `savings_challenge_contributions` (unique partial index on `idempotency_key`), `savings_challenge_history`, and `savings_challenge_idempotency` (24h TTL / bounded 500 entries).
+   - **Data migration & compatibility**: Existing SQLite databases upgrade automatically via `CREATE TABLE IF NOT EXISTS` without touching `expenses`, `settlements`, `goals`, `profile`, `trips`, `recurring_expenses`, or `gmail_scan_cache`. `savings_challenges.goal_id` is indexed and validated transactionally rather than declared as an `ON DELETE CASCADE` foreign key to `goals(id)` because `replaceGoals` refreshes `goals` during `/api/data` sync.
+   - **Authorization & Anti-Replay**: `/api/savings-challenges*` requires `requireCoupleAuth` (rejects `x-duospend-secret` webhooks with `401`, rejects unauthenticated/expired sessions with `401` and non-couple Google accounts with `403`), enforces `X-Requested-With: XMLHttpRequest` + `64 KB` body cap on mutations, validates IDs with `/^[A-Za-z0-9_-]{3,80}$/`, checks `expectedVersion` (`409` on concurrent edits), requires `confirmRetroactive: true` for retroactive changes (`409`), and executes contribution confirmations/reversions inside `BEGIN IMMEDIATE ... COMMIT` transactions with `Idempotency-Key` protection.
+   - **Backup & Restore**: `DeveloperModal` JSON export includes `savingsChallenges`; `SqliteDatabaseHandle` exposes `exportSavingsChallengesBackup()`, `restoreSavingsChallengesBackup()`, and `clearSavingsChallenges()`.
+   - **SQLite Schema Example (Additive)**:
+     ```sql
+     CREATE TABLE IF NOT EXISTS savings_challenges (
+       id TEXT PRIMARY KEY, title TEXT NOT NULL, goal_id TEXT NOT NULL,
+       monthly_limit REAL NOT NULL, currency TEXT NOT NULL, start_month TEXT NOT NULL,
+       duration_months INTEGER NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
+       status TEXT NOT NULL, split_scope TEXT NOT NULL DEFAULT 'all',
+       virtual_savings_accumulated REAL NOT NULL DEFAULT 0,
+       virtual_savings_applied REAL NOT NULL DEFAULT 0,
+       timezone TEXT NOT NULL DEFAULT 'Europe/Rome', version INTEGER NOT NULL DEFAULT 1
+     );
+     -- Child tables (FK ON DELETE CASCADE): savings_challenge_categories, savings_challenge_periods,
+     -- savings_challenge_contributions (with unique partial index on idempotency_key),
+     -- savings_challenge_history, plus bounded savings_challenge_idempotency (24h TTL).
+     ```
+5. **Receipt Image & Upload Hardening (`src/components/camera/receiptOcrUtils.ts`, `server/utils/sanitizers.ts`)**:
    - **Client**: `validateReceiptFile` checks non-empty size `<= 12 MB`, exact MIME (`image/jpeg`, `image/png`, `image/webp`), rejects path traversal/control characters, double executable extensions (`.php.jpg`, `.exe.png`, etc.), and extension-MIME mismatches; `compressReceiptImage` guards `> 8192px` / `> 25 MP` sources and canvas-reencodes to JPEG (`<= 1280px`) to strip client EXIF GPS.
    - **Server**: Express JSON cap `15 MB`; base64 string cap `14,000,000` chars; `MAX_DECODED_IMAGE_BYTES = 10 MB`; real magic-byte header validation; `extractRasterDimensions` checking PNG `IHDR`, JPEG `SOF*`, WebP `VP8/VP8L/VP8X` against `8192px` max side and `25,000,000` max pixels; polyglot script/PHP/HTML tag scanning; `stripJpegExifAndCommentSegments` removing JPEG `APP1` (`0xE1`) and `COM` (`0xFE`) segments before persistence/OCR.
-5. **Worker Watchdog & Prototype Pollution**:
+6. **Worker Watchdog & Prototype Pollution**:
    - `server/utils/background-worker.ts` enforces `WORKER_TIMEOUT_MS = 8_000`, terminating hung workers and falling back safely in-process.
    - `stripDangerousKeys` strips `__proto__`, `constructor`, and `prototype` recursively from untrusted payloads.
 
@@ -176,7 +200,8 @@
 ### Residual Risks & Operational Notes
 - **In-memory session persistence**: Google and Dev sessions live in Node.js process RAM (`200` / `50` entries). Container restarts require re-authentication, and horizontal multi-instance scaling would require an external session store.
 - **SQLite inline receipt photos**: Verified receipts remain base64 data URIs inside SQLite payloads; large histories can still encounter browser `localStorage` quota stripping (mitigated gracefully via `QuotaExceededError` fallback and server `receiptUrl` preservation).
-- **Offline multi-device edit collision**: Simultaneous offline edits by both partners on the *exact same transaction ID* resolve by last-reconnecting local-precedence overwrite.
+- **Offline multi-device edit collision**: Simultaneous offline edits by both partners on the *exact same transaction ID* resolve by last-reconnecting local-precedence overwrite. For savings challenges, mutations are server-authoritative (`expectedVersion` + `409 Conflict`) and blocked offline (read-only cached preview only).
+- **Savings challenge currency & PWA limits**: Challenges do not apply implicit FX conversion (foreign-currency expenses are excluded and flagged); Chrome PWAs cannot trigger silent end-of-month push notifications while closed.
 - **Webhook HTTPS requirement**: MacroDroid / external webhooks must travel over HTTPS (e.g., Cloudflare Tunnel / reverse proxy) so `x-duospend-secret` is encrypted in transit.
 
 ### Automated Verification Suites (`npm test`, `npm run lint`, `npm run build`)
@@ -185,8 +210,11 @@
 - `tests/developer-console.test.ts` (3 tests): production dual-auth dev tools & `RESET` confirmation gating.
 - `tests/fallback-parsers.test.ts` (8 tests): deterministic offline SMS/notification & email regex fallbacks.
 - `tests/google-auth-and-gmail.test.ts` (20 tests): couple authorization, token validation, Gmail pagination/confidence filtering/rules.
+- `tests/reconciliation-and-trips.test.ts` (8 tests): elastic `±14 day` cross-channel reconciliation, `0 €` quarantine completion, active `TripProject` auto-tagging + isolated 50/50 trip balance, `RecurringExpenseItem` cycle matching, and SQLite persistence.
+- `tests/savings-challenges-engine.test.ts` (8 tests): server-side virtual savings math (`max(0, limit - validSpend)`), zero/negative/extreme limits, leap years (`2028-02-29`), DST transitions, IANA timezones, currency exclusion without implicit FX, custom/orphaned categories, overlapping challenges, rounding, and setup estimates.
+- `tests/savings-challenges-api.test.ts` (7 tests): CRUD lifecycle, retroactive confirmation (`409`), deleted-expense recalculation, atomic contributions/reversions, idempotency replay/double-click protection, optimistic version conflict (`409`), simulated SQLite trigger crash rollback, legacy DB additive migration, backup/restore, DB reset, CSRF/payload-limit/XSS/IDOR/auth/webhook-rejection guards.
+- `tests/savings-challenges-ui.test.ts` (5 tests): Vision Board integration, 2-column desktop + mobile-first layout, ARIA/dialog/live-region accessibility, long names & extreme amounts, loading/empty/error/offline states, reconnect sync & `401` lock handling, SW `/api/*` bypass & `prefers-reduced-motion`.
 - `tests/server-security-and-data.test.ts` (17 tests): XSS/prototype-pollution stripping, path traversal, SSRF, `x-duospend-secret` route scoping, magic bytes, PNG decompression bomb rejection, polyglot rejection, JPEG EXIF `APP1`/`COM` stripping, and filename/MIME validation.
 - `tests/settlement.test.ts` (5 tests): 50/50, personal, custom split, and settlement balance math.
 - `tests/sqlite-database.test.ts` (10 tests): SQLite WAL persistence, schema migrations, ID deduplication, Gmail 30-day cache.
 - `tests/storage-and-gemini-resilience.test.ts` (4 tests): `QuotaExceededError` handling, Gemini transient cooldown/fallback, and offline dirty-sync local-precedence merge preserving `receiptUrl`.
-- `tests/reconciliation-and-trips.test.ts` (8 tests): elastic `±14 day` cross-channel reconciliation (delayed Gmail syncs after bank notifications), `0 €` quarantine completion (`zero_quarantine`), positive amount & cycle-separation guards, active `TripProject` auto-tagging + isolated 50/50 trip balance, `RecurringExpenseItem` cycle matching, and SQLite persistence for `trips` / `recurring_expenses` / reconciliation metadata.

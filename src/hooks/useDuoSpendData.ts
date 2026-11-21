@@ -13,6 +13,7 @@ import {
   saveExpenses,
   saveGmailRecurringRules,
   saveGoals,
+  saveGoalsLocalOnly,
   saveIgnoredGmailMessageIds,
   saveProfile,
   saveRecurringExpenses,
@@ -736,6 +737,27 @@ export function useDuoSpendData() {
     });
   }, []);
 
+  const handleSyncGoalFromServer = useCallback((updatedGoal: SavingGoal) => {
+    setGoals((current) => {
+      const exists = current.some((g) => g.id === updatedGoal.id);
+      const updated = exists
+        ? current.map((g) => (g.id === updatedGoal.id ? updatedGoal : g))
+        : [...current, updatedGoal];
+      saveGoalsLocalOnly(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleSyncGoalsFromServer = useCallback((updatedGoals: SavingGoal[]) => {
+    if (updatedGoals.length === 0) return;
+    setGoals((current) => {
+      const byId = new Map(updatedGoals.map((g) => [g.id, g]));
+      const updated = current.map((g) => byId.get(g.id) ?? g);
+      saveGoalsLocalOnly(updated);
+      return updated;
+    });
+  }, []);
+
   return {
     expenses: activeExpenses,
     allExpenses: expenses,
@@ -790,5 +812,7 @@ export function useDuoSpendData() {
     handleAddGoal,
     handleUpdateGoal,
     handleDeleteGoal,
+    handleSyncGoalFromServer,
+    handleSyncGoalsFromServer,
   };
 }

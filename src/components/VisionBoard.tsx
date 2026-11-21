@@ -1,30 +1,47 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Check, Plus, Sparkles, X } from 'lucide-react';
 import { computeGoalsSavingsOverview } from '../services/analytics-math';
-import { SavingGoal, CoupleProfile } from '../types';
+import {
+  CoupleProfile,
+  Expense,
+  GoalVirtualSavingsSummary,
+  SavingGoal,
+} from '../types';
 import { GoalsSavingsOverview } from './charts/GoalsSavingsOverview';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { GoalCardItem } from './vision/GoalCardItem';
+import { SavingsChallengesSection } from './vision/SavingsChallengesSection';
 import { VisionImageGenerator } from './vision/VisionImageGenerator';
 
 interface VisionBoardProps {
   goals: SavingGoal[];
+  expenses?: Expense[];
   profile: CoupleProfile;
   onUpdateGoalImage: (goalId: string, imageUrl: string, resolution: string) => void;
   onAddGoal: (goal: SavingGoal) => void;
   onUpdateGoal: (goal: SavingGoal) => void;
   onDeleteGoal: (id: string) => void;
+  onSyncGoalFromServer?: (goal: SavingGoal) => void;
+  onSyncGoalsFromServer?: (goals: SavingGoal[]) => void;
 }
 
 export const VisionBoard: React.FC<VisionBoardProps> = ({
   goals,
+  expenses = [],
   profile,
   onUpdateGoalImage,
   onAddGoal,
   onUpdateGoal,
   onDeleteGoal,
+  onSyncGoalFromServer,
+  onSyncGoalsFromServer,
 }) => {
   const [lastCreatedGoalId, setLastCreatedGoalId] = useState<string | undefined>(undefined);
+  const [goalSummaries, setGoalSummaries] = useState<GoalVirtualSavingsSummary[]>([]);
+  const [challengeGoalRequest, setChallengeGoalRequest] = useState<{
+    goalId: string;
+    nonce: number;
+  } | null>(null);
 
   // Stato creazione nuovo obiettivo
   const [isAddingGoal, setIsAddingGoal] = useState(false);
@@ -93,6 +110,26 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
     [goals]
   );
 
+  const goalSummaryById = useMemo(() => {
+    const map = new Map<string, GoalVirtualSavingsSummary>();
+    for (const item of goalSummaries) {
+      map.set(item.goalId, item);
+    }
+    return map;
+  }, [goalSummaries]);
+
+  const handleRequestCreateGoalFromChallenge = useCallback(() => {
+    setIsAddingGoal(true);
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById('vision-goals-section')?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }, []);
+
   return (
     <div className="space-y-5 sm:space-y-6">
       {/* Intestazione */}
@@ -133,6 +170,18 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
         />
       )}
 
+      {/* Sezione Sfide di Risparmio di Coppia */}
+      <SavingsChallengesSection
+        goals={goals}
+        expenses={expenses}
+        profile={profile}
+        onGoalSummariesChange={setGoalSummaries}
+        onSyncGoalFromServer={onSyncGoalFromServer}
+        onSyncGoalsFromServer={onSyncGoalsFromServer}
+        onRequestCreateGoal={handleRequestCreateGoalFromChallenge}
+        createForGoalRequest={challengeGoalRequest}
+      />
+
       {/* Sezione Generatore Immagini */}
       <VisionImageGenerator
         goals={goals}
@@ -141,7 +190,7 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
       />
 
       {/* Elenco Traguardi Attivi */}
-      <div className="ds-card p-5 sm:p-6 space-y-4">
+      <div id="vision-goals-section" className="ds-card p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-stone-900 font-display">
@@ -279,11 +328,15 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
                     goal={goal}
                     currency={profile.currency}
                     isEditing={editingGoalId === goal.id}
+                    virtualSummary={goalSummaryById.get(goal.id)}
                     onStartEdit={(targetGoal) => setEditingGoalId(targetGoal.id)}
                     onCancelEdit={() => setEditingGoalId(null)}
                     onSaveEdit={handleSaveGoalEdit}
                     onQuickAdd={handleQuickAdd}
                     onRequestDelete={(targetGoal) => setGoalPendingDelete(targetGoal)}
+                    onCreateChallenge={(targetGoalId) =>
+                      setChallengeGoalRequest({ goalId: targetGoalId, nonce: Date.now() })
+                    }
                   />
                 </div>
               </div>

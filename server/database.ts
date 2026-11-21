@@ -7,19 +7,28 @@ import type {
   Expense,
   RecurringExpenseItem,
   SavingGoal,
+  SavingsChallengePeriodStatus,
+  SavingsChallengeSplitScope,
+  SavingsChallengeStatus,
   Settlement,
   TripProject,
 } from '../src/types';
 import {
   buildAllowedCategorySet,
+  isValidSafeEntityId,
+  sanitizeChallengeLimit,
   sanitizeCustomCategories,
+  sanitizeDurationMonths,
   sanitizeExpenseRecord,
   sanitizeGoalRecord,
+  sanitizeIanaTimeZone,
+  sanitizeIsoDate,
   sanitizePlainText,
   sanitizeProfileRecord,
   sanitizeRecurringExpenseRecord,
   sanitizeSettlementRecord,
   sanitizeTripRecord,
+  sanitizeYearMonth,
   stripDangerousKeys,
 } from './utils/security';
 
@@ -27,6 +36,93 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SAFE_GMAIL_CACHE_MESSAGE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_GMAIL_SCAN_CACHE_ENTRIES = 2000;
 const MAX_GMAIL_CACHE_BLOB_CHARS = 32_000;
+
+export interface SavingsChallengeRowBackup {
+  id: string;
+  title: string;
+  goalId: string;
+  goalTitleSnapshot: string;
+  monthlyLimit: number;
+  currency: string;
+  startMonth: string;
+  durationMonths: number;
+  startDate: string;
+  endDate: string;
+  status: SavingsChallengeStatus;
+  splitScope: SavingsChallengeSplitScope;
+  initialSpend: number;
+  currentValidSpend: number;
+  virtualSavingsAccumulated: number;
+  virtualSavingsApplied: number;
+  lastReconciledAt?: string;
+  lastCalculationError?: string;
+  timezone: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface SavingsChallengeCategoryRowBackup {
+  challengeId: string;
+  categoryName: string;
+  position: number;
+}
+
+export interface SavingsChallengePeriodRowBackup {
+  id: string;
+  challengeId: string;
+  periodYm: string;
+  startDate: string;
+  endDate: string;
+  monthlyLimit: number;
+  validSpend: number;
+  virtualSavingsPotential: number;
+  virtualSavingsApplied: number;
+  matchedExpenseCount: number;
+  excludedExpenseCount: number;
+  calculationMetaJson?: string;
+  status: SavingsChallengePeriodStatus;
+  reconciledAt?: string;
+  calculationError?: string;
+}
+
+export interface SavingsChallengeContributionRowBackup {
+  id: string;
+  challengeId: string;
+  periodYm?: string;
+  goalId: string;
+  goalTitleSnapshot: string;
+  amount: number;
+  currency: string;
+  status: 'applied' | 'reverted';
+  note?: string;
+  idempotencyKey?: string;
+  createdBy: string;
+  createdAt: string;
+  revertedAt?: string;
+  revertedBy?: string;
+  revertReason?: string;
+}
+
+export interface SavingsChallengeHistoryRowBackup {
+  id: string;
+  challengeId: string;
+  action: string;
+  actor: string;
+  summary: string;
+  beforeJson?: string;
+  afterJson?: string;
+  createdAt: string;
+}
+
+export interface SavingsChallengesBackupSnapshot {
+  challenges: SavingsChallengeRowBackup[];
+  categories: SavingsChallengeCategoryRowBackup[];
+  periods: SavingsChallengePeriodRowBackup[];
+  contributions: SavingsChallengeContributionRowBackup[];
+  history: SavingsChallengeHistoryRowBackup[];
+}
 
 export interface ServerDatabase {
   expenses: Expense[];
@@ -37,6 +133,7 @@ export interface ServerDatabase {
   gmailScanCache?: GmailScanCacheEntry[];
   trips?: TripProject[];
   recurringExpenses?: RecurringExpenseItem[];
+  savingsChallengesBackup?: SavingsChallengesBackupSnapshot;
 }
 
 export interface GmailScanCacheEntry {
@@ -69,6 +166,11 @@ export interface SqliteDatabaseHandle {
   readAiModelRegistry: () => AiModelRegistryEntry[];
   upsertAiModelRegistry: (entries: AiModelRegistryEntry[]) => void;
   resetDatabase: () => ServerDatabase;
+  withTransaction: <T>(action: (db: DatabaseSync) => T) => T;
+  getRawDatabase: () => DatabaseSync;
+  exportSavingsChallengesBackup: () => SavingsChallengesBackupSnapshot;
+  restoreSavingsChallengesBackup: (snapshot: SavingsChallengesBackupSnapshot) => void;
+  clearSavingsChallenges: () => void;
   close: () => void;
 }
 
@@ -541,6 +643,111 @@ function initializeSchema(db: DatabaseSync): void {
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_ai_model_registry_expires_at ON ai_model_registry (expires_at);
+
+    CREATE TABLE IF NOT EXISTS savings_challenges (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      goal_id TEXT NOT NULL,
+      goal_title_snapshot TEXT NOT NULL,
+      monthly_limit REAL NOT NULL,
+      currency TEXT NOT NULL,
+      start_month TEXT NOT NULL,
+      duration_months INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      status TEXT NOT NULL,
+      split_scope TEXT NOT NULL DEFAULT 'all',
+      initial_spend REAL NOT NULL DEFAULT 0,
+      current_valid_spend REAL NOT NULL DEFAULT 0,
+      virtual_savings_accumulated REAL NOT NULL DEFAULT 0,
+      virtual_savings_applied REAL NOT NULL DEFAULT 0,
+      last_reconciled_at TEXT,
+      last_calculation_error TEXT,
+      timezone TEXT NOT NULL DEFAULT 'Europe/Rome',
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_savings_challenges_goal_id ON savings_challenges (goal_id);
+    CREATE INDEX IF NOT EXISTS idx_savings_challenges_status ON savings_challenges (status);
+    CREATE INDEX IF NOT EXISTS idx_savings_challenges_dates ON savings_challenges (start_date, end_date);
+
+    CREATE TABLE IF NOT EXISTS savings_challenge_categories (
+      challenge_id TEXT NOT NULL,
+      category_name TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (challenge_id, category_name),
+      FOREIGN KEY (challenge_id) REFERENCES savings_challenges(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_savings_challenge_categories_name ON savings_challenge_categories (category_name);
+
+    CREATE TABLE IF NOT EXISTS savings_challenge_periods (
+      id TEXT PRIMARY KEY,
+      challenge_id TEXT NOT NULL,
+      period_ym TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      monthly_limit REAL NOT NULL,
+      valid_spend REAL NOT NULL DEFAULT 0,
+      virtual_savings_potential REAL NOT NULL DEFAULT 0,
+      virtual_savings_applied REAL NOT NULL DEFAULT 0,
+      matched_expense_count INTEGER NOT NULL DEFAULT 0,
+      excluded_expense_count INTEGER NOT NULL DEFAULT 0,
+      calculation_meta_json TEXT,
+      status TEXT NOT NULL,
+      reconciled_at TEXT,
+      calculation_error TEXT,
+      UNIQUE (challenge_id, period_ym),
+      FOREIGN KEY (challenge_id) REFERENCES savings_challenges(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_savings_challenge_periods_challenge ON savings_challenge_periods (challenge_id, period_ym);
+
+    CREATE TABLE IF NOT EXISTS savings_challenge_contributions (
+      id TEXT PRIMARY KEY,
+      challenge_id TEXT NOT NULL,
+      period_ym TEXT,
+      goal_id TEXT NOT NULL,
+      goal_title_snapshot TEXT NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT,
+      idempotency_key TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      reverted_at TEXT,
+      reverted_by TEXT,
+      revert_reason TEXT,
+      FOREIGN KEY (challenge_id) REFERENCES savings_challenges(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_savings_challenge_contributions_challenge ON savings_challenge_contributions (challenge_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_savings_challenge_contributions_goal ON savings_challenge_contributions (goal_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_savings_challenge_contributions_idem ON savings_challenge_contributions (idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS savings_challenge_history (
+      id TEXT PRIMARY KEY,
+      challenge_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      before_json TEXT,
+      after_json TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (challenge_id) REFERENCES savings_challenges(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_savings_challenge_history_challenge_time ON savings_challenge_history (challenge_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS savings_challenge_idempotency (
+      idempotency_key TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      challenge_id TEXT,
+      response_status INTEGER NOT NULL,
+      response_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_savings_challenge_idempotency_expires ON savings_challenge_idempotency (expires_at);
   `);
 
   const expenseCols = db.prepare('PRAGMA table_info(expenses)').all() as Array<{ name?: string }>;
@@ -873,6 +1080,202 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       });
   };
 
+  const ALLOWED_CHALLENGE_STATUSES = new Set<SavingsChallengeStatus>([
+    'active',
+    'paused',
+    'completed',
+    'cancelled',
+  ]);
+  const ALLOWED_PERIOD_STATUSES = new Set<SavingsChallengePeriodStatus>([
+    'upcoming',
+    'active',
+    'completed',
+    'paused',
+    'cancelled',
+    'needs_recalculation',
+  ]);
+
+  const clearChallengesTablesInTx = () => {
+    db.exec('DELETE FROM savings_challenges');
+    db.exec('DELETE FROM savings_challenge_idempotency');
+  };
+
+  const insertChallengeBackupStmt = db.prepare(`
+    INSERT INTO savings_challenges (
+      id, title, goal_id, goal_title_snapshot, monthly_limit, currency,
+      start_month, duration_months, start_date, end_date, status, split_scope,
+      initial_spend, current_valid_spend, virtual_savings_accumulated, virtual_savings_applied,
+      last_reconciled_at, last_calculation_error, timezone, created_by, created_at, updated_at, version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertChallengeCatBackupStmt = db.prepare(`
+    INSERT INTO savings_challenge_categories (challenge_id, category_name, position)
+    VALUES (?, ?, ?)
+    ON CONFLICT(challenge_id, category_name) DO UPDATE SET position = excluded.position
+  `);
+
+  const insertChallengePeriodBackupStmt = db.prepare(`
+    INSERT INTO savings_challenge_periods (
+      id, challenge_id, period_ym, start_date, end_date, monthly_limit, valid_spend,
+      virtual_savings_potential, virtual_savings_applied, matched_expense_count,
+      excluded_expense_count, calculation_meta_json, status, reconciled_at, calculation_error
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertChallengeContribBackupStmt = db.prepare(`
+    INSERT INTO savings_challenge_contributions (
+      id, challenge_id, period_ym, goal_id, goal_title_snapshot, amount, currency,
+      status, note, idempotency_key, created_by, created_at, reverted_at, reverted_by, revert_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertChallengeHistoryBackupStmt = db.prepare(`
+    INSERT INTO savings_challenge_history (
+      id, challenge_id, action, actor, summary, before_json, after_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const replaceSavingsChallengesBackupInTx = (rawSnapshot: SavingsChallengesBackupSnapshot) => {
+    const safeSnapshot = stripDangerousKeys(rawSnapshot);
+    clearChallengesTablesInTx();
+    if (!safeSnapshot || typeof safeSnapshot !== 'object') return;
+
+    const validChallengeIds = new Set<string>();
+    const challenges = Array.isArray(safeSnapshot.challenges) ? safeSnapshot.challenges.slice(0, 200) : [];
+    for (const ch of challenges) {
+      if (!ch || !isValidSafeEntityId(ch.id) || !isValidSafeEntityId(ch.goalId)) continue;
+      const limit = sanitizeChallengeLimit(ch.monthlyLimit);
+      const startMonth = sanitizeYearMonth(ch.startMonth);
+      const durationMonths = sanitizeDurationMonths(ch.durationMonths);
+      if (limit === null || !startMonth || durationMonths === null) continue;
+      const status = ALLOWED_CHALLENGE_STATUSES.has(ch.status) ? ch.status : 'active';
+      const splitScope: SavingsChallengeSplitScope =
+        ch.splitScope === 'shared_only' ? 'shared_only' : 'all';
+      const currency =
+        typeof ch.currency === 'string' && /^[A-Z]{3}$/.test(ch.currency.trim().toUpperCase())
+          ? ch.currency.trim().toUpperCase()
+          : 'EUR';
+      const timezone = sanitizeIanaTimeZone(ch.timezone, 'Europe/Rome');
+      const nowIso = new Date().toISOString();
+
+      insertChallengeBackupStmt.run(
+        ch.id,
+        sanitizePlainText(ch.title, 100, 'Sfida di Risparmio'),
+        ch.goalId,
+        sanitizePlainText(ch.goalTitleSnapshot, 160, 'Obiettivo di Coppia'),
+        limit,
+        currency,
+        startMonth,
+        durationMonths,
+        sanitizeIsoDate(ch.startDate),
+        sanitizeIsoDate(ch.endDate),
+        status,
+        splitScope,
+        Math.max(0, Math.round((Number(ch.initialSpend) || 0) * 100) / 100),
+        Math.max(0, Math.round((Number(ch.currentValidSpend) || 0) * 100) / 100),
+        Math.max(0, Math.round((Number(ch.virtualSavingsAccumulated) || 0) * 100) / 100),
+        Math.max(0, Math.round((Number(ch.virtualSavingsApplied) || 0) * 100) / 100),
+        ch.lastReconciledAt ? sanitizePlainText(ch.lastReconciledAt, 40) : null,
+        ch.lastCalculationError ? sanitizePlainText(ch.lastCalculationError, 240) : null,
+        timezone,
+        sanitizePlainText(ch.createdBy, 100, 'Coppia'),
+        sanitizePlainText(ch.createdAt, 40, nowIso),
+        sanitizePlainText(ch.updatedAt, 40, nowIso),
+        Math.max(1, Math.floor(Number(ch.version) || 1))
+      );
+      validChallengeIds.add(ch.id);
+    }
+
+    const categories = Array.isArray(safeSnapshot.categories) ? safeSnapshot.categories.slice(0, 4000) : [];
+    for (const cat of categories) {
+      if (!cat || !validChallengeIds.has(cat.challengeId)) continue;
+      const cleanName = sanitizePlainText(cat.categoryName, 60);
+      if (!cleanName) continue;
+      insertChallengeCatBackupStmt.run(
+        cat.challengeId,
+        cleanName,
+        Math.max(0, Math.floor(Number(cat.position) || 0))
+      );
+    }
+
+    const periods = Array.isArray(safeSnapshot.periods) ? safeSnapshot.periods.slice(0, 2400) : [];
+    for (const period of periods) {
+      if (!period || !validChallengeIds.has(period.challengeId)) continue;
+      const periodYm = sanitizeYearMonth(period.periodYm);
+      if (!periodYm) continue;
+      const periodId = sanitizePlainText(period.id, 120, `${period.challengeId}:${periodYm}`);
+      insertChallengePeriodBackupStmt.run(
+        periodId,
+        period.challengeId,
+        periodYm,
+        sanitizeIsoDate(period.startDate),
+        sanitizeIsoDate(period.endDate),
+        Math.max(0, Math.round((Number(period.monthlyLimit) || 0) * 100) / 100),
+        Math.max(0, Math.round((Number(period.validSpend) || 0) * 100) / 100),
+        Math.max(0, Math.round((Number(period.virtualSavingsPotential) || 0) * 100) / 100),
+        Math.max(0, Math.round((Number(period.virtualSavingsApplied) || 0) * 100) / 100),
+        Math.max(0, Math.floor(Number(period.matchedExpenseCount) || 0)),
+        Math.max(0, Math.floor(Number(period.excludedExpenseCount) || 0)),
+        typeof period.calculationMetaJson === 'string'
+          ? period.calculationMetaJson.slice(0, 16_000)
+          : null,
+        ALLOWED_PERIOD_STATUSES.has(period.status) ? period.status : 'active',
+        period.reconciledAt ? sanitizePlainText(period.reconciledAt, 40) : null,
+        period.calculationError ? sanitizePlainText(period.calculationError, 240) : null
+      );
+    }
+
+    const contributions = Array.isArray(safeSnapshot.contributions)
+      ? safeSnapshot.contributions.slice(0, 5000)
+      : [];
+    for (const contrib of contributions) {
+      if (!contrib || !validChallengeIds.has(contrib.challengeId) || !isValidSafeEntityId(contrib.id)) {
+        continue;
+      }
+      const amount = Math.round((Number(contrib.amount) || 0) * 100) / 100;
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const currency =
+        typeof contrib.currency === 'string' && /^[A-Z]{3}$/.test(contrib.currency.trim().toUpperCase())
+          ? contrib.currency.trim().toUpperCase()
+          : 'EUR';
+      insertChallengeContribBackupStmt.run(
+        contrib.id,
+        contrib.challengeId,
+        contrib.periodYm ? sanitizeYearMonth(contrib.periodYm) : null,
+        sanitizePlainText(contrib.goalId, 80, 'goal'),
+        sanitizePlainText(contrib.goalTitleSnapshot, 160, 'Obiettivo di Coppia'),
+        amount,
+        currency,
+        contrib.status === 'reverted' ? 'reverted' : 'applied',
+        contrib.note ? sanitizePlainText(contrib.note, 300) : null,
+        contrib.idempotencyKey ? sanitizePlainText(contrib.idempotencyKey, 128) : null,
+        sanitizePlainText(contrib.createdBy, 100, 'Coppia'),
+        sanitizePlainText(contrib.createdAt, 40, new Date().toISOString()),
+        contrib.revertedAt ? sanitizePlainText(contrib.revertedAt, 40) : null,
+        contrib.revertedBy ? sanitizePlainText(contrib.revertedBy, 100) : null,
+        contrib.revertReason ? sanitizePlainText(contrib.revertReason, 300) : null
+      );
+    }
+
+    const history = Array.isArray(safeSnapshot.history) ? safeSnapshot.history.slice(0, 10_000) : [];
+    for (const entry of history) {
+      if (!entry || !validChallengeIds.has(entry.challengeId) || !isValidSafeEntityId(entry.id)) {
+        continue;
+      }
+      insertChallengeHistoryBackupStmt.run(
+        entry.id,
+        entry.challengeId,
+        sanitizePlainText(entry.action, 60, 'updated'),
+        sanitizePlainText(entry.actor, 100, 'Coppia'),
+        sanitizePlainText(entry.summary, 400, 'Aggiornamento'),
+        typeof entry.beforeJson === 'string' ? entry.beforeJson.slice(0, 16_000) : null,
+        typeof entry.afterJson === 'string' ? entry.afterJson.slice(0, 16_000) : null,
+        sanitizePlainText(entry.createdAt, 40, new Date().toISOString())
+      );
+    }
+  };
+
   const seedFullDatabase = (seed: ServerDatabase) => {
     runInTransaction(db, () => {
       replaceExpenses(seed.expenses);
@@ -882,6 +1285,11 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       replaceRecurringExpenses(seed.recurringExpenses ?? []);
       saveProfile(seed.profile, seed.lastUpdated);
       replaceGmailScanCache(seed.gmailScanCache ?? []);
+      if (seed.savingsChallengesBackup) {
+        replaceSavingsChallengesBackupInTx(seed.savingsChallengesBackup);
+      } else {
+        clearChallengesTablesInTx();
+      }
     });
   };
 
@@ -1116,6 +1524,9 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       if (patch.gmailScanCache !== undefined) {
         replaceGmailScanCache(patch.gmailScanCache);
       }
+      if (patch.savingsChallengesBackup !== undefined) {
+        replaceSavingsChallengesBackupInTx(patch.savingsChallengesBackup);
+      }
       if (patch.profile !== undefined) {
         saveProfile(patch.profile, timestamp);
       } else {
@@ -1241,6 +1652,113 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
     return readDatabase();
   };
 
+  const exportSavingsChallengesBackup = (): SavingsChallengesBackupSnapshot => {
+    const challengeRows = db
+      .prepare('SELECT * FROM savings_challenges ORDER BY created_at DESC')
+      .all() as Array<Record<string, unknown>>;
+    const categoryRows = db
+      .prepare('SELECT * FROM savings_challenge_categories ORDER BY challenge_id ASC, position ASC')
+      .all() as Array<Record<string, unknown>>;
+    const periodRows = db
+      .prepare('SELECT * FROM savings_challenge_periods ORDER BY challenge_id ASC, period_ym ASC')
+      .all() as Array<Record<string, unknown>>;
+    const contribRows = db
+      .prepare('SELECT * FROM savings_challenge_contributions ORDER BY created_at DESC')
+      .all() as Array<Record<string, unknown>>;
+    const historyRows = db
+      .prepare('SELECT * FROM savings_challenge_history ORDER BY created_at DESC')
+      .all() as Array<Record<string, unknown>>;
+
+    return {
+      challenges: challengeRows.map((row) => ({
+        id: String(row.id),
+        title: String(row.title),
+        goalId: String(row.goal_id),
+        goalTitleSnapshot: String(row.goal_title_snapshot),
+        monthlyLimit: Number(row.monthly_limit),
+        currency: String(row.currency),
+        startMonth: String(row.start_month),
+        durationMonths: Number(row.duration_months),
+        startDate: String(row.start_date),
+        endDate: String(row.end_date),
+        status: row.status as SavingsChallengeStatus,
+        splitScope: (row.split_scope === 'shared_only' ? 'shared_only' : 'all') as SavingsChallengeSplitScope,
+        initialSpend: Number(row.initial_spend ?? 0),
+        currentValidSpend: Number(row.current_valid_spend ?? 0),
+        virtualSavingsAccumulated: Number(row.virtual_savings_accumulated ?? 0),
+        virtualSavingsApplied: Number(row.virtual_savings_applied ?? 0),
+        ...(row.last_reconciled_at ? { lastReconciledAt: String(row.last_reconciled_at) } : {}),
+        ...(row.last_calculation_error ? { lastCalculationError: String(row.last_calculation_error) } : {}),
+        timezone: String(row.timezone ?? 'Europe/Rome'),
+        createdBy: String(row.created_by),
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+        version: Number(row.version ?? 1),
+      })),
+      categories: categoryRows.map((row) => ({
+        challengeId: String(row.challenge_id),
+        categoryName: String(row.category_name),
+        position: Number(row.position ?? 0),
+      })),
+      periods: periodRows.map((row) => ({
+        id: String(row.id),
+        challengeId: String(row.challenge_id),
+        periodYm: String(row.period_ym),
+        startDate: String(row.start_date),
+        endDate: String(row.end_date),
+        monthlyLimit: Number(row.monthly_limit),
+        validSpend: Number(row.valid_spend ?? 0),
+        virtualSavingsPotential: Number(row.virtual_savings_potential ?? 0),
+        virtualSavingsApplied: Number(row.virtual_savings_applied ?? 0),
+        matchedExpenseCount: Number(row.matched_expense_count ?? 0),
+        excludedExpenseCount: Number(row.excluded_expense_count ?? 0),
+        ...(row.calculation_meta_json ? { calculationMetaJson: String(row.calculation_meta_json) } : {}),
+        status: row.status as SavingsChallengePeriodStatus,
+        ...(row.reconciled_at ? { reconciledAt: String(row.reconciled_at) } : {}),
+        ...(row.calculation_error ? { calculationError: String(row.calculation_error) } : {}),
+      })),
+      contributions: contribRows.map((row) => ({
+        id: String(row.id),
+        challengeId: String(row.challenge_id),
+        ...(row.period_ym ? { periodYm: String(row.period_ym) } : {}),
+        goalId: String(row.goal_id),
+        goalTitleSnapshot: String(row.goal_title_snapshot),
+        amount: Number(row.amount),
+        currency: String(row.currency),
+        status: (row.status === 'reverted' ? 'reverted' : 'applied') as 'applied' | 'reverted',
+        ...(row.note ? { note: String(row.note) } : {}),
+        ...(row.idempotency_key ? { idempotencyKey: String(row.idempotency_key) } : {}),
+        createdBy: String(row.created_by),
+        createdAt: String(row.created_at),
+        ...(row.reverted_at ? { revertedAt: String(row.reverted_at) } : {}),
+        ...(row.reverted_by ? { revertedBy: String(row.reverted_by) } : {}),
+        ...(row.revert_reason ? { revertReason: String(row.revert_reason) } : {}),
+      })),
+      history: historyRows.map((row) => ({
+        id: String(row.id),
+        challengeId: String(row.challenge_id),
+        action: String(row.action),
+        actor: String(row.actor),
+        summary: String(row.summary),
+        ...(row.before_json ? { beforeJson: String(row.before_json) } : {}),
+        ...(row.after_json ? { afterJson: String(row.after_json) } : {}),
+        createdAt: String(row.created_at),
+      })),
+    };
+  };
+
+  const restoreSavingsChallengesBackup = (snapshot: SavingsChallengesBackupSnapshot): void => {
+    runInTransaction(db, () => {
+      replaceSavingsChallengesBackupInTx(snapshot);
+    });
+  };
+
+  const clearSavingsChallenges = (): void => {
+    runInTransaction(db, () => {
+      clearChallengesTablesInTx();
+    });
+  };
+
   return {
     readDatabase,
     writeDatabase,
@@ -1248,6 +1766,12 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
     readAiModelRegistry,
     upsertAiModelRegistry,
     resetDatabase,
+    withTransaction: <T>(action: (rawDb: DatabaseSync) => T): T =>
+      runInTransaction(db, () => action(db)),
+    getRawDatabase: () => db,
+    exportSavingsChallengesBackup,
+    restoreSavingsChallengesBackup,
+    clearSavingsChallenges,
     close: () => db.close(),
   };
 }
@@ -1259,6 +1783,10 @@ function getDefaultDatabase(): SqliteDatabaseHandle {
     defaultInstance = createSqliteDatabase();
   }
   return defaultInstance;
+}
+
+export function getDefaultDatabaseHandle(): SqliteDatabaseHandle {
+  return getDefaultDatabase();
 }
 
 export function readDatabase(): ServerDatabase {

@@ -12,7 +12,8 @@ DuoSpend is a React 19, Vite 8, Express 4 and Node.js 22 SQLite personal-finance
 - Use the existing sanitizers for all external text, URLs, image payloads, profile fields and database records.
 - Keep the SQLite schema and migration behavior compatible. Do not delete or expose user data.
 - Keep API responses, logs and PWA caches free of secrets and personal information.
-- Do not cache `/api/*`, authentication responses or user-generated data in the Service Worker.
+- Do not cache `/api/*` (including `/api/savings-challenges*`), authentication responses or user-generated data in the Service Worker.
+- Keep Couple Savings Challenges strictly virtual (no real bank transfers), computed server-side in SQLite (`server/services/savings-challenge-engine.ts` and `savings-challenges.service.ts`), guarded by `requireCoupleAuth` (never webhook secrets), idempotency keys, optimistic version checks, and atomic transactions.
 
 ## Security requirements
 

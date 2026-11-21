@@ -200,6 +200,8 @@ export default function App() {
     handleAddGoal,
     handleUpdateGoal,
     handleDeleteGoal,
+    handleSyncGoalFromServer,
+    handleSyncGoalsFromServer,
   } = useDuoSpendData();
 
   useEffect(() => {
@@ -519,11 +521,14 @@ export default function App() {
           {currentTab === 'vision' && (
             <VisionBoard
               goals={goals}
+              expenses={expenses}
               profile={profile}
               onUpdateGoalImage={handleUpdateGoalImage}
               onAddGoal={handleAddGoal}
               onUpdateGoal={handleUpdateGoal}
               onDeleteGoal={handleDeleteGoal}
+              onSyncGoalFromServer={handleSyncGoalFromServer}
+              onSyncGoalsFromServer={handleSyncGoalsFromServer}
             />
           )}
         </Suspense>

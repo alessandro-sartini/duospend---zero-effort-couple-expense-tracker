@@ -7,6 +7,7 @@ import {
   UBUNTU_SERVER_TOKEN,
   UBUNTU_SERVER_URL,
 } from '../config';
+import * as databaseModule from '../database';
 import { readDatabase, resetDatabase, writeDatabase } from '../database';
 import { HttpError } from '../utils/http-error';
 import { validateUbuntuSyncTarget } from '../utils/security';
@@ -18,6 +19,12 @@ function getFileSizeSafe(filePath: string): number {
 export function getDeveloperStatus() {
   const dbSizeBytes = getFileSizeSafe(DB_FILE) + getFileSizeSafe(`${DB_FILE}-wal`);
   const db = readDatabase();
+  const getHandle = (databaseModule as { getDefaultDatabaseHandle?: typeof databaseModule.getDefaultDatabaseHandle })
+    .getDefaultDatabaseHandle;
+  const savingsChallengesCount =
+    typeof getHandle === 'function'
+      ? getHandle().exportSavingsChallengesBackup().challenges.length
+      : db.savingsChallengesBackup?.challenges.length ?? 0;
 
   return {
     success: true,
@@ -29,6 +36,7 @@ export function getDeveloperStatus() {
       expenses: db.expenses.length,
       settlements: db.settlements.length,
       goals: db.goals.length,
+      savingsChallenges: savingsChallengesCount,
     },
     lastUpdated: db.lastUpdated,
     serverUptimeSec: Math.floor(process.uptime()),
@@ -46,7 +54,16 @@ export function resetDatabaseWithMode(mode: 'empty' | 'demo' = 'demo') {
       expenses: [],
       settlements: [],
       goals: [],
+      trips: [],
+      recurringExpenses: [],
       gmailScanCache: [],
+      savingsChallengesBackup: {
+        challenges: [],
+        categories: [],
+        periods: [],
+        contributions: [],
+        history: [],
+      },
       profile: currentProfile,
     });
     return {

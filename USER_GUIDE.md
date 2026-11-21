@@ -95,7 +95,23 @@ All 4 capture tools are reachable from the **floating `+` Quick Actions button**
 - **C. Categories & Trends (`Categorie e Trend`)**: Switch between **Month**, **Quarter**, **Year**, and **All-Time** charts/metrics; add **Custom Categories** with monthly budgets; edit budgets in bulk; hide unused categories (`Altro` / `Other` stays protected so expenses always have a safe fallback).
 - **D. Couple Settlement (`Pareggio Saldo`)**: Mathematical breakdown of shared pool totals, fair 50% shares, net balance, and chronological reimbursement history.
 - **E. AI Advisor (`Consulente AI`)**: Context-aware Gemini chat with access to your ledger summary. Choose general **Flash** (`gemini-3.8-flash` with fallback to `gemini-3.5-flash-lite`, `gemini-3.7-flash`, `gemini-3.1-flash-lite`), deep audit **Carbon** (`gemini-4-carbon`), interactive scenario planner **Argon** (`gemini-4-argon`), **Hydrogen** (`gemini-4-hydrogen`), or fast **Flash-Lite** (`gemini-3.1-flash-lite`).
-- **F. Vision Board (`Bacheca Obiettivi`)**: Savings goal cards with progress bars plus high-resolution **1K / 2K / 4K** goal image generation (`gemini-3.1-flash-image` with fallback to `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`).
+- **F. Vision Board (`Bacheca Obiettivi`) & Couple Savings Challenges (`Sfide di Risparmio`)**: Savings goal cards with progress bars, high-resolution **1K / 2K / 4K** goal image generation (`gemini-3.1-flash-image` with fallback to `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`), and the integrated **Couple Savings Challenges** section.
+
+### Couple Savings Challenges (Virtual Savings)
+- **What Virtual Savings Means**: A savings challenge tracks a non-competitive monthly spending limit for selected categories linked to an existing Vision Board goal. Virtual savings are calculated server-side as `max(0, monthlyLimit - validSpend)`. **No real bank account is touched, no real money is moved, and there are no partner leaderboards or penalties.** Goal totals update only when an authorized couple member explicitly previews and confirms a virtual contribution (which remains reversible).
+- **How to Create a Challenge**:
+  1. Open **Obiettivi (Vision Board)** and tap **Nuova sfida** (or tap **Sfida** directly on a goal card).
+  2. Pick the linked Vision Board goal, enter a name, select one or more categories (including custom categories), set a monthly limit (`> 0`), choose start month (`YYYY-MM`), duration (`1–12` months), scope (*all category expenses* vs *shared 50/50 & custom only*), and timezone.
+  3. Review the live server estimate (previous 3-month average, suggested limit, and virtual-savings notice) and tap **Attiva sfida**.
+- **Editing, Pausing & Retroactive Changes**: You can edit, pause, resume, complete, recalculate, or delete challenges at any time. Changing limits, categories, or dates on an already-started challenge requires explicit retroactive confirmation before recalculating; changing the linked goal while contributions are applied requires reverting those contributions first.
+- **How to Confirm or Revert a Virtual Contribution**:
+  1. Select a challenge with available virtual savings and tap **Prepara contributo virtuale**.
+  2. Inspect the server-calculated preview (`Anteprima`), verify the amount and projected goal total, check the confirmation box, and tap **Conferma contributo virtuale** (double-click & replay protected).
+  3. To undo anytime, open the challenge detail and tap **Rimuovi ultimo contributo** (or **Annulla** beside any applied entry in history); the virtual amount is deducted back from the Vision Board goal atomically.
+- **Calculation, Currency & Offline Limits**:
+  - **Currency**: No implicit FX conversion—only expenses matching the challenge currency (`EUR` by default) are counted; foreign-currency expenses are excluded and listed separately.
+  - **Excluded Records**: Deleted expenses, `0 €` / `zero_quarantine` items, negative/refund amounts, future-dated expenses (relative to the challenge timezone), and partner `settlements` are excluded.
+  - **Offline & PWA Behavior**: Cached challenge snapshots remain readable offline (`read-only`), while creating/editing/confirming/reverting challenges requires server connectivity so totals are always computed authoritatively in SQLite. Chrome PWAs do not run silent end-of-month background push notifications when closed.
 
 ---
 
@@ -107,7 +123,7 @@ All 4 capture tools are reachable from the **floating `+` Quick Actions button**
 - **Accessibility & Mobile UX**: Opens in standalone mode respecting mobile notches/safe areas (`env(safe-area-inset-*)`), preserves pinch-to-zoom, supports keyboard navigation, traps focus (`useFocusTrap`) with `Escape` closing across modals and dialogs, and honors system `prefers-reduced-motion`.
 
 ### Offline Behavior & Sync Recovery
-- Static shell files are cached offline by the Service Worker (`duospend-shell-v7`), while private `/api/*` data is **never** cached in the Service Worker.
+- Static shell files are cached offline by the Service Worker (`duospend-shell-v8`), while private `/api/*` data (including `/api/savings-challenges*`) is **never** cached in the Service Worker.
 - Expenses, settlements, goals, and profile edits made offline save to `localStorage` and mark `duospend_dirty_sync_v1`. On reconnect, `syncWithServerDatabase()` merges changes through a serialized queue where pending local edits take precedence per record ID while restoring server `receiptUrl` photos if stripped locally due to `QuotaExceededError`.
 
 ### Browser Support & What Requires a Native APK

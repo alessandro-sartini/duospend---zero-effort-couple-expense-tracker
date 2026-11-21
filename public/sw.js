@@ -1,4 +1,4 @@
-const CACHE_NAME = 'duospend-shell-v7';
+const CACHE_NAME = 'duospend-shell-v8';
 const APP_SHELL_URLS = [
   '/',
   '/index.html',

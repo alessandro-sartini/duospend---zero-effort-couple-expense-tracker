@@ -138,3 +138,214 @@ export interface SavingGoal {
   imageUrl?: string;
   imageResolution?: string;
 }
+
+export type SavingsChallengeStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+
+export type SavingsChallengeHealthState =
+  | 'positive'
+  | 'warning'
+  | 'exceeded'
+  | 'completed'
+  | 'neutral'
+  | 'paused'
+  | 'cancelled'
+  | 'needs_recalculation';
+
+export type SavingsChallengeSplitScope = 'all' | 'shared_only';
+
+export type SavingsChallengePeriodStatus =
+  | 'upcoming'
+  | 'active'
+  | 'completed'
+  | 'paused'
+  | 'cancelled'
+  | 'needs_recalculation';
+
+export interface SavingsChallengeExcludedBreakdown {
+  foreignCurrencyCount: number;
+  foreignCurrencies: Array<{ currency: string; count: number; total: number }>;
+  zeroOrQuarantineCount: number;
+  negativeOrInvalidCount: number;
+  futureExpenseCount: number;
+  futureScheduledTotal: number;
+  personalExcludedCount: number;
+  settlementsAlwaysExcluded: true;
+}
+
+export interface SavingsChallengeMatchedExpensePreview {
+  id: string;
+  title: string;
+  date: string;
+  amount: number;
+  currency: string;
+  category: string;
+  splitType: SplitType;
+}
+
+export interface SavingsChallengePeriodRecord {
+  id: string;
+  challengeId: string;
+  periodYm: string;
+  startDate: string;
+  endDate: string;
+  monthlyLimit: number;
+  validSpend: number;
+  virtualSavingsPotential: number;
+  virtualSavingsApplied: number;
+  matchedExpenseCount: number;
+  excludedExpenseCount: number;
+  status: SavingsChallengePeriodStatus;
+  reconciledAt?: string;
+  calculationError?: string;
+}
+
+export interface SavingsChallengeContribution {
+  id: string;
+  challengeId: string;
+  periodYm?: string;
+  goalId: string;
+  goalTitleSnapshot: string;
+  amount: number;
+  currency: string;
+  status: 'applied' | 'reverted';
+  note?: string;
+  createdBy: string;
+  createdAt: string;
+  revertedAt?: string;
+  revertedBy?: string;
+  revertReason?: string;
+}
+
+export interface SavingsChallengeHistoryEntry {
+  id: string;
+  challengeId: string;
+  action: string;
+  actor: string;
+  summary: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface SavingsChallengeMetrics {
+  totalLimit: number;
+  validSpend: number;
+  remainingBudget: number;
+  exceededAmount: number;
+  consumedPercent: number;
+  barPercent: number;
+  virtualSavingsPotential: number;
+  virtualSavingsApplied: number;
+  virtualSavingsAvailable: number;
+  daysTotal: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  isPeriodConcluded: boolean;
+  matchedExpenseCount: number;
+  matchedExpensesPreview: SavingsChallengeMatchedExpensePreview[];
+  sharedSpend: number;
+  personalSpend: number;
+  excludedBreakdown: SavingsChallengeExcludedBreakdown;
+  overlappingChallengeIds: string[];
+  overlappingCategories: string[];
+  orphanedCategories: string[];
+  goalLinked: boolean;
+  healthState: SavingsChallengeHealthState;
+  statusMessage: string;
+}
+
+export interface SavingsChallenge {
+  id: string;
+  title: string;
+  goalId: string;
+  goalTitleSnapshot: string;
+  categories: string[];
+  monthlyLimit: number;
+  currency: string;
+  startMonth: string; // YYYY-MM
+  durationMonths: number;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  status: SavingsChallengeStatus;
+  splitScope: SavingsChallengeSplitScope;
+  initialSpend: number;
+  currentValidSpend: number;
+  virtualSavingsAccumulated: number;
+  virtualSavingsApplied: number;
+  lastReconciledAt?: string;
+  lastCalculationError?: string;
+  timezone: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  periods: SavingsChallengePeriodRecord[];
+  metrics: SavingsChallengeMetrics;
+  latestContribution?: SavingsChallengeContribution;
+}
+
+export interface GoalVirtualSavingsSummary {
+  goalId: string;
+  totalVirtualApplied: number;
+  activeChallengesCount: number;
+  completedChallengesCount: number;
+  lastCompletedChallengeTitle?: string;
+  lastCompletedAt?: string;
+  contributionsCount: number;
+}
+
+export interface SavingsChallengeEstimate {
+  startMonth: string;
+  durationMonths: number;
+  startDate: string;
+  endDate: string;
+  currency: string;
+  timezone: string;
+  splitScope: SavingsChallengeSplitScope;
+  categories: string[];
+  previousPeriodAverageSpend: number;
+  previousPeriodMonthsSampled: number;
+  currentPeriodSpend: number;
+  suggestedMonthlyLimit: number;
+  estimatedVirtualSavings: number;
+  customCategoriesSelected: string[];
+  excludedForeignCurrencyCount: number;
+  goalPreview?: {
+    id: string;
+    title: string;
+    currentAmount: number;
+    targetAmount: number;
+    imageUrl?: string;
+  };
+  calculationSummary: string;
+  virtualSavingsNotice: string;
+}
+
+export interface ContributionPreview {
+  challengeId: string;
+  goalId: string;
+  goalTitle: string;
+  goalImageUrl?: string;
+  currentGoalAmount: number;
+  targetGoalAmount: number;
+  availableVirtualSavings: number;
+  proposedAmount: number;
+  projectedGoalAmount: number;
+  projectedGoalPercent: number;
+  currency: string;
+  matchedExpenseCount: number;
+  validSpend: number;
+  totalLimit: number;
+  previousContributions: SavingsChallengeContribution[];
+  explanation: string;
+  virtualDisclaimer: string;
+  challengeVersion: number;
+}
+
+export interface SavingsChallengesCalculationPolicy {
+  formula: string;
+  currencyPolicy: string;
+  splitPolicy: string;
+  excludedItemsPolicy: string;
+  virtualTransferPolicy: string;
+}

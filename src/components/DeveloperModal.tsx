@@ -11,6 +11,10 @@ import {
 } from 'lucide-react';
 import { CoupleProfile, Expense, SavingGoal, Settlement } from '../types';
 import { loginDeveloperSession, logoutDeveloperSession } from '../services/auth';
+import {
+  fetchSavingsChallenges,
+  loadCachedSavingsChallenges,
+} from '../services/savings-challenges';
 import { ModalShell } from './ui/ModalShell';
 import { DeveloperLoginView } from './developer/DeveloperLoginView';
 import { DeveloperNotificationSimulator } from './developer/DeveloperNotificationSimulator';
@@ -135,13 +139,21 @@ export const DeveloperModal: React.FC<DeveloperModalProps> = ({
     await Promise.all([Promise.resolve(onRefreshData()), fetchServerStatus()]);
   };
 
-  const handleExportJson = () => {
+  const handleExportJson = async () => {
+    let savingsChallenges = loadCachedSavingsChallenges()?.challenges ?? [];
+    try {
+      const live = await fetchSavingsChallenges({ recalculate: false });
+      savingsChallenges = live.challenges;
+    } catch {
+      // Usa la cache locale delle sfide se offline
+    }
     const fullBackup = {
       exportDate: new Date().toISOString(),
       profile,
       expenses,
       settlements,
       goals,
+      savingsChallenges,
     };
     const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -271,8 +283,10 @@ export const DeveloperModal: React.FC<DeveloperModalProps> = ({
               <strong className="text-stone-900 text-sm">{settlements.length}</strong>
             </div>
             <div className="ds-card p-2.5">
-              <span className="text-stone-400 block text-[10px]">Obiettivi</span>
-              <strong className="text-stone-900 text-sm">{goals.length}</strong>
+              <span className="text-stone-400 block text-[10px]">Obiettivi / Sfide</span>
+              <strong className="text-stone-900 text-sm">
+                {goals.length} / {typeof serverStatus?.recordCount?.savingsChallenges === 'number' ? serverStatus.recordCount.savingsChallenges : '—'}
+              </strong>
             </div>
             <div className="ds-card p-2.5">
               <span className="text-stone-400 block text-[10px]">File Dimensione</span>
