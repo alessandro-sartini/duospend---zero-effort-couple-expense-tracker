@@ -80,9 +80,11 @@ app.use('/api', (req, res, next) => {
       return res.status(403).json({ error: 'Richiesta cross-site non consentita.' });
     }
 
-    const expectedProtocol =
+    const rawProtocol = (
       req.get('x-forwarded-proto')?.split(',')[0]?.trim() ||
-      (req.secure ? 'https:' : 'http:');
+      (req.secure ? 'https' : 'http')
+    ).toLowerCase();
+    const expectedProtocol = rawProtocol.endsWith(':') ? rawProtocol : `${rawProtocol}:`;
     const origin = req.get('origin');
     if (origin) {
       try {

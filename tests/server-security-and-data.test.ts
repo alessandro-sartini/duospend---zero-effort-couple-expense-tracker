@@ -543,5 +543,61 @@ describe('Sicurezza server, anti-traversal e sanitizzazione POST /api/data', () 
         validateReceiptFile({ name: 'scontrino-esselunga_01.jpg', size: 1024, type: 'image/jpeg' })
       ).toEqual({ valid: true });
     });
+
+    it('accetta X-Forwarded-Proto: https con Origin https matching dietro reverse proxy e rifiuta origin/protocollo diversi', async () => {
+      const { getExpectedRequestProtocol, validateApiMutationOrigin } = await import('../server/app');
+
+      const makeReq = (headers: Record<string, string>, hostname = 'duospend.example.com') =>
+        ({
+          method: 'POST',
+          hostname,
+          secure: false,
+          get: (name: string) => {
+            const lower = name.toLowerCase();
+            const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === lower);
+            return entry?.[1];
+          },
+        }) as any;
+
+      expect(
+        getExpectedRequestProtocol(makeReq({ 'X-Forwarded-Proto': 'https' }))
+      ).toBe('https:');
+
+      expect(
+        validateApiMutationOrigin(
+          makeReq({
+            'X-Forwarded-Proto': 'https',
+            Origin: 'https://duospend.example.com',
+            'Sec-Fetch-Site': 'same-origin',
+          })
+        )
+      ).toEqual({ allowed: true });
+
+      expect(
+        validateApiMutationOrigin(
+          makeReq({
+            'X-Forwarded-Proto': 'https',
+            Origin: 'http://duospend.example.com',
+          })
+        )
+      ).toEqual({
+        allowed: false,
+        status: 403,
+        error: 'Origine della richiesta non consentita.',
+      });
+
+      expect(
+        validateApiMutationOrigin(
+          makeReq({
+            'X-Forwarded-Proto': 'https',
+            Origin: 'https://evil.example.com',
+          })
+        )
+      ).toEqual({
+        allowed: false,
+        status: 403,
+        error: 'Origine della richiesta non consentita.',
+      });
+    });
   });
 });
