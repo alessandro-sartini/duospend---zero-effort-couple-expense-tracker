@@ -1,13 +1,13 @@
-const CACHE_NAME = 'duospend-shell-v3';
+const CACHE_NAME = 'duospend-shell-v4';
 const APP_SHELL_URLS = [
   '/',
   '/index.html',
-  '/manifest.webmanifest',
-  '/icon.svg',
+  '/manifest.webmanifest?v=2',
+  '/icon.svg?v=2',
   '/logo.svg',
-  '/favicon-32.png',
-  '/apple-touch-icon.png',
-  '/icon-192.png',
+  '/favicon-32.png?v=2',
+  '/apple-touch-icon.png?v=2',
+  '/icon-192.png?v=2',
 ];
 
 self.addEventListener('install', (event) => {
