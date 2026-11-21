@@ -13,7 +13,6 @@ import {
   parseNotificationHistoryHeuristically,
   sanitizeExpenseCategory,
   sanitizeExpenseRecord,
-  sanitizeIsoDate,
   sanitizePlainText,
   sanitizePromptInput,
 } from '../utils/security';
@@ -34,7 +33,7 @@ export function normalizeNotificationExpense(
       : heuristic.amount;
   const currencyRaw = typeof raw.currency === 'string' ? raw.currency.trim().toUpperCase() : '';
   const currency = /^[A-Z]{3}$/.test(currencyRaw) ? currencyRaw : heuristic.currency;
-  const date = sanitizeIsoDate(raw.date || heuristic.date);
+  const date = new Date().toISOString().slice(0, 10);
   const category = sanitizeExpenseCategory(
     raw.category,
     inferCategoryFromText(`${title} ${originalText}`)
@@ -154,7 +153,6 @@ Estrai con precisione:
 - amount: importo numerico pagato (se espresso con virgola es. "14,50" converti in 14.50)
 - currency: valuta (di default "EUR")
 - category: categorizza rigorosamente in una di queste: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Altro"
-- date: data nel formato YYYY-MM-DD (se non specificata, usa la data odierna)
 - notes: breve riassunto (es. "Pagamento con carta tramite ${safeAppName}")
 
 Restituisci esclusivamente JSON valido conforme allo schema.`;
@@ -171,10 +169,9 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
             amount: { type: Type.NUMBER },
             currency: { type: Type.STRING },
             category: { type: Type.STRING },
-            date: { type: Type.STRING },
             notes: { type: Type.STRING },
           },
-          required: ['merchant', 'amount', 'category', 'date'],
+          required: ['merchant', 'amount', 'category'],
         },
       },
     });
@@ -248,7 +245,6 @@ Per ogni notifica o SMS che rappresenta una spesa effettuata, invio denaro o acq
 - amount (importo numerico pagato)
 - currency (valuta, default EUR)
 - category (una tra: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Altro")
-- date (YYYY-MM-DD)
 - notes (breve descrizione)
 
 Ignora notifiche che non sono spese (codici OTP, avvisi di sicurezza, promozioni). Restituisci un array JSON.`;
@@ -267,10 +263,9 @@ Ignora notifiche che non sono spese (codici OTP, avvisi di sicurezza, promozioni
               amount: { type: Type.NUMBER },
               currency: { type: Type.STRING },
               category: { type: Type.STRING },
-              date: { type: Type.STRING },
               notes: { type: Type.STRING },
             },
-            required: ['merchant', 'amount', 'category', 'date'],
+            required: ['merchant', 'amount', 'category'],
           },
         },
       },

@@ -6,6 +6,7 @@ import {
   parseNotificationHistoryHeuristically,
 } from '../server/utils/security';
 import { buildReceiptFallback, normalizeReceiptResponse } from '../server/services/ai.service';
+import { normalizeNotificationExpense } from '../server/services/notification.service';
 
 describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
   describe('Notifiche singole (parseNotificationHeuristically)', () => {
@@ -50,6 +51,30 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(parsed.currency).toBe('USD');
       expect(parsed.title).toBe('Amazon Marketplace');
       expect(parsed.category).toBe('Shopping');
+    });
+
+    it('usa sempre la data di sistema new Date() ignorando qualsiasi data dall AI', () => {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const rawAiResult = {
+        merchant: 'Satispay',
+        amount: 10,
+        currency: 'EUR',
+        category: 'Altro',
+        date: '2023-10-25',
+        notes: 'Pagamento Satispay',
+      };
+
+      const normalized = normalizeNotificationExpense(
+        rawAiResult,
+        'Hai inviato 10,00 € con Satispay',
+        'Satispay',
+        'user',
+        'Default notes'
+      );
+
+      expect(normalized.date).toBe(todayIso);
+      expect(normalized.amount).toBe(10);
+      expect(normalized.title).toBe('Satispay');
     });
   });
 
