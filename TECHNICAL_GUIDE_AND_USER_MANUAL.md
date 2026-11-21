@@ -68,8 +68,8 @@
 │       → gemini-3.7-flash → gemini-3.1-flash-lite                           │
 │     - Advisor selectable: gemini-3.8-flash, gemini-4-carbon,               │
 │       gemini-4-argon, gemini-4-hydrogen, gemini-3.1-flash-lite             │
-│     - Vision images: gemini-3.1-flash-image → gemini-3-pro-image →         │
-│       gemini-3.1-flash-lite-image → gemini-2.5-flash-image                 │
+│     - Vision images: gemini-3.1-flash-image-preview →                      │
+│       gemini-2.5-flash-image → gemini-3-pro-image-preview → imagen-4.0-*   │
 │                                                                            │
 │  2. Google Workspace Gmail API (gmail.googleapis.com)                      │
 │     - Scope: https://www.googleapis.com/auth/gmail.readonly                │
@@ -213,8 +213,9 @@
 - `tests/reconciliation-and-trips.test.ts` (8 tests): elastic `±14 day` cross-channel reconciliation, `0 €` quarantine completion, active `TripProject` auto-tagging + isolated 50/50 trip balance, `RecurringExpenseItem` cycle matching, and SQLite persistence.
 - `tests/savings-challenges-engine.test.ts` (8 tests): server-side virtual savings math (`max(0, limit - validSpend)`), zero/negative/extreme limits, leap years (`2028-02-29`), DST transitions, IANA timezones, currency exclusion without implicit FX, custom/orphaned categories, overlapping challenges, rounding, and setup estimates.
 - `tests/savings-challenges-api.test.ts` (7 tests): CRUD lifecycle, retroactive confirmation (`409`), deleted-expense recalculation, atomic contributions/reversions, idempotency replay/double-click protection, optimistic version conflict (`409`), simulated SQLite trigger crash rollback, legacy DB additive migration, backup/restore, DB reset, CSRF/payload-limit/XSS/IDOR/auth/webhook-rejection guards.
-- `tests/savings-challenges-ui.test.ts` (5 tests): Vision Board integration, 2-column desktop + mobile-first layout, ARIA/dialog/live-region accessibility, long names & extreme amounts, loading/empty/error/offline states, reconnect sync & `401` lock handling, SW `/api/*` bypass & `prefers-reduced-motion`.
+- `tests/savings-challenges-ui.test.ts` (5 tests): Vision Board integration, collapsed-by-default color-coded accordions with 5-row pagination and inline 2-column desktop + mobile-first expansion, ARIA/dialog/live-region accessibility, long names & extreme amounts, loading/empty/error/offline states, reconnect sync & `401` lock handling, SW `/api/*` bypass & `prefers-reduced-motion`.
 - `tests/server-security-and-data.test.ts` (17 tests): XSS/prototype-pollution stripping, path traversal, SSRF, `x-duospend-secret` route scoping, magic bytes, PNG decompression bomb rejection, polyglot rejection, JPEG EXIF `APP1`/`COM` stripping, and filename/MIME validation.
 - `tests/settlement.test.ts` (5 tests): 50/50, personal, custom split, and settlement balance math.
 - `tests/sqlite-database.test.ts` (10 tests): SQLite WAL persistence, schema migrations, ID deduplication, Gmail 30-day cache.
 - `tests/storage-and-gemini-resilience.test.ts` (4 tests): `QuotaExceededError` handling, Gemini transient cooldown/fallback, and offline dirty-sync local-precedence merge preserving `receiptUrl`.
+- `tests/vision-image-fallback.test.ts` (6 tests): `responseModalities: ['IMAGE', 'TEXT']`, `400` retry without `imageSize`, Gemini Image to `imagen-*` automatic fallback, transparent `quota_or_billing` / `missing_api_key` fallback diagnostics, and collapsible Vision Board cover UI (`Genera con AI` + `Carica foto`).

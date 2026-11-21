@@ -10,15 +10,22 @@ export const DEFAULT_TEXT_FALLBACK_MODELS = [
 ];
 
 export const DEFAULT_IMAGE_FALLBACK_MODELS = [
+  'gemini-3.1-flash-image-preview',
+  'gemini-2.5-flash-image',
+  'gemini-3-pro-image-preview',
   'gemini-3.1-flash-image',
   'gemini-3-pro-image',
   'gemini-3.1-flash-lite-image',
-  'gemini-2.5-flash-image',
+  'gemini-2.0-flash-preview-image-generation',
+];
+
+export const DEFAULT_IMAGEN_FALLBACK_MODELS = [
+  'imagen-4.0-fast-generate-001',
+  'imagen-4.0-generate-001',
+  'imagen-3.0-generate-002',
 ];
 
 const MODEL_ALIAS_MAP: Record<string, string> = {
-  'gemini-3-pro-image-preview': 'gemini-3-pro-image',
-  'gemini-2.0-flash-preview-image-generation': 'gemini-3.1-flash-image',
   'gemini-2.5-flash': 'gemini-3.8-flash',
   'gemini-2.5-flash-lite': 'gemini-3.5-flash-lite',
   'gemini-2.0-flash': 'gemini-3.8-flash',
@@ -28,6 +35,7 @@ const ACTIVE_DISCOVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const DEPRECATED_MODEL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRANSIENT_UNAVAILABLE_TTL_MS = 10 * 60 * 1000;
 const GEMINI_REQUEST_TIMEOUT_MS = 22_000;
+const GEMINI_IMAGE_REQUEST_TIMEOUT_MS = 45_000;
 const unavailableModelsCache = new Map<string, number>();
 const deprecatedReplacementCache = new Map<string, string>();
 let discoveredModelsCache: { expiresAt: number; textModels: string[]; imageModels: string[] } | null = null;
@@ -189,10 +197,485 @@ async function discoverAvailableGeminiModels(
   }
 }
 
+export type ImageFallbackReason =
+  | 'missing_api_key'
+  | 'quota_or_billing'
+  | 'api_key_invalid'
+  | 'safety_filtered'
+  | 'models_unavailable';
+
+export class VisionImageGenerationError extends Error {
+  readonly reason: ImageFallbackReason;
+  readonly attemptedModels: string[];
+  readonly diagnosticMessage: string;
+
+  constructor(params: {
+    reason: ImageFallbackReason;
+    attemptedModels: string[];
+    diagnosticMessage: string;
+  }) {
+    super(params.diagnosticMessage);
+    this.name = 'VisionImageGenerationError';
+    this.reason = params.reason;
+    this.attemptedModels = params.attemptedModels;
+    this.diagnosticMessage = params.diagnosticMessage;
+  }
+}
+
+let discoveredImagenModelsCache: { expiresAt: number; models: string[] } | null = null;
+const imageFailureReasonCache = new Map<string, ImageFallbackReason>();
+
+async function discoverAvailableImagenModels(ai: GoogleGenAI): Promise<string[]> {
+  const now = Date.now();
+  if (discoveredImagenModelsCache && discoveredImagenModelsCache.expiresAt > now) {
+    return discoveredImagenModelsCache.models;
+  }
+
+  try {
+    const pager = await ai.models.list();
+    const imagenModels: string[] = [];
+    for await (const model of pager) {
+      const cleanName = String(model.name || '').replace(/^models\//i, '').trim();
+      if (!cleanName.startsWith('imagen-')) continue;
+      const actions = model.supportedActions ?? [];
+      if (
+        actions.length === 0 ||
+        actions.includes('predict') ||
+        actions.includes('generateImages')
+      ) {
+        imagenModels.push(cleanName);
+      }
+    }
+
+    const sorted = [...new Set(imagenModels)].sort(
+      (a, b) => parseGeminiVersionScore(b) - parseGeminiVersionScore(a)
+    );
+    discoveredImagenModelsCache = {
+      expiresAt: now + ACTIVE_DISCOVERY_TTL_MS,
+      models: sorted,
+    };
+    return sorted;
+  } catch (error) {
+    console.warn('Imagen model discovery failed:', error);
+    return [];
+  }
+}
+
+function parseGeminiErrorDetails(error: unknown): {
+  status: number | undefined;
+  message: string;
+  isApiKeyError: boolean;
+  isQuotaOrBilling: boolean;
+  isDeprecatedOrNotFound: boolean;
+  isParameterError: boolean;
+  isSafety: boolean;
+  isTransient: boolean;
+} {
+  const errObj = error as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+    error?: { code?: unknown; message?: unknown };
+  } | undefined;
+  const rawStatus = Number(errObj?.status ?? errObj?.code ?? errObj?.error?.code);
+  const status = Number.isFinite(rawStatus) && rawStatus > 0 ? rawStatus : undefined;
+  const message = String(errObj?.message || errObj?.error?.message || error || '');
+
+  const isBillingPermission =
+    status === 403 && /billing|tier|quota|enable/i.test(message);
+
+  const isApiKeyError =
+    status === 401 ||
+    (status === 403 && !isBillingPermission) ||
+    /API_KEY_INVALID|API key not valid|API key expired|PERMISSION_DENIED.*api key/i.test(message);
+
+  const isQuotaOrBilling =
+    status === 429 ||
+    isBillingPermission ||
+    /RESOURCE_EXHAUSTED|quota|rate limit|billing|free_tier|limit:\s*0|exceeded your current quota/i.test(
+      message
+    );
+
+  const isDeprecatedOrNotFound =
+    status === 404 ||
+    /NOT_FOUND|not found|deprecated|no longer available|not supported for generateContent|not supported for generateImages|not supported for predict/i.test(
+      message
+    );
+
+  const isParameterError =
+    !isApiKeyError &&
+    !isDeprecatedOrNotFound &&
+    !isQuotaOrBilling &&
+    (status === 400 ||
+      /INVALID_ARGUMENT|imageSize|imageConfig|aspectRatio|responseModalities|outputMimeType|includeRaiReason/i.test(
+        message
+      ));
+
+  const isSafety =
+    /SAFETY|IMAGE_SAFETY|PROHIBITED_CONTENT|BLOCKLIST|RAI|filtered out/i.test(message);
+
+  const isTransient =
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    status === 408 ||
+    /UNAVAILABLE|DEADLINE_EXCEEDED|TimeoutError|AbortError|timed out|aborted|high demand|overloaded|temporarily unavailable|fetch failed|network/i.test(
+      message
+    );
+
+  return {
+    status,
+    message,
+    isApiKeyError,
+    isQuotaOrBilling,
+    isDeprecatedOrNotFound,
+    isParameterError,
+    isSafety,
+    isTransient,
+  };
+}
+
+export async function generateImageWithFallback(options: {
+  model?: string;
+  fallbackModels?: string[];
+  imagenModels?: string[];
+  prompt: string;
+  imageSize?: string;
+  aspectRatio?: string;
+}): Promise<{
+  imageDataUrl: string;
+  caption: string;
+  modelUsed: string;
+  attemptedModels: string[];
+}> {
+  hydrateModelCachesFromDatabase();
+  const ai = getGeminiClient();
+  const now = Date.now();
+
+  const rawGeminiSeeds = [
+    options.model,
+    ...(options.fallbackModels ?? []),
+    ...DEFAULT_IMAGE_FALLBACK_MODELS,
+    ...(discoveredModelsCache?.expiresAt && discoveredModelsCache.expiresAt > now
+      ? discoveredModelsCache.imageModels
+      : []),
+  ];
+
+  const resolvedGeminiSeeds = Array.from(
+    new Set(
+      rawGeminiSeeds
+        .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+        .map((m) => resolveGeminiModelName(m))
+        .filter((m): m is string => Boolean(m))
+    )
+  );
+
+  const activeGeminiQueue = resolvedGeminiSeeds.filter((m) => {
+    const exp = unavailableModelsCache.get(m);
+    return !exp || exp <= now;
+  });
+
+  // If every non-404 candidate was put into transient cooldown, re-probe once on explicit retry
+  // so newly enabled AI Studio billing or refreshed quotas recover immediately.
+  const queue =
+    activeGeminiQueue.length > 0
+      ? [...activeGeminiQueue]
+      : resolvedGeminiSeeds.filter((m) => {
+          const reason = imageFailureReasonCache.get(m);
+          return reason !== 'models_unavailable' || (unavailableModelsCache.get(m) ?? 0) <= now;
+        });
+
+  const attempted: string[] = [];
+  const attemptedSet = new Set<string>();
+  const failures: Array<{
+    model: string;
+    reason: ImageFallbackReason;
+    message: string;
+  }> = [];
+
+  let discoveryRun = false;
+  let abortedForInvalidKey = false;
+
+  const enqueueDiscoveredGemini = async () => {
+    if (discoveryRun) return;
+    discoveryRun = true;
+    const discovered = await discoverAvailableGeminiModels(ai, 'image');
+    for (const modelName of discovered) {
+      const exp = unavailableModelsCache.get(modelName);
+      if (
+        !attemptedSet.has(modelName) &&
+        !queue.includes(modelName) &&
+        (!exp || exp <= Date.now())
+      ) {
+        queue.push(modelName);
+      }
+    }
+  };
+
+  while (queue.length > 0) {
+    const candidateModel = queue.shift()!;
+    if (attemptedSet.has(candidateModel)) continue;
+    attemptedSet.add(candidateModel);
+    attempted.push(candidateModel);
+
+    const callGeminiImage = async (withImageSize: boolean, withImageConfig: boolean) => {
+      const imageConfig: Record<string, string> = {};
+      if (withImageConfig) {
+        if (options.aspectRatio) imageConfig.aspectRatio = options.aspectRatio;
+        if (withImageSize && options.imageSize) imageConfig.imageSize = options.imageSize;
+      }
+
+      return ai.models.generateContent({
+        model: candidateModel,
+        contents: { parts: [{ text: options.prompt }] },
+        config: {
+          responseModalities: ['IMAGE', 'TEXT'],
+          ...(withImageConfig && Object.keys(imageConfig).length > 0 ? { imageConfig } : {}),
+          abortSignal: AbortSignal.timeout(GEMINI_IMAGE_REQUEST_TIMEOUT_MS),
+        },
+      });
+    };
+
+    try {
+      const response = await callGeminiImage(Boolean(options.imageSize), true).catch(async (err) => {
+        const info = parseGeminiErrorDetails(err);
+        if (info.isParameterError && options.imageSize) {
+          return callGeminiImage(false, true).catch((err2) => {
+            const info2 = parseGeminiErrorDetails(err2);
+            if (info2.isParameterError) {
+              return callGeminiImage(false, false);
+            }
+            throw err2;
+          });
+        }
+        if (info.isParameterError) {
+          return callGeminiImage(false, false);
+        }
+        throw err;
+      });
+
+      let imageDataUrl: string | null = null;
+      let caption = '';
+
+      for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+        if (part.inlineData?.data) {
+          const mime = part.inlineData.mimeType || 'image/png';
+          imageDataUrl = `data:${mime};base64,${part.inlineData.data}`;
+        } else if (part.text) {
+          caption += part.text;
+        }
+      }
+
+      if (imageDataUrl) {
+        unavailableModelsCache.delete(candidateModel);
+        imageFailureReasonCache.delete(candidateModel);
+        return {
+          imageDataUrl,
+          caption: caption.trim(),
+          modelUsed: candidateModel,
+          attemptedModels: attempted,
+        };
+      }
+
+      const finishReason = String(response.candidates?.[0]?.finishReason || '');
+      const blockReason = String(
+        (response as { promptFeedback?: { blockReason?: string } })?.promptFeedback?.blockReason || ''
+      );
+      const isSafety = /SAFETY|IMAGE_SAFETY|PROHIBITED|BLOCK/i.test(`${finishReason} ${blockReason}`);
+      failures.push({
+        model: candidateModel,
+        reason: isSafety ? 'safety_filtered' : 'models_unavailable',
+        message: isSafety
+          ? `Safety filter triggered (${finishReason || blockReason})`
+          : 'Response contained text only without inlineData image',
+      });
+      await enqueueDiscoveredGemini();
+    } catch (error) {
+      const info = parseGeminiErrorDetails(error);
+      if (info.isApiKeyError) {
+        failures.push({ model: candidateModel, reason: 'api_key_invalid', message: info.message });
+        abortedForInvalidKey = true;
+        break;
+      }
+
+      if (info.isQuotaOrBilling) {
+        unavailableModelsCache.set(candidateModel, Date.now() + TRANSIENT_UNAVAILABLE_TTL_MS);
+        imageFailureReasonCache.set(candidateModel, 'quota_or_billing');
+        failures.push({ model: candidateModel, reason: 'quota_or_billing', message: info.message });
+      } else if (info.isDeprecatedOrNotFound) {
+        const expiresAt = Date.now() + DEPRECATED_MODEL_TTL_MS;
+        unavailableModelsCache.set(candidateModel, expiresAt);
+        imageFailureReasonCache.set(candidateModel, 'models_unavailable');
+        const suggestedModel = extractSuggestedModelFromError(error);
+        if (suggestedModel) {
+          deprecatedReplacementCache.set(candidateModel, suggestedModel);
+          if (!attemptedSet.has(suggestedModel) && !queue.includes(suggestedModel)) {
+            queue.unshift(suggestedModel);
+          }
+        }
+        persistAiModelEntries([
+          {
+            modelId: candidateModel,
+            kind: 'image',
+            status: 'deprecated',
+            ...(suggestedModel ? { replacementModel: suggestedModel } : {}),
+            expiresAt,
+            updatedAt: new Date().toISOString(),
+          },
+        ]);
+        failures.push({ model: candidateModel, reason: 'models_unavailable', message: info.message });
+      } else if (info.isSafety) {
+        failures.push({ model: candidateModel, reason: 'safety_filtered', message: info.message });
+      } else {
+        if (info.isTransient) {
+          unavailableModelsCache.set(candidateModel, Date.now() + TRANSIENT_UNAVAILABLE_TTL_MS);
+        }
+        failures.push({ model: candidateModel, reason: 'models_unavailable', message: info.message });
+      }
+
+      await enqueueDiscoveredGemini();
+    }
+
+    if (queue.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+  }
+
+  if (!abortedForInvalidKey && typeof ai.models.generateImages === 'function') {
+    const discoveredImagen = await discoverAvailableImagenModels(ai);
+    const imagenCandidates = Array.from(
+      new Set([
+        ...(options.imagenModels ?? []),
+        ...DEFAULT_IMAGEN_FALLBACK_MODELS,
+        ...discoveredImagen,
+      ])
+    ).filter((modelId) => {
+      const exp = unavailableModelsCache.get(modelId);
+      const cachedReason = imageFailureReasonCache.get(modelId);
+      return !exp || exp <= Date.now() || cachedReason === 'quota_or_billing';
+    });
+
+    for (const imagenModel of imagenCandidates) {
+      if (attemptedSet.has(imagenModel)) continue;
+      attemptedSet.add(imagenModel);
+      attempted.push(imagenModel);
+
+      try {
+        const aspect = options.aspectRatio || '1:1';
+        const imgResponse = await ai.models
+          .generateImages({
+            model: imagenModel,
+            prompt: options.prompt,
+            config: {
+              numberOfImages: 1,
+              aspectRatio: aspect,
+              outputMimeType: 'image/png',
+              includeRaiReason: true,
+              abortSignal: AbortSignal.timeout(GEMINI_IMAGE_REQUEST_TIMEOUT_MS),
+            },
+          })
+          .catch((err) => {
+            const info = parseGeminiErrorDetails(err);
+            if (info.isParameterError) {
+              return ai.models.generateImages({
+                model: imagenModel,
+                prompt: options.prompt,
+                config: {
+                  numberOfImages: 1,
+                  aspectRatio: aspect,
+                  abortSignal: AbortSignal.timeout(GEMINI_IMAGE_REQUEST_TIMEOUT_MS),
+                },
+              });
+            }
+            throw err;
+          });
+
+        const first = imgResponse?.generatedImages?.[0];
+        if (first?.image?.imageBytes) {
+          const mime = first.image.mimeType || 'image/png';
+          unavailableModelsCache.delete(imagenModel);
+          imageFailureReasonCache.delete(imagenModel);
+          return {
+            imageDataUrl: `data:${mime};base64,${first.image.imageBytes}`,
+            caption: first.enhancedPrompt ? String(first.enhancedPrompt).trim() : '',
+            modelUsed: imagenModel,
+            attemptedModels: attempted,
+          };
+        }
+
+        failures.push({
+          model: imagenModel,
+          reason: first?.raiFilteredReason ? 'safety_filtered' : 'models_unavailable',
+          message: first?.raiFilteredReason || 'Imagen returned no generated image bytes',
+        });
+      } catch (error) {
+        const info = parseGeminiErrorDetails(error);
+        if (info.isApiKeyError) {
+          failures.push({ model: imagenModel, reason: 'api_key_invalid', message: info.message });
+          break;
+        }
+        if (info.isQuotaOrBilling) {
+          unavailableModelsCache.set(imagenModel, Date.now() + TRANSIENT_UNAVAILABLE_TTL_MS);
+          imageFailureReasonCache.set(imagenModel, 'quota_or_billing');
+          failures.push({ model: imagenModel, reason: 'quota_or_billing', message: info.message });
+        } else if (info.isDeprecatedOrNotFound) {
+          unavailableModelsCache.set(imagenModel, Date.now() + DEPRECATED_MODEL_TTL_MS);
+          imageFailureReasonCache.set(imagenModel, 'models_unavailable');
+          failures.push({ model: imagenModel, reason: 'models_unavailable', message: info.message });
+        } else {
+          if (info.isTransient) {
+            unavailableModelsCache.set(imagenModel, Date.now() + TRANSIENT_UNAVAILABLE_TTL_MS);
+          }
+          failures.push({
+            model: imagenModel,
+            reason: info.isSafety ? 'safety_filtered' : 'models_unavailable',
+            message: info.message,
+          });
+        }
+      }
+    }
+  }
+
+  const reasonPriority: ImageFallbackReason[] = [
+    'api_key_invalid',
+    'quota_or_billing',
+    'safety_filtered',
+    'models_unavailable',
+  ];
+  const observedReasons = new Set(failures.map((f) => f.reason));
+  for (const seed of resolvedGeminiSeeds) {
+    const cachedReason = imageFailureReasonCache.get(seed);
+    if (cachedReason) observedReasons.add(cachedReason);
+  }
+  const finalReason = reasonPriority.find((r) => observedReasons.has(r)) ?? 'models_unavailable';
+
+  const diagnosticByReason: Record<ImageFallbackReason, string> = {
+    missing_api_key:
+      'Chiave GEMINI_API_KEY non configurata sul server: generato poster locale. Puoi anche caricare una foto dalla galleria.',
+    api_key_invalid:
+      'La chiave GEMINI_API_KEY non risulta valida o autorizzata per generare immagini.',
+    quota_or_billing:
+      'Tutti i modelli Gemini Image e Imagen hanno restituito quota esaurita o free-tier a limite 0 (su Google AI Studio i modelli immagine richiedono billing/Tier 1 attivo). Puoi caricare subito una foto dalla galleria.',
+    safety_filtered:
+      'La descrizione è stata bloccata dai filtri di sicurezza AI. Prova a riformulare la scena o carica una foto dalla galleria.',
+    models_unavailable:
+      'Nessun modello Gemini Image o Imagen disponibile per questa chiave API ha generato un’immagine. Puoi riprovare tra poco o caricare una foto dalla galleria.',
+  };
+
+  throw new VisionImageGenerationError({
+    reason: finalReason,
+    attemptedModels: attempted,
+    diagnosticMessage: diagnosticByReason[finalReason],
+  });
+}
+
 export function resetGeminiModelCachesForTests(): void {
   unavailableModelsCache.clear();
   deprecatedReplacementCache.clear();
+  imageFailureReasonCache.clear();
   discoveredModelsCache = null;
+  discoveredImagenModelsCache = null;
   registryHydrated = false;
 }
 

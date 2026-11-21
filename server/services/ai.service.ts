@@ -1,5 +1,10 @@
 import { Type } from '@google/genai';
-import { generateContentWithFallback, hasGeminiApiKey } from './gemini';
+import {
+  generateContentWithFallback,
+  generateImageWithFallback,
+  hasGeminiApiKey,
+  VisionImageGenerationError,
+} from './gemini';
 import { HttpError } from '../utils/http-error';
 import {
   buildFallbackVisionSvgDataUrl,
@@ -350,41 +355,34 @@ export async function generateVisionImageWithAiOrFallback(params: {
       size: selectedSize,
       modelUsed: 'fallback-svg-locale',
       fallbackUsed: true,
+      fallbackReason: 'missing_api_key' as const,
+      diagnosticMessage:
+        'Chiave GEMINI_API_KEY non configurata sul server: generato poster locale. Puoi anche caricare una foto dalla galleria.',
+      attemptedModels: [] as string[],
     };
   }
 
   try {
-    const { response, modelUsed } = await generateContentWithFallback({
-      model: 'gemini-3.1-flash-image',
-      fallbackModels: ['gemini-3-pro-image', 'gemini-3.1-flash-lite-image', 'gemini-2.5-flash-image'],
-      contents: {
-        parts: [
-          {
-            text: `High quality cinematic visualization of couple financial goal: ${safePrompt}. Editorial composition, natural lighting, elegant warm modern aesthetic.`,
-          },
-        ],
-      },
-      config: {
-        imageConfig: {
-          imageSize: selectedSize as any,
-          aspectRatio: selectedAspectRatio,
-        },
-      },
+    const result = await generateImageWithFallback({
+      prompt: `High quality cinematic visualization of couple financial goal: ${safePrompt}. Editorial composition, natural lighting, elegant warm modern aesthetic.`,
+      imageSize: selectedSize,
+      aspectRatio: selectedAspectRatio,
     });
 
-    let imageDataUrl: string | null = null;
-    let caption = '';
-
-    for (const part of response.candidates?.[0]?.content?.parts ?? []) {
-      if (part.inlineData?.data) {
-        const mime = part.inlineData.mimeType || 'image/png';
-        imageDataUrl = `data:${mime};base64,${part.inlineData.data}`;
-      } else if (part.text) {
-        caption += part.text;
-      }
-    }
-
-    if (!imageDataUrl) {
+    return {
+      success: true,
+      imageUrl: result.imageDataUrl,
+      caption: sanitizePlainText(result.caption, 200) || safeCaption,
+      size: selectedSize,
+      modelUsed: result.modelUsed,
+      fallbackUsed: false,
+      attemptedModels: result.attemptedModels,
+    };
+  } catch (error) {
+    if (error instanceof VisionImageGenerationError) {
+      console.warn(
+        `Image generation AI fallback (${error.reason}) after trying [${error.attemptedModels.join(', ')}]`
+      );
       return {
         success: true,
         imageUrl: buildFallbackVisionSvgDataUrl(safePrompt, selectedSize),
@@ -392,18 +390,12 @@ export async function generateVisionImageWithAiOrFallback(params: {
         size: selectedSize,
         modelUsed: 'fallback-svg-locale',
         fallbackUsed: true,
+        fallbackReason: error.reason,
+        diagnosticMessage: error.diagnosticMessage,
+        attemptedModels: error.attemptedModels,
       };
     }
 
-    return {
-      success: true,
-      imageUrl: imageDataUrl,
-      caption: sanitizePlainText(caption, 200) || safeCaption,
-      size: selectedSize,
-      modelUsed,
-      fallbackUsed: false,
-    };
-  } catch (error) {
     console.warn('Image generation AI error, returning SVG fallback poster:', error);
     return {
       success: true,
@@ -412,6 +404,10 @@ export async function generateVisionImageWithAiOrFallback(params: {
       size: selectedSize,
       modelUsed: 'fallback-svg-locale',
       fallbackUsed: true,
+      fallbackReason: 'models_unavailable' as const,
+      diagnosticMessage:
+        'Servizio AI immagini temporaneamente non raggiungibile. Puoi usare il poster locale o caricare una foto dalla galleria.',
+      attemptedModels: [] as string[],
     };
   }
 }

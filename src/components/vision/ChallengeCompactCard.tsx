@@ -1,20 +1,30 @@
 import React from 'react';
-import { Calendar, Sparkles, Target } from 'lucide-react';
+import { ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { formatCurrency } from '../../constants/categories';
 import type { SavingsChallenge } from '../../types';
-import { formatYearMonthIt, getChallengeHealthDisplay } from './challengeStatusMeta';
+import { getChallengeHealthDisplay } from './challengeStatusMeta';
 
 interface ChallengeCompactCardProps {
   challenge: SavingsChallenge;
-  isSelected: boolean;
-  onSelect: (challengeId: string) => void;
+  isExpanded?: boolean;
+  isSelected?: boolean;
+  panelId?: string;
+  embeddedInAccordion?: boolean;
+  onToggle?: (challengeId: string) => void;
+  onSelect?: (challengeId: string) => void;
 }
 
 export const ChallengeCompactCard: React.FC<ChallengeCompactCardProps> = ({
   challenge,
+  isExpanded,
   isSelected,
+  panelId,
+  embeddedInAccordion = false,
+  onToggle,
   onSelect,
 }) => {
+  const expanded = isExpanded ?? isSelected ?? false;
+  const handleClick = () => (onToggle ?? onSelect)?.(challenge.id);
   const health = getChallengeHealthDisplay(challenge.metrics.healthState);
   const StatusIcon = health.icon;
   const { metrics } = challenge;
@@ -22,37 +32,59 @@ export const ChallengeCompactCard: React.FC<ChallengeCompactCardProps> = ({
   return (
     <button
       type="button"
-      onClick={() => onSelect(challenge.id)}
-      aria-pressed={isSelected}
-      aria-label={`Seleziona sfida ${challenge.title}, stato ${health.label}`}
-      className={`w-full text-left ds-subcard p-3.5 sm:p-4 space-y-2.5 transition-colors cursor-pointer min-w-0 ${
-        isSelected
-          ? 'border-orange-500 ring-2 ring-orange-500/25'
-          : 'hover:border-orange-400/80'
+      onClick={handleClick}
+      aria-expanded={expanded}
+      aria-pressed={expanded}
+      aria-controls={panelId}
+      aria-label={`${expanded ? 'Comprimi' : 'Espandi'} sfida ${challenge.title}, stato ${health.label}`}
+      className={`w-full text-left pl-4 pr-3.5 py-2.5 sm:pl-5 sm:pr-4 sm:py-3 space-y-1.5 transition-colors cursor-pointer min-w-0 ${
+        embeddedInAccordion
+          ? 'hover:bg-stone-50'
+          : `ds-subcard relative overflow-hidden ${
+              expanded
+                ? 'border-orange-500 ring-2 ring-orange-500/25'
+                : 'hover:border-orange-400/80'
+            }`
       }`}
     >
-      <div className="flex items-start justify-between gap-2 min-w-0">
-        <div className="min-w-0 flex-1">
-          <h4 className="text-sm font-bold text-stone-900 break-words line-clamp-2 leading-snug">
+      {!embeddedInAccordion && (
+        <span
+          aria-hidden="true"
+          className={`absolute inset-y-0 left-0 w-1 ${health.accentStripClass}`}
+        />
+      )}
+
+      {/* Riga 1: indicatore stato colorato, titolo, pill stato + chevron */}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span
+            aria-hidden="true"
+            className={`w-2.5 h-2.5 rounded-full shrink-0 ${health.dotClass}`}
+          />
+          <h4 className="text-sm font-bold text-stone-900 truncate leading-snug">
             {challenge.title}
           </h4>
-          <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5 min-w-0">
-            <Target className="w-3 h-3 text-orange-600 shrink-0" aria-hidden="true" />
-            <span className="truncate">{challenge.goalTitleSnapshot}</span>
-          </p>
         </div>
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border shrink-0 ${health.badgeClass}`}
-        >
-          <StatusIcon className="w-3 h-3 shrink-0" aria-hidden="true" />
-          <span>{health.label}</span>
-        </span>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border shrink-0 ${health.badgeClass}`}
+          >
+            <StatusIcon className="w-3 h-3 shrink-0" aria-hidden="true" />
+            <span>{health.label}</span>
+          </span>
+          {expanded ? (
+            <ChevronUp className="w-4 h-4 text-stone-500 shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-stone-500 shrink-0" aria-hidden="true" />
+          )}
+        </div>
       </div>
 
-      {/* Barra progresso leggibile */}
-      <div className="space-y-1">
+      {/* Riga 2: mini progress bar colorata, speso/limite, highlight risparmio, meta & giorni rimasti */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-stone-500 min-w-0">
         <div
-          className="w-full h-2 rounded-full progress-track overflow-hidden"
+          className="w-16 sm:w-24 h-1.5 rounded-full progress-track overflow-hidden shrink-0"
           role="progressbar"
           aria-valuenow={metrics.barPercent}
           aria-valuemin={0}
@@ -64,47 +96,38 @@ export const ChallengeCompactCard: React.FC<ChallengeCompactCardProps> = ({
             style={{ width: `${metrics.barPercent}%` }}
           />
         </div>
-      </div>
 
-      {/* 3 metriche compatte anti-overflow */}
-      <div className="grid grid-cols-3 gap-2 text-[11px] min-w-0">
-        <div className="min-w-0">
-          <span className="text-stone-500 block text-[10px]">Limite</span>
-          <span className="font-mono tabular-nums font-semibold text-stone-900 block truncate">
-            {formatCurrency(metrics.totalLimit, challenge.currency)}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <span className="text-stone-500 block text-[10px]">Speso</span>
-          <span className="font-mono tabular-nums font-semibold text-stone-900 block truncate">
+        <span className="font-mono tabular-nums text-stone-600 shrink-0">
+          <strong className="text-stone-900">
             {formatCurrency(metrics.validSpend, challenge.currency)}
-          </span>
-        </div>
-        <div className="min-w-0 text-right">
-          <span className="text-stone-500 block text-[10px]">Virt. disp.</span>
-          <span className="font-mono tabular-nums font-bold text-emerald-600 block truncate">
-            {formatCurrency(metrics.virtualSavingsAvailable, challenge.currency)}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-stone-200/70 text-[10px] text-stone-500">
-        <span className="inline-flex items-center gap-1 min-w-0 truncate">
-          <Calendar className="w-3 h-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {formatYearMonthIt(challenge.startMonth)}
-            {challenge.durationMonths > 1 ? ` · ${challenge.durationMonths} mesi` : ''}
-          </span>
+          </strong>
+          {' / '}
+          {formatCurrency(metrics.totalLimit, challenge.currency)}
         </span>
-        <span className="inline-flex items-center gap-1 font-mono font-semibold shrink-0">
-          {metrics.isPeriodConcluded ? (
-            'Periodo concluso'
-          ) : (
-            <>
-              <Sparkles className="w-3 h-3 text-orange-600" aria-hidden="true" />
-              <span>{metrics.daysRemaining} gg rimasti</span>
-            </>
-          )}
+
+        {metrics.exceededAmount > 0 ? (
+          <span className="font-mono tabular-nums font-semibold text-rose-600 shrink-0">
+            +{formatCurrency(metrics.exceededAmount, challenge.currency)} oltre
+          </span>
+        ) : metrics.virtualSavingsAvailable > 0 ? (
+          <span className="font-mono tabular-nums font-bold text-emerald-600 shrink-0">
+            +{formatCurrency(metrics.virtualSavingsAvailable, challenge.currency)} virt.
+          </span>
+        ) : metrics.virtualSavingsApplied > 0 ? (
+          <span className="font-mono tabular-nums font-semibold text-orange-600 shrink-0">
+            {formatCurrency(metrics.virtualSavingsApplied, challenge.currency)} applic.
+          </span>
+        ) : null}
+
+        <span className="hidden sm:inline-flex items-center gap-1 truncate max-w-[160px] min-w-0">
+          <Target className="w-3 h-3 text-orange-600 shrink-0" aria-hidden="true" />
+          <span className="truncate">{challenge.goalTitleSnapshot}</span>
+        </span>
+
+        <span className="ml-auto font-mono text-[10px] font-semibold shrink-0">
+          {metrics.isPeriodConcluded
+            ? 'Periodo concluso'
+            : `${metrics.daysRemaining} gg rimasti`}
         </span>
       </div>
     </button>

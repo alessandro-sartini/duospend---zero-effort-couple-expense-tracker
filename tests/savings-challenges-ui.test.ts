@@ -208,7 +208,7 @@ describe('UI, accessibilità, PWA offline e riconnessione Sfide di Risparmio', (
     expect(detailHtml.toLowerCase()).not.toContain('classifica');
   });
 
-  it('rende correttamente stati loading, empty, error, offline e layout 2 colonne nella sezione Sfide', () => {
+  it('rende accordion chiusi di default con indicatori a colori, dettaglio espandibile inline e paginazione oltre 5 sfide', () => {
     const loadingHtml = renderToStaticMarkup(
       React.createElement(SavingsChallengesSection, {
         goals: sampleGoals,
@@ -232,7 +232,8 @@ describe('UI, accessibilità, PWA offline e riconnessione Sfide di Risparmio', (
     expect(emptyHtml).toContain('Nessuna sfida di risparmio attiva');
     expect(emptyHtml).toContain('Crea la prima sfida');
 
-    const offlineErrorHtml = renderToStaticMarkup(
+    // Stato collassato di default: mostra indicatore colore (bg-emerald-500), barra compatta e metriche senza aprire il dettaglio
+    const collapsedOfflineErrorHtml = renderToStaticMarkup(
       React.createElement(SavingsChallengesSection, {
         goals: sampleGoals,
         expenses: [],
@@ -243,10 +244,49 @@ describe('UI, accessibilità, PWA offline e riconnessione Sfide di Risparmio', (
         initialError: 'Errore temporaneo server',
       })
     );
-    expect(offlineErrorHtml).toContain('lg:grid-cols-12');
-    expect(offlineErrorHtml).toContain('Connessione assente');
-    expect(offlineErrorHtml).toContain('role="alert"');
-    expect(offlineErrorHtml).toContain('Errore temporaneo server');
+    expect(collapsedOfflineErrorHtml).toContain('aria-expanded="false"');
+    expect(collapsedOfflineErrorHtml).toContain('bg-emerald-500');
+    expect(collapsedOfflineErrorHtml).toContain('Connessione assente');
+    expect(collapsedOfflineErrorHtml).toContain('role="alert"');
+    expect(collapsedOfflineErrorHtml).toContain('Errore temporaneo server');
+    expect(collapsedOfflineErrorHtml).not.toContain('Prepara contributo virtuale');
+
+    // Stato espanso inline: mostra region accessibile, layout desktop 2 colonne e storico chiuso di default
+    const expandedHtml = renderToStaticMarkup(
+      React.createElement(SavingsChallengesSection, {
+        goals: sampleGoals,
+        expenses: [],
+        profile: sampleProfile,
+        initialChallenges: [sampleChallenge],
+        initialExpandedChallengeId: 'chg-ui-1',
+        initialLoading: false,
+      })
+    );
+    expect(expandedHtml).toContain('aria-expanded="true"');
+    expect(expandedHtml).toContain('role="region"');
+    expect(expandedHtml).toContain('lg:grid-cols-12');
+    expect(expandedHtml).toContain('Prepara contributo virtuale');
+    expect(expandedHtml).toContain('Chiudi dettaglio');
+
+    // Paginazione compatta oltre 5 sfide
+    const sevenChallenges: SavingsChallenge[] = Array.from({ length: 7 }, (_, i) => ({
+      ...sampleChallenge,
+      id: `chg-ui-${i + 1}`,
+      title: `Sfida Numero ${i + 1}`,
+    }));
+    const paginatedHtml = renderToStaticMarkup(
+      React.createElement(SavingsChallengesSection, {
+        goals: sampleGoals,
+        expenses: [],
+        profile: sampleProfile,
+        initialChallenges: sevenChallenges,
+        initialLoading: false,
+      })
+    );
+    expect(paginatedHtml).toContain('Sfida Numero 1');
+    expect(paginatedHtml).toContain('Sfida Numero 5');
+    expect(paginatedHtml).not.toContain('Sfida Numero 6');
+    expect(paginatedHtml).toContain('Mostra tutte le 7 sfide (+2)');
   });
 
   it('rende modali accessibili (role=dialog, aria-modal, mobile bottom-sheet) per creazione e contributo virtuale', () => {

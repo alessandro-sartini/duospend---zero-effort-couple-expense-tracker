@@ -14,6 +14,8 @@ export interface ChallengeHealthDisplay {
   label: string;
   badgeClass: string;
   barClass: string;
+  dotClass: string;
+  accentStripClass: string;
   ringStroke: string;
   icon: LucideIcon;
 }
@@ -27,6 +29,8 @@ export function getChallengeHealthDisplay(
         label: 'Completata',
         badgeClass: 'bg-emerald-500/12 text-emerald-700 border-emerald-500/25',
         barClass: 'bg-emerald-600',
+        dotClass: 'bg-emerald-500',
+        accentStripClass: 'bg-emerald-500',
         ringStroke: 'var(--chart-color-2)',
         icon: CheckCircle2,
       };
@@ -35,6 +39,8 @@ export function getChallengeHealthDisplay(
         label: 'Quasi al limite',
         badgeClass: 'bg-amber-500/12 text-amber-700 border-amber-500/25',
         barClass: 'bg-amber-500',
+        dotClass: 'bg-amber-500',
+        accentStripClass: 'bg-amber-500',
         ringStroke: 'var(--chart-color-6)',
         icon: AlertTriangle,
       };
@@ -43,6 +49,8 @@ export function getChallengeHealthDisplay(
         label: 'Limite superato',
         badgeClass: 'bg-rose-500/12 text-rose-700 border-rose-500/25',
         barClass: 'bg-rose-500',
+        dotClass: 'bg-rose-500',
+        accentStripClass: 'bg-rose-500',
         ringStroke: 'var(--theme-progress-danger)',
         icon: AlertTriangle,
       };
@@ -51,6 +59,8 @@ export function getChallengeHealthDisplay(
         label: 'In pausa',
         badgeClass: 'bg-stone-500/10 text-stone-600 border-stone-500/20',
         barClass: 'bg-stone-400',
+        dotClass: 'bg-stone-400',
+        accentStripClass: 'bg-stone-400',
         ringStroke: 'var(--chart-color-11)',
         icon: PauseCircle,
       };
@@ -59,6 +69,8 @@ export function getChallengeHealthDisplay(
         label: 'Annullata',
         badgeClass: 'bg-stone-500/10 text-stone-600 border-stone-500/20',
         barClass: 'bg-stone-400',
+        dotClass: 'bg-stone-400',
+        accentStripClass: 'bg-stone-400',
         ringStroke: 'var(--chart-color-11)',
         icon: CircleSlash,
       };
@@ -67,6 +79,8 @@ export function getChallengeHealthDisplay(
         label: 'Da ricalcolare',
         badgeClass: 'bg-amber-500/12 text-amber-700 border-amber-500/25',
         barClass: 'bg-amber-500',
+        dotClass: 'bg-amber-500',
+        accentStripClass: 'bg-amber-500',
         ringStroke: 'var(--chart-color-6)',
         icon: RefreshCw,
       };
@@ -75,6 +89,8 @@ export function getChallengeHealthDisplay(
         label: 'Nessuna spesa',
         badgeClass: 'bg-blue-500/12 text-blue-700 border-blue-500/25',
         barClass: 'bg-blue-500',
+        dotClass: 'bg-blue-500',
+        accentStripClass: 'bg-blue-500',
         ringStroke: 'var(--chart-color-3)',
         icon: Target,
       };
@@ -84,6 +100,8 @@ export function getChallengeHealthDisplay(
         label: 'In linea',
         badgeClass: 'bg-emerald-500/12 text-emerald-700 border-emerald-500/25',
         barClass: 'bg-emerald-600',
+        dotClass: 'bg-emerald-500',
+        accentStripClass: 'bg-emerald-500',
         ringStroke: 'var(--chart-color-2)',
         icon: Sparkles,
       };

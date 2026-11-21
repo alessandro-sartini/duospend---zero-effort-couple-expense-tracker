@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle2,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -39,8 +38,11 @@ import { ChallengeCompactCard } from './ChallengeCompactCard';
 import { ChallengeDetailPanel } from './ChallengeDetailPanel';
 import { ChallengeFormModal } from './ChallengeFormModal';
 import { ContributionConfirmModal } from './ContributionConfirmModal';
+import { getChallengeHealthDisplay } from './challengeStatusMeta';
 
 type ChallengeFilterTab = 'active' | 'completed' | 'all';
+
+const INITIAL_VISIBLE_CHALLENGES = 5;
 
 interface SavingsChallengesSectionProps {
   goals: SavingGoal[];
@@ -53,6 +55,7 @@ interface SavingsChallengesSectionProps {
   createForGoalRequest?: { goalId: string; nonce: number } | null;
   initialChallenges?: SavingsChallenge[];
   initialGoalSummaries?: GoalVirtualSavingsSummary[];
+  initialExpandedChallengeId?: string | null;
   initialLoading?: boolean;
   initialOffline?: boolean;
   initialError?: string | null;
@@ -69,6 +72,7 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
   createForGoalRequest,
   initialChallenges,
   initialGoalSummaries,
+  initialExpandedChallengeId = null,
   initialLoading = false,
   initialOffline = false,
   initialError = null,
@@ -86,9 +90,10 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
   });
 
   const [filterTab, setFilterTab] = useState<ChallengeFilterTab>('active');
-  const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(
-    () => initialChallenges?.[0]?.id ?? null
+  const [expandedChallengeId, setExpandedChallengeId] = useState<string | null>(
+    () => initialExpandedChallengeId
   );
+  const [showAllVisible, setShowAllVisible] = useState(false);
   const [historyByChallenge, setHistoryByChallenge] = useState<
     Record<string, { history: SavingsChallengeHistoryEntry[]; contributions: SavingsChallengeContribution[] }>
   >({});
@@ -141,10 +146,9 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
       setGoalSummaries(data.goalSummaries);
       setPolicy(data.policy);
       setIsOffline(false);
-      setSelectedChallengeId((current) => {
-        if (current && data.challenges.some((c) => c.id === current)) return current;
-        return data.challenges[0]?.id ?? null;
-      });
+      setExpandedChallengeId((current) =>
+        current && data.challenges.some((c) => c.id === current) ? current : null
+      );
     } catch (err) {
       if (isOfflineNetworkError(err)) {
         setIsOffline(true);
@@ -153,7 +157,9 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
           setChallenges(cached.challenges);
           setGoalSummaries(cached.goalSummaries);
           if (cached.policy) setPolicy(cached.policy);
-          setSelectedChallengeId((current) => current ?? cached.challenges[0]?.id ?? null);
+          setExpandedChallengeId((current) =>
+            current && cached.challenges.some((c) => c.id === current) ? current : null
+          );
         }
       } else {
         setErrorText(
@@ -228,9 +234,13 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
   }, []);
 
   useEffect(() => {
-    if (initialChallenges || !selectedChallengeId || isOffline) return;
-    void loadHistoryForChallenge(selectedChallengeId);
-  }, [initialChallenges, selectedChallengeId, isOffline, loadHistoryForChallenge]);
+    if (initialChallenges || !expandedChallengeId || isOffline) return;
+    void loadHistoryForChallenge(expandedChallengeId);
+  }, [initialChallenges, expandedChallengeId, isOffline, loadHistoryForChallenge]);
+
+  const handleToggleChallenge = (challengeId: string) => {
+    setExpandedChallengeId((current) => (current === challengeId ? null : challengeId));
+  };
 
   const activeChallengesList = useMemo(
     () => challenges.filter((c) => c.status === 'active' || c.status === 'paused'),
@@ -247,10 +257,28 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
     return challenges;
   }, [filterTab, activeChallengesList, completedChallengesList, challenges]);
 
-  const selectedChallenge = useMemo(() => {
-    const inVisible = visibleChallenges.find((c) => c.id === selectedChallengeId);
-    return inVisible ?? visibleChallenges[0] ?? null;
-  }, [visibleChallenges, selectedChallengeId]);
+  const expandedIndex = expandedChallengeId
+    ? visibleChallenges.findIndex((c) => c.id === expandedChallengeId)
+    : -1;
+  const shouldShowAll = showAllVisible || expandedIndex >= INITIAL_VISIBLE_CHALLENGES;
+
+  const displayedChallenges = useMemo(
+    () =>
+      shouldShowAll
+        ? visibleChallenges
+        : visibleChallenges.slice(0, INITIAL_VISIBLE_CHALLENGES),
+    [shouldShowAll, visibleChallenges]
+  );
+  const hiddenCount = Math.max(0, visibleChallenges.length - displayedChallenges.length);
+
+  const totalActiveVirtualAvailable = useMemo(
+    () =>
+      activeChallengesList.reduce(
+        (sum, c) => sum + (c.metrics.virtualSavingsAvailable || 0),
+        0
+      ),
+    [activeChallengesList]
+  );
 
   const mergeUpdatedChallenge = (
     updatedChallenge: SavingsChallenge,
@@ -264,7 +292,7 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
       return next;
     });
     setGoalSummaries(updatedSummaries);
-    setSelectedChallengeId(updatedChallenge.id);
+    setExpandedChallengeId(updatedChallenge.id);
     void loadHistoryForChallenge(updatedChallenge.id);
   };
 
@@ -314,6 +342,7 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
     });
     mergeUpdatedChallenge(res.challenge, res.goalSummaries);
     setFilterTab('active');
+    setShowAllVisible(false);
     setStatusAnnouncement({
       type: 'success',
       text: `Sfida "${res.challenge.title}" attivata! Nessun conto reale viene modificato.`,
@@ -421,6 +450,7 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
         revertAppliedContributions: requireRevertConfirm,
       });
       setChallenges((current) => current.filter((c) => c.id !== challenge.id));
+      setExpandedChallengeId((current) => (current === challenge.id ? null : current));
       setGoalSummaries(res.goalSummaries);
       if (res.updatedGoals.length > 0) {
         onSyncGoalsFromServer?.(res.updatedGoals);
@@ -454,19 +484,6 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
       setIsBusy(false);
     }
   };
-
-  const selectedHistory = selectedChallenge
-    ? historyByChallenge[selectedChallenge.id]?.history ?? []
-    : [];
-  const selectedContributions = selectedChallenge
-    ? historyByChallenge[selectedChallenge.id]?.contributions ?? []
-    : [];
-  const selectedGoal = selectedChallenge
-    ? goals.find((g) => g.id === selectedChallenge.goalId)
-    : undefined;
-  const selectedGoalSummary = selectedChallenge
-    ? goalSummaries.find((s) => s.goalId === selectedChallenge.goalId)
-    : undefined;
 
   return (
     <section
@@ -583,24 +600,19 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
         </div>
       )}
 
-      {/* Loading skeleton */}
+      {/* Loading skeleton compatto */}
       {isLoading ? (
         <div
           aria-busy="true"
           aria-label="Caricamento sfide di risparmio"
-          className="grid grid-cols-1 lg:grid-cols-12 gap-5"
+          className="space-y-2.5"
         >
-          <div className="lg:col-span-5 space-y-3">
-            {[1, 2].map((n) => (
-              <div
-                key={n}
-                className="ds-subcard h-32 p-4 animate-pulse motion-reduce:animate-none"
-              />
-            ))}
-          </div>
-          <div className="lg:col-span-7">
-            <div className="ds-subcard h-72 p-4 animate-pulse motion-reduce:animate-none" />
-          </div>
+          {[1, 2, 3].map((n) => (
+            <div
+              key={n}
+              className="ds-subcard h-16 p-4 animate-pulse motion-reduce:animate-none"
+            />
+          ))}
         </div>
       ) : challenges.length === 0 ? (
         /* Empty state istruttivo */
@@ -643,29 +655,52 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
         </div>
       ) : (
         <>
-          {/* Filtri Attive / Storico / Tutte */}
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtra sfide per stato">
-            {(
-              [
-                { id: 'active', label: `Attive (${activeChallengesList.length})` },
-                { id: 'completed', label: `Concluse (${completedChallengesList.length})` },
-                { id: 'all', label: `Tutte (${challenges.length})` },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                aria-pressed={filterTab === tab.id}
-                onClick={() => setFilterTab(tab.id)}
-                className={`min-h-9 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
-                  filterTab === tab.id
-                    ? 'bg-orange-600 text-white border-orange-600'
-                    : 'ds-btn-secondary'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Filtri Attive / Storico / Tutte + riepilogo virtuale compatto */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtra sfide per stato">
+              {(
+                [
+                  { id: 'active', label: `Attive (${activeChallengesList.length})` },
+                  { id: 'completed', label: `Concluse (${completedChallengesList.length})` },
+                  { id: 'all', label: `Tutte (${challenges.length})` },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  aria-pressed={filterTab === tab.id}
+                  onClick={() => {
+                    setFilterTab(tab.id);
+                    setShowAllVisible(false);
+                  }}
+                  className={`min-h-9 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                    filterTab === tab.id
+                      ? 'bg-orange-600 text-white border-orange-600'
+                      : 'ds-btn-secondary'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {totalActiveVirtualAvailable > 0 && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-emerald-500/12 text-emerald-700 border border-emerald-500/25">
+                  +{formatCurrency(totalActiveVirtualAvailable, profile.currency)} virtuali disp.
+                </span>
+              )}
+              {expandedChallengeId &&
+                visibleChallenges.some((c) => c.id === expandedChallengeId) && (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedChallengeId(null)}
+                    className="ds-btn-secondary min-h-8 px-2.5 py-1 text-[11px]"
+                  >
+                    Chiudi dettaglio
+                  </button>
+                )}
+            </div>
           </div>
 
           {visibleChallenges.length === 0 ? (
@@ -673,69 +708,115 @@ export const SavingsChallengesSection: React.FC<SavingsChallengesSectionProps> =
               Nessuna sfida presente in questa vista. Passa a &ldquo;Tutte&rdquo; o crea una nuova sfida.
             </div>
           ) : (
-            /* Desktop: 2 colonne (sx compatte, dx dettaglio/storico) · Mobile: verticale */
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-              <div className="lg:col-span-5 space-y-3 min-w-0">
-                {visibleChallenges.map((challenge) => (
-                  <ChallengeCompactCard
-                    key={challenge.id}
-                    challenge={challenge}
-                    isSelected={selectedChallenge?.id === challenge.id}
-                    onSelect={(id) => setSelectedChallengeId(id)}
-                  />
-                ))}
-              </div>
+            /* Lista Accordion compatta (chiusa di default, indicatori a colori, paginata a 5 voci) */
+            <div className="space-y-2.5">
+              {displayedChallenges.map((challenge) => {
+                const isExpanded = expandedChallengeId === challenge.id;
+                const panelId = `savings-challenge-panel-${challenge.id}`;
+                const health = getChallengeHealthDisplay(challenge.metrics.healthState);
+                const challengeHistory = historyByChallenge[challenge.id]?.history ?? [];
+                const challengeContributions =
+                  historyByChallenge[challenge.id]?.contributions ?? [];
+                const challengeGoal = goals.find((g) => g.id === challenge.goalId);
+                const challengeGoalSummary = goalSummaries.find(
+                  (s) => s.goalId === challenge.goalId
+                );
 
-              <div className="lg:col-span-7 min-w-0">
-                {selectedChallenge && (
-                  <ChallengeDetailPanel
-                    challenge={selectedChallenge}
-                    linkedGoal={selectedGoal}
-                    goalSummary={selectedGoalSummary}
-                    history={selectedHistory}
-                    contributions={selectedContributions}
-                    policy={policy}
-                    isLoadingHistory={isLoadingHistory}
-                    isOffline={isOffline}
-                    isBusy={isBusy}
-                    onPrepareContribution={(target) => setContributionTarget(target)}
-                    onEdit={(target) => {
-                      setEditingChallenge(target);
-                      setPreselectedGoalId(target.goalId);
-                      setIsFormOpen(true);
-                    }}
-                    onPause={(target) =>
-                      void runChallengeAction(
-                        () => pauseSavingsChallenge(target.id, target.version),
-                        `Sfida "${target.title}" messa in pausa.`
-                      )
-                    }
-                    onResume={(target) =>
-                      void runChallengeAction(
-                        () => resumeSavingsChallenge(target.id, target.version),
-                        `Sfida "${target.title}" riattivata.`
-                      )
-                    }
-                    onComplete={(target) =>
-                      void runChallengeAction(
-                        () => completeSavingsChallenge(target.id, target.version),
-                        `Sfida "${target.title}" completata. Nessun conto reale è stato modificato.`,
-                        true
-                      )
-                    }
-                    onRecalculate={(target) =>
-                      void runChallengeAction(
-                        () => recalculateSavingsChallenge(target.id),
-                        `Sfida "${target.title}" ricalcolata dai dati reali.`
-                      )
-                    }
-                    onRequestRevertContribution={(target, contrib) =>
-                      setRevertPending({ challenge: target, contribution: contrib })
-                    }
-                    onRequestDelete={handleRequestDelete}
-                  />
-                )}
-              </div>
+                return (
+                  <div
+                    key={challenge.id}
+                    className={`ds-subcard relative overflow-hidden transition-colors ${
+                      isExpanded ? 'border-orange-500 ring-2 ring-orange-500/20' : ''
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`absolute inset-y-0 left-0 ${
+                        isExpanded ? 'w-1.5' : 'w-1'
+                      } ${health.accentStripClass}`}
+                    />
+
+                    <ChallengeCompactCard
+                      challenge={challenge}
+                      isExpanded={isExpanded}
+                      panelId={panelId}
+                      embeddedInAccordion
+                      onToggle={handleToggleChallenge}
+                    />
+
+                    {isExpanded && (
+                      <div
+                        id={panelId}
+                        role="region"
+                        aria-label={`Dettagli sfida ${challenge.title}`}
+                        className="border-t border-stone-200/70 pl-4 pr-3.5 py-3.5 sm:pl-5 sm:pr-4 sm:py-4"
+                      >
+                        <ChallengeDetailPanel
+                          challenge={challenge}
+                          linkedGoal={challengeGoal}
+                          goalSummary={challengeGoalSummary}
+                          history={challengeHistory}
+                          contributions={challengeContributions}
+                          policy={policy}
+                          isLoadingHistory={isLoadingHistory}
+                          isOffline={isOffline}
+                          isBusy={isBusy}
+                          embedded
+                          onPrepareContribution={(target) => setContributionTarget(target)}
+                          onEdit={(target) => {
+                            setEditingChallenge(target);
+                            setPreselectedGoalId(target.goalId);
+                            setIsFormOpen(true);
+                          }}
+                          onPause={(target) =>
+                            void runChallengeAction(
+                              () => pauseSavingsChallenge(target.id, target.version),
+                              `Sfida "${target.title}" messa in pausa.`
+                            )
+                          }
+                          onResume={(target) =>
+                            void runChallengeAction(
+                              () => resumeSavingsChallenge(target.id, target.version),
+                              `Sfida "${target.title}" riattivata.`
+                            )
+                          }
+                          onComplete={(target) =>
+                            void runChallengeAction(
+                              () => completeSavingsChallenge(target.id, target.version),
+                              `Sfida "${target.title}" completata. Nessun conto reale è stato modificato.`,
+                              true
+                            )
+                          }
+                          onRecalculate={(target) =>
+                            void runChallengeAction(
+                              () => recalculateSavingsChallenge(target.id),
+                              `Sfida "${target.title}" ricalcolata dai dati reali.`
+                            )
+                          }
+                          onRequestRevertContribution={(target, contrib) =>
+                            setRevertPending({ challenge: target, contribution: contrib })
+                          }
+                          onRequestDelete={handleRequestDelete}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {visibleChallenges.length > INITIAL_VISIBLE_CHALLENGES && (
+                <div className="pt-1 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowAllVisible((prev) => !prev)}
+                    className="ds-btn-secondary min-h-9 px-4 py-1.5 text-xs"
+                  >
+                    {hiddenCount > 0
+                      ? `Mostra tutte le ${visibleChallenges.length} sfide (+${hiddenCount})`
+                      : `Mostra solo le prime ${INITIAL_VISIBLE_CHALLENGES} sfide`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>

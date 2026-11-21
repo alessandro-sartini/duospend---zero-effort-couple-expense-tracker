@@ -41,6 +41,7 @@ interface ChallengeDetailPanelProps {
   isLoadingHistory: boolean;
   isOffline: boolean;
   isBusy: boolean;
+  embedded?: boolean;
   onPrepareContribution: (challenge: SavingsChallenge) => void;
   onEdit: (challenge: SavingsChallenge) => void;
   onPause: (challenge: SavingsChallenge) => void;
@@ -64,6 +65,7 @@ export const ChallengeDetailPanel: React.FC<ChallengeDetailPanelProps> = ({
   isLoadingHistory,
   isOffline,
   isBusy,
+  embedded = false,
   onPrepareContribution,
   onEdit,
   onPause,
@@ -74,7 +76,7 @@ export const ChallengeDetailPanel: React.FC<ChallengeDetailPanelProps> = ({
   onRequestDelete,
 }) => {
   const [showCalcDetails, setShowCalcDetails] = useState(false);
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
 
   const health = getChallengeHealthDisplay(challenge.metrics.healthState);
   const StatusIcon = health.icon;
@@ -100,38 +102,63 @@ export const ChallengeDetailPanel: React.FC<ChallengeDetailPanelProps> = ({
       : 0;
 
   return (
-    <div className="ds-subcard p-4 sm:p-5 space-y-4 min-w-0">
-      {/* Header sfida */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 min-w-0">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${health.badgeClass}`}
-            >
-              <StatusIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-              <span>{health.label}</span>
-            </span>
-            <span className="text-[11px] font-mono text-stone-500">
+    <div className={embedded ? 'space-y-4 min-w-0' : 'ds-subcard p-4 sm:p-5 space-y-4 min-w-0'}>
+      {/* Header sfida (compatto se embedded inline in accordion) */}
+      {embedded ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0 text-[11px] text-stone-500">
+          <div className="min-w-0 space-y-0.5">
+            <div className="font-mono text-stone-600">
               {challenge.startDate} → {challenge.endDate}
-            </span>
+            </div>
+            <p className="truncate sm:whitespace-normal">
+              Categorie: <strong className="text-stone-800">{challenge.categories.join(', ')}</strong>
+              {' · '}
+              {challenge.splitScope === 'shared_only'
+                ? 'Solo spese condivise'
+                : 'Tutte le spese della coppia'}
+            </p>
           </div>
-          <h4 className="text-base sm:text-lg font-bold text-stone-900 font-display break-words">
-            {challenge.title}
-          </h4>
-          <p className="text-[11px] text-stone-500">
-            Categorie: <strong className="text-stone-800">{challenge.categories.join(', ')}</strong>
-            {' · '}
-            {challenge.splitScope === 'shared_only'
-              ? 'Solo spese condivise'
-              : 'Tutte le spese della coppia'}
-          </p>
+          <div className="text-[10px] font-mono text-stone-500 shrink-0 sm:text-right">
+            <div>Timezone: {challenge.timezone}</div>
+            <div>Ultimo agg.: {formatDateTimeShort(challenge.lastReconciledAt)}</div>
+          </div>
         </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 min-w-0">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${health.badgeClass}`}
+              >
+                <StatusIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>{health.label}</span>
+              </span>
+              <span className="text-[11px] font-mono text-stone-500">
+                {challenge.startDate} → {challenge.endDate}
+              </span>
+            </div>
+            <h4 className="text-base sm:text-lg font-bold text-stone-900 font-display break-words">
+              {challenge.title}
+            </h4>
+            <p className="text-[11px] text-stone-500">
+              Categorie: <strong className="text-stone-800">{challenge.categories.join(', ')}</strong>
+              {' · '}
+              {challenge.splitScope === 'shared_only'
+                ? 'Solo spese condivise'
+                : 'Tutte le spese della coppia'}
+            </p>
+          </div>
 
-        <div className="text-[10px] font-mono text-stone-500 shrink-0 sm:text-right">
-          <div>Timezone: {challenge.timezone}</div>
-          <div>Ultimo agg.: {formatDateTimeShort(challenge.lastReconciledAt)}</div>
+          <div className="text-[10px] font-mono text-stone-500 shrink-0 sm:text-right">
+            <div>Timezone: {challenge.timezone}</div>
+            <div>Ultimo agg.: {formatDateTimeShort(challenge.lastReconciledAt)}</div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Layout 2 colonne desktop dentro il dettaglio espanso */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <div className="lg:col-span-7 space-y-4 min-w-0">
 
       {/* Anello progresso + Messaggio motivante non competitivo */}
       <div className="ds-card p-4 flex flex-col sm:flex-row items-center gap-4">
@@ -475,7 +502,9 @@ export const ChallengeDetailPanel: React.FC<ChallengeDetailPanelProps> = ({
           </button>
         </div>
       </div>
+        </div>
 
+        <div className="lg:col-span-5 space-y-3 min-w-0">
       {/* Periodi mensili (se multi-mese) */}
       {challenge.periods.length > 1 && (
         <div className="ds-card p-3.5 space-y-2">
@@ -675,6 +704,8 @@ export const ChallengeDetailPanel: React.FC<ChallengeDetailPanelProps> = ({
             )}
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   );
