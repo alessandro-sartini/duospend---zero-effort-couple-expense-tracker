@@ -226,6 +226,41 @@ describe('Resilienza salvataggio OCR (localStorage quota) e cooldown modelli Gem
     expect(generateContentMock.mock.calls[2]?.[0]?.model).toBe('gemini-3.5-flash-lite');
   });
 
+  it('generateContentWithFallback mette in cooldown il modello bloccato su TimeoutError / "This operation was aborted" (Node 22 AbortSignal.timeout)', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'AIza' + 'SyDummyValidKeyForUnitTesting1234567890');
+
+    generateContentMock.mockImplementation(async ({ model }: { model: string }) => {
+      if (model === 'gemini-3.8-flash') {
+        const timeoutErr = new Error('This operation was aborted');
+        timeoutErr.name = 'TimeoutError';
+        throw timeoutErr;
+      }
+      return { text: '{"ok":true}' };
+    });
+
+    const first = await generateContentWithFallback({
+      model: 'gemini-3.8-flash',
+      fallbackModels: ['gemini-3.5-flash-lite'],
+      timeoutMs: 8_000,
+      contents: 'Notifica pagamento 1',
+    });
+
+    expect(first.modelUsed).toBe('gemini-3.5-flash-lite');
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+
+    // La chiamata successiva salta direttamente gemini-3.8-flash perché in cooldown cache
+    const second = await generateContentWithFallback({
+      model: 'gemini-3.8-flash',
+      fallbackModels: ['gemini-3.5-flash-lite'],
+      timeoutMs: 8_000,
+      contents: 'Notifica pagamento 2',
+    });
+
+    expect(second.modelUsed).toBe('gemini-3.5-flash-lite');
+    expect(generateContentMock).toHaveBeenCalledTimes(3);
+    expect(generateContentMock.mock.calls[2]?.[0]?.model).toBe('gemini-3.5-flash-lite');
+  });
+
   it('syncWithServerDatabase preserva le modifiche locali offline rispetto ai record server obsoleti mantenendo receiptUrl', async () => {
     const store = new Map<string, string>();
     const setItemMock = vi.fn((key: string, value: string) => {

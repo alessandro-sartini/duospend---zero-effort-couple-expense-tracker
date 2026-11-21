@@ -739,6 +739,7 @@ export async function generateContentWithFallback(options: {
   contents: unknown;
   config?: Record<string, unknown>;
   fallbackModels?: string[];
+  timeoutMs?: number;
 }) {
   hydrateModelCachesFromDatabase();
   const ai = getGeminiClient();
@@ -747,6 +748,12 @@ export async function generateContentWithFallback(options: {
     Boolean(options.model && /image/i.test(options.model));
   const defaultFallbacks = isImageTask ? DEFAULT_IMAGE_FALLBACK_MODELS : DEFAULT_TEXT_FALLBACK_MODELS;
   const now = Date.now();
+  const effectiveTimeoutMs =
+    typeof options.timeoutMs === 'number' &&
+    Number.isFinite(options.timeoutMs) &&
+    options.timeoutMs > 0
+      ? options.timeoutMs
+      : GEMINI_REQUEST_TIMEOUT_MS;
 
   const initialQueue = [
     ...new Set(
@@ -776,7 +783,7 @@ export async function generateContentWithFallback(options: {
       const requestConfig = {
         ...(options.config ?? {}),
         ...(!options.config?.abortSignal
-          ? { abortSignal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS) }
+          ? { abortSignal: AbortSignal.timeout(effectiveTimeoutMs) }
           : {}),
       };
       const response = await ai.models.generateContent({
@@ -839,7 +846,10 @@ export async function generateContentWithFallback(options: {
           statusCode === 503 ||
           statusCode === 504 ||
           errorName === 'AbortError' ||
+          errorName === 'TimeoutError' ||
           errorMessage.includes('timeout') ||
+          errorMessage.includes('timed out') ||
+          errorMessage.includes('aborted') ||
           errorMessage.includes('unavailable') ||
           errorMessage.includes('high demand') ||
           errorMessage.includes('resource_exhausted') ||

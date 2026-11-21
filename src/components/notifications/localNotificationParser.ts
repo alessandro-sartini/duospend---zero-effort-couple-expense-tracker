@@ -127,10 +127,12 @@ export function parseNotificationsLocally(
   defaultCurrency: string,
   isMultiLine: boolean
 ): ParsedNotificationItem[] {
-  const otpOrPromo = /\b(otp|codice\s*(?:sicurezza|verifica)|password\s*temporanea|sconto|promo)\b/i;
+  const otpOrPromo =
+    /\b(otp|one[- ]time\s*password|codice\s*(?:di\s*)?(?:sicurezza|verifica|accesso|conferma)|password\s*temporanea|sconto|sconti|coupon|promo|promozione|buono\s+(?:sconto|regalo)|accredito\s+bonifico|hai\s+ricevuto\s+un\s+bonifico|rimborso\s+accreditato)\b/i;
   if (!isMultiLine) {
+    if (otpOrPromo.test(inputText)) return [];
     const single = parseNotificationLineLocally(inputText, defaultCurrency);
-    return single ? [single] : [];
+    return single && single.amount > 0 ? [single] : [];
   }
   return inputText
     .split(/\r?\n+/)

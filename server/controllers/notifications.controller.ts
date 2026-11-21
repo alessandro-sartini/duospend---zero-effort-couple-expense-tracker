@@ -5,7 +5,7 @@ import { sendControllerError } from '../utils/http-error';
 
 export async function postIngestNotificationController(req: Request, res: Response) {
   try {
-    const { notificationText, appName, payer, persist } = req.body ?? {};
+    const { notificationText, appName, payer, persist, eventId } = req.body ?? {};
     const shouldPersist =
       persist === true || hasValidWebhookSecret(req.get('x-duospend-secret'));
 
@@ -14,6 +14,7 @@ export async function postIngestNotificationController(req: Request, res: Respon
       appName,
       payer,
       shouldPersist,
+      eventId,
     });
     return res.json(result);
   } catch (error) {

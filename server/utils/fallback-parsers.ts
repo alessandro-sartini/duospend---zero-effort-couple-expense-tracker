@@ -299,12 +299,55 @@ function extractNotificationMerchant(text: string, fallback: string): string {
   return fallback;
 }
 
+const OTP_OR_SECURITY_NOTIFICATION_PATTERN =
+  /\b(?:otp|one[- ]time\s*password|codice\s*(?:di\s*)?(?:sicurezza|verifica|accesso|conferma|autorizzazione|segreto|pin)|password\s*temporanea|non\s+condividere\s+questo\s+codice|verifica\s+in\s+due\s+passaggi|2fa|nuovo\s+accesso|accesso\s+rilevato|tentativo\s+di\s+accesso|login\s+(?:rilevato|effettuato)|hai\s+effettuato\s+l['’]?accesso)\b/i;
+
+const PROMO_OR_DISCOUNT_NOTIFICATION_PATTERN =
+  /\b(?:sconto|sconti|coupon|promo|promozione|promozionale|buono\s+(?:sconto|regalo|da|del)|codice\s+sconto|offerta\s+speciale|voucher|spesa\s+minima|risparmi(?:a|o)\s+fino|cashback\s+disponibile|regalo\s+per\s+te|fino\s+al?\s+\d+\s*%\s+di)\b/i;
+
+const INCOMING_CREDIT_OR_REFUND_NOTIFICATION_PATTERN =
+  /\b(?:accredito\s+(?:di|bonifico|stipendio|ricevuto|sul\s+conto)|bonifico\s+(?:ricevuto|in\s+entrata|a\s+tuo\s+favore|accreditato)|hai\s+ricevuto\s+(?:un\s+bonifico|un\s+accredito|un\s+rimborso|€|\$|£|eur\b|usd\b|gbp\b|\d)|ti\s+ha\s+inviato\s+(?:€|\$|£|eur\b|usd\b|gbp\b|\d)|rimborso\s+(?:di|ricevuto|accreditato|effettuato)|storno\s+(?:di|operazione|pagamento))\b/i;
+
+const BALANCE_INFO_ONLY_NOTIFICATION_PATTERN =
+  /\bsaldo\s+(?:disponibile|contabile|attuale)\b/i;
+
+const EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN =
+  /\b(?:pagamento\s+(?:di|pos|effettuato|autorizzato|con\s+carta)|hai\s+(?:pagato|speso|inviato)|addebit(?:o|ati|ato)\b|operazione\s+di\s+\d|transazione\s+(?:di|autorizzata)|acquisto\s+(?:di|presso|autorizzato))\b/i;
+
+export function classifyNonExpenseNotification(text: string): {
+  isNonExpense: boolean;
+  reason?: string;
+} {
+  const clean = (text || '').trim();
+  if (!clean) {
+    return { isNonExpense: true, reason: 'Testo notifica vuoto.' };
+  }
+  if (OTP_OR_SECURITY_NOTIFICATION_PATTERN.test(clean)) {
+    return { isNonExpense: true, reason: 'Codice OTP o avviso di sicurezza.' };
+  }
+  if (PROMO_OR_DISCOUNT_NOTIFICATION_PATTERN.test(clean)) {
+    return { isNonExpense: true, reason: 'Messaggio promozionale, coupon o sconto.' };
+  }
+  if (INCOMING_CREDIT_OR_REFUND_NOTIFICATION_PATTERN.test(clean)) {
+    return { isNonExpense: true, reason: 'Accredito in entrata o rimborso.' };
+  }
+  if (
+    BALANCE_INFO_ONLY_NOTIFICATION_PATTERN.test(clean) &&
+    !EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN.test(clean)
+  ) {
+    return { isNonExpense: true, reason: 'Comunicazione informativa di saldo.' };
+  }
+  return { isNonExpense: false };
+}
+
 export function parseNotificationHeuristically(
   text: string,
   appName = 'App Bancaria / SMS',
   payer: Payer = 'user'
 ) {
-  const { amount, currency } = extractAmountAndCurrency(text, 'EUR');
+  const nonExpenseCheck = classifyNonExpenseNotification(text);
+  const { amount: rawAmount, currency } = extractAmountAndCurrency(text, 'EUR');
+  const amount = nonExpenseCheck.isNonExpense ? 0 : rawAmount;
   const merchant = extractNotificationMerchant(text, sanitizePlainText(appName, 60, 'Pagamento'));
   const date = extractDateFromText(text);
   const category = inferCategoryFromText(`${merchant} ${text}`);
@@ -319,6 +362,9 @@ export function parseNotificationHeuristically(
     splitType: '50_50' as const,
     source: 'notification' as const,
     notes: sanitizePlainText(`Fallback locale da ${appName}: ${text}`, 220),
+    ...(nonExpenseCheck.isNonExpense
+      ? { isExpense: false, ignoreReason: nonExpenseCheck.reason }
+      : {}),
   };
 }
 
@@ -326,11 +372,10 @@ export function parseNotificationHistoryHeuristically(
   historyText: string,
   payer: Payer = 'user'
 ) {
-  const otpOrPromo = /\b(otp|codice\s*(?:sicurezza|verifica)|password\s*temporanea|sconto|promo)\b/i;
   const lines = historyText
     .split(/\r?\n+/)
     .map((line) => line.trim())
-    .filter((line) => line.length >= 6 && !otpOrPromo.test(line));
+    .filter((line) => line.length >= 6 && !classifyNonExpenseNotification(line).isNonExpense);
 
   return lines
     .map((line, idx) => {

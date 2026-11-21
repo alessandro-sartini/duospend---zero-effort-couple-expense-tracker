@@ -88,6 +88,14 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
         }
 
         const data = await res.json();
+        if (data.ignored || data.isExpense === false) {
+          setParsedItems([]);
+          setError(
+            data.reason ||
+              'La notifica non rappresenta una spesa reale (es. codice OTP, promozione o accredito).'
+          );
+          return;
+        }
         const extracted: ParsedNotificationItem[] = isMultiLine
           ? data.expenses || []
           : data.expense

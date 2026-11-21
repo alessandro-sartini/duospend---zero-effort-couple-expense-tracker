@@ -1,12 +1,65 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ServerDatabase } from '../server/database';
+
+const initialNotificationMockDb: ServerDatabase = {
+  expenses: [],
+  settlements: [],
+  goals: [],
+  trips: [],
+  recurringExpenses: [],
+  profile: {
+    userName: 'Partner 1',
+    partnerName: 'Partner 2',
+    monthlyBudget: 2500,
+    currency: 'EUR',
+    weddingBudgetGoal: 10000,
+    userEmail: 'owner@example.com',
+    partnerEmail: 'partner@example.com',
+  },
+  lastUpdated: '2026-11-21T00:00:00.000Z',
+};
+
+let notificationInMemoryDb: ServerDatabase = structuredClone(initialNotificationMockDb);
+const generateContentWithFallbackMock = vi.fn();
+const hasGeminiApiKeyMock = vi.fn(() => false);
+
+vi.mock('../server/database', () => ({
+  readDatabase: () => structuredClone(notificationInMemoryDb),
+  writeDatabase: (patch: Partial<ServerDatabase>) => {
+    notificationInMemoryDb = {
+      ...notificationInMemoryDb,
+      ...patch,
+      lastUpdated: new Date().toISOString(),
+    };
+    return structuredClone(notificationInMemoryDb);
+  },
+  insertExpenseRecord: (expense: ServerDatabase['expenses'][number]) => {
+    notificationInMemoryDb = {
+      ...notificationInMemoryDb,
+      expenses: [expense, ...notificationInMemoryDb.expenses.filter((e) => e.id !== expense.id)],
+      lastUpdated: new Date().toISOString(),
+    };
+  },
+}));
+
+vi.mock('../server/services/gemini', () => ({
+  generateContentWithFallback: (...args: unknown[]) => generateContentWithFallbackMock(...args),
+  hasGeminiApiKey: () => hasGeminiApiKeyMock(),
+}));
+
 import {
+  classifyNonExpenseNotification,
   extractReceiptsHeuristically,
   isLikelyPromotionalOrNonExpenseEmail,
   parseNotificationHeuristically,
   parseNotificationHistoryHeuristically,
 } from '../server/utils/security';
 import { buildReceiptFallback, normalizeReceiptResponse } from '../server/services/ai.service';
-import { normalizeNotificationExpense } from '../server/services/notification.service';
+import {
+  ingestNotification,
+  normalizeNotificationExpense,
+  resetNotificationIdempotencyCacheForTests,
+} from '../server/services/notification.service';
 
 describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
   describe('Notifiche singole (parseNotificationHeuristically)', () => {
@@ -261,6 +314,153 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(normalized.category).toBe('Ristoranti e Bar');
       expect(normalized.items).toEqual([{ name: 'Espresso', price: 1.5 }]);
       expect(normalized.notes).toBe('Colazione veloce');
+    });
+  });
+
+  describe('Webhook ingestNotification: filtro isExpense (SMS promo/OTP) e idempotenza concorrente/sequenziale', () => {
+    beforeEach(() => {
+      notificationInMemoryDb = structuredClone(initialNotificationMockDb);
+      resetNotificationIdempotencyCacheForTests();
+      generateContentWithFallbackMock.mockReset();
+      hasGeminiApiKeyMock.mockReset();
+      hasGeminiApiKeyMock.mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('scarta SMS promozionali ("Hai 10€ di sconto...") e codici OTP senza inserire alcuna riga in SQLite', async () => {
+      expect(
+        classifyNonExpenseNotification('Hai 10€ di sconto sul tuo prossimo acquisto in negozio!')
+          .isNonExpense
+      ).toBe(true);
+      expect(
+        classifyNonExpenseNotification('Banca Intesa: il tuo codice OTP di verifica è 548291.')
+          .isNonExpense
+      ).toBe(true);
+
+      const promoResult = await ingestNotification({
+        notificationText: 'Hai 10€ di sconto sul tuo prossimo acquisto da Carrefour!',
+        appName: 'SMS Promo',
+        payer: 'user',
+        shouldPersist: true,
+      });
+
+      expect(promoResult.success).toBe(true);
+      expect(promoResult.isExpense).toBe(false);
+      expect(promoResult.persisted).toBe(false);
+      expect(promoResult.ignored).toBe(true);
+      expect(promoResult.reason).toBeTruthy();
+      expect(notificationInMemoryDb.expenses).toHaveLength(0);
+      expect(generateContentWithFallbackMock).not.toHaveBeenCalled();
+
+      const otpResult = await ingestNotification({
+        notificationText: 'Nexi: Codice OTP 839201 per confermare accesso.',
+        appName: 'Nexi',
+        payer: 'user',
+        shouldPersist: true,
+      });
+
+      expect(otpResult.success).toBe(true);
+      expect(otpResult.isExpense).toBe(false);
+      expect(otpResult.persisted).toBe(false);
+      expect(otpResult.ignored).toBe(true);
+      expect(notificationInMemoryDb.expenses).toHaveLength(0);
+
+      // Anche se un messaggio ambiguo supera il pre-filtro e Gemini risponde isExpense: false, non salva nulla in SQLite
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: false,
+            ignoreReason: 'Offerta commerciale di partner selezionati',
+            merchant: 'Offerta',
+            amount: 0,
+            currency: 'EUR',
+            category: 'Altro',
+          }),
+        },
+      });
+
+      const aiFilteredResult = await ingestNotification({
+        notificationText: 'Con Te: 10€ per te sulla prossima spesa in cassa fino a domenica.',
+        appName: 'Messaggi',
+        payer: 'user',
+        shouldPersist: true,
+      });
+
+      expect(aiFilteredResult.success).toBe(true);
+      expect(aiFilteredResult.isExpense).toBe(false);
+      expect(aiFilteredResult.persisted).toBe(false);
+      expect(aiFilteredResult.ignored).toBe(true);
+      expect(aiFilteredResult.reason).toContain('Offerta commerciale');
+      expect(notificationInMemoryDb.expenses).toHaveLength(0);
+    });
+
+    it('deduplica una doppia chiamata concorrente e sequenziale a ingestNotification con lo stesso testo producendo una sola riga in SQLite', async () => {
+      generateContentWithFallbackMock.mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        return {
+          modelUsed: 'gemini-3.5-flash-lite',
+          response: {
+            text: JSON.stringify({
+              isExpense: true,
+              ignoreReason: '',
+              merchant: 'Esselunga',
+              amount: 42.8,
+              currency: 'EUR',
+              category: 'Spesa',
+              notes: 'Pagamento carta',
+            }),
+          },
+        };
+      });
+
+      const payload = {
+        notificationText: 'Nexi: Pagamento di 42,80 EUR presso ESSELUNGA autorizzato.',
+        appName: 'Nexi',
+        payer: 'user',
+        shouldPersist: true,
+      };
+
+      // 1) Due richieste identiche inviate in parallelo (in-flight deduplication)
+      const [first, secondConcurrent] = await Promise.all([
+        ingestNotification(payload),
+        ingestNotification(payload),
+      ]);
+
+      expect(first.success).toBe(true);
+      expect(first.persisted).toBe(true);
+      expect(first.deduplicated).toBe(false);
+      expect(first.expense?.sourceReference).toMatch(/^notif:[a-f0-9]{16}:\d+$/);
+
+      expect(secondConcurrent.success).toBe(true);
+      expect(secondConcurrent.deduplicated).toBe(true);
+      expect(secondConcurrent.expense?.id).toBe(first.expense?.id);
+
+      expect(generateContentWithFallbackMock).toHaveBeenCalledTimes(1);
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
+
+      // 2) Terza richiesta identica sequenziale entro il TTL di 5 minuti
+      const thirdSequential = await ingestNotification({
+        ...payload,
+        notificationText: '  Nexi:   Pagamento di 42,80 EUR presso ESSELUNGA autorizzato. ',
+      });
+
+      expect(thirdSequential.success).toBe(true);
+      expect(thirdSequential.deduplicated).toBe(true);
+      expect(thirdSequential.expense?.id).toBe(first.expense?.id);
+      expect(generateContentWithFallbackMock).toHaveBeenCalledTimes(1);
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
+
+      // 3) Anche dopo un reset della cache in memoria (es. riavvio container), sourceReference in SQLite impedisce duplicati
+      resetNotificationIdempotencyCacheForTests();
+      const afterRestart = await ingestNotification(payload);
+      expect(afterRestart.success).toBe(true);
+      expect(afterRestart.persisted).toBe(true);
+      expect(afterRestart.reconciled).toBe(true);
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
     });
   });
 });

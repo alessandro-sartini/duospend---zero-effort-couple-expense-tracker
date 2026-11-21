@@ -13,6 +13,7 @@ import {
   normalizeMerchantKey,
   reconcileIncomingExpenses,
 } from '../src/services/reconciliation';
+import { buildNotificationSourceReference } from '../server/services/notification.service';
 import type { Expense, RecurringExpenseItem, TripProject } from '../src/types';
 
 describe('Motore di riconciliazione multi-canale, quarantena 0 €, Vacanze e Ricorrenti', () => {
@@ -425,5 +426,100 @@ describe('Motore di riconciliazione multi-canale, quarantena 0 €, Vacanze e Ri
     expect(reloaded.expenses[0]?.recurringRuleId).toBe('rec-1');
     expect(reloaded.expenses[0]?.linkedSources).toEqual(['camera', 'notification']);
     expect(reloaded.expenses[0]?.linkedReferences).toEqual(['gmail:abc123']);
+  });
+
+  it('deduplica due notifiche identiche sullo stesso canale notification tramite sourceReference (exact_duplicate) senza bloccare due spese distinte nello stesso giorno', () => {
+    const fixedTime = 1_763_740_000_000;
+    const notifText1 = 'Satispay: Hai pagato €1,50 a Bar Centrale.';
+    const sourceRef1 = buildNotificationSourceReference({
+      payer: 'user',
+      appName: 'Satispay',
+      notificationText: notifText1,
+      nowMs: fixedTime,
+    });
+
+    const firstIngestion = reconcileIncomingExpenses(
+      [],
+      [
+        {
+          title: 'Bar Centrale',
+          amount: 1.5,
+          currency: 'EUR',
+          date: '2026-11-21',
+          category: 'Ristoranti e Bar',
+          payer: 'user',
+          splitType: '50_50',
+          source: 'notification',
+          sourceReference: sourceRef1,
+          notes: 'Caffè mattina',
+        },
+      ]
+    );
+    expect(firstIngestion.addedCount).toBe(1);
+    expect(firstIngestion.expenses).toHaveLength(1);
+
+    // Retry di MacroDroid dopo pochi secondi (stesso bucket 5 min / stesso sourceReference)
+    const duplicateCandidate: Omit<Expense, 'id'> = {
+      title: 'Bar Centrale',
+      amount: 1.5,
+      currency: 'EUR',
+      date: '2026-11-21',
+      category: 'Ristoranti e Bar',
+      payer: 'user',
+      splitType: '50_50',
+      source: 'notification',
+      sourceReference: buildNotificationSourceReference({
+        payer: 'user',
+        appName: 'Satispay',
+        notificationText: notifText1,
+        nowMs: fixedTime + 15_000,
+      }),
+      notes: 'Caffè mattina',
+    };
+
+    const dupMatch = computeExpenseMatchScore(duplicateCandidate, firstIngestion.expenses[0]!);
+    expect(dupMatch.kind).toBe('exact_duplicate');
+    expect(dupMatch.score).toBe(100);
+
+    const afterDuplicateRetry = reconcileIncomingExpenses(firstIngestion.expenses, [
+      duplicateCandidate,
+    ]);
+    expect(afterDuplicateRetry.addedCount).toBe(0);
+    expect(afterDuplicateRetry.mergedCount).toBe(1);
+    expect(afterDuplicateRetry.expenses).toHaveLength(1);
+
+    // Seconda spesa legittima allo stesso bar nel pomeriggio (notifica distinta / finestra temporale diversa)
+    const notifText2 = 'Satispay: Hai pagato €1,50 a Bar Centrale alle 15:30.';
+    const distinctAfternoonExpense: Omit<Expense, 'id'> = {
+      title: 'Bar Centrale',
+      amount: 1.5,
+      currency: 'EUR',
+      date: '2026-11-21',
+      category: 'Ristoranti e Bar',
+      payer: 'user',
+      splitType: '50_50',
+      source: 'notification',
+      sourceReference: buildNotificationSourceReference({
+        payer: 'user',
+        appName: 'Satispay',
+        notificationText: notifText2,
+        nowMs: fixedTime + 4 * 60 * 60 * 1000,
+      }),
+      notes: 'Caffè pomeriggio',
+    };
+
+    const afternoonMatch = computeExpenseMatchScore(
+      distinctAfternoonExpense,
+      afterDuplicateRetry.expenses[0]!
+    );
+    expect(afternoonMatch.kind).toBe('possible_duplicate');
+    expect(afternoonMatch.score).toBeLessThan(80);
+
+    const afterAfternoonCoffee = reconcileIncomingExpenses(afterDuplicateRetry.expenses, [
+      distinctAfternoonExpense,
+    ]);
+    expect(afterAfternoonCoffee.addedCount).toBe(1);
+    expect(afterAfternoonCoffee.mergedCount).toBe(0);
+    expect(afterAfternoonCoffee.expenses).toHaveLength(2);
   });
 });
