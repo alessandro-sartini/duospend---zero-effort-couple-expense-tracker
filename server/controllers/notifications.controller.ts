@@ -6,12 +6,16 @@ import { sendControllerError } from '../utils/http-error';
 export async function postIngestNotificationController(req: Request, res: Response) {
   try {
     const { notificationText, appName, payer, persist, eventId } = req.body ?? {};
+    const isExplicitPreviewOnly =
+      persist === false || persist === 'false' || persist === 0 || persist === '0';
     const shouldPersist =
-      persist === true ||
-      persist === 'true' ||
-      persist === 1 ||
-      persist === '1' ||
-      hasValidWebhookSecret(req.get('x-duospend-secret'));
+      !isExplicitPreviewOnly &&
+      (persist === true ||
+        persist === 'true' ||
+        persist === 1 ||
+        persist === '1' ||
+        persist === undefined ||
+        hasValidWebhookSecret(req.get('x-duospend-secret')));
 
     const result = await ingestNotification({
       notificationText,

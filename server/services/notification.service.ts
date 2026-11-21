@@ -46,6 +46,25 @@ const completedNotificationIngests = new Map<
   { expiresAt: number; result: IngestNotificationResult }
 >();
 
+const UNEXPANDED_MACRODROID_PLACEHOLDER_PATTERN =
+  /^(?:\{[a-z0-9_]+\}|%[a-z0-9_]+%|\[(?:lv=|v=)?[a-z0-9_]+\])$/i;
+
+function maskOtpDigitsForLog(text: string): string {
+  return text.replace(/\b\d{4,8}\b/g, '[NUM]').slice(0, 90);
+}
+
+function logNotificationIngestOutcome(params: {
+  status: 'persisted' | 'ignored' | 'deduplicated' | 'preview';
+  shouldPersist: boolean;
+  result: IngestNotificationResult;
+  appName: string;
+  textPreview: string;
+}): void {
+  const { status, shouldPersist, result, appName, textPreview } = params;
+  console.info(
+    `[notifications/ingest] status=${status} persisted=${result.persisted} isExpense=${result.isExpense} ignored=${Boolean(result.ignored)} deduplicated=${Boolean(result.deduplicated)} reconciled=${Boolean(result.reconciled)} shouldPersist=${shouldPersist} amount=${result.expense?.amount ?? 0} title="${result.expense?.title ?? ''}" app="${appName}" model=${result.modelUsed}${result.reason ? ` reason="${result.reason}"` : ''} text="${textPreview}"`
+  );
+}
 export function resetNotificationIdempotencyCacheForTests(): void {
   inFlightNotificationIngests.clear();
   completedNotificationIngests.clear();
@@ -317,6 +336,29 @@ export async function ingestNotification(params: {
   if (!safePromptText) {
     throw new HttpError(400, 'notificationText non contiene testo valido.');
   }
+  const textPreview = maskOtpDigitsForLog(safePromptText);
+
+  if (UNEXPANDED_MACRODROID_PLACEHOLDER_PATTERN.test(safePromptText.trim())) {
+    const placeholderResult: IngestNotificationResult = {
+      success: true,
+      isExpense: false,
+      persisted: false,
+      ignored: true,
+      reason: `Variabile MacroDroid non espansa (${safePromptText.trim()}): seleziona la variabile dal pulsante '...' in MacroDroid o invia un testo reale.`,
+      modelUsed: 'filtro-deterministico-locale',
+      fallbackUsed: false,
+      deduplicated: false,
+    };
+    logNotificationIngestOutcome({
+      status: 'ignored',
+      shouldPersist,
+      result: placeholderResult,
+      appName: safeAppName,
+      textPreview,
+    });
+    return placeholderResult;
+  }
+
   const safeEventId = typeof eventId === 'string' ? sanitizePlainText(eventId, 120) : '';
 
   const dedupHash = computeNotificationDedupHash({
@@ -330,10 +372,18 @@ export async function ingestNotification(params: {
 
   const cachedEntry = completedNotificationIngests.get(cacheKey);
   if (cachedEntry && cachedEntry.expiresAt > nowMs) {
-    return {
+    const dedupResult: IngestNotificationResult = {
       ...cachedEntry.result,
       deduplicated: true,
     };
+    logNotificationIngestOutcome({
+      status: 'deduplicated',
+      shouldPersist,
+      result: dedupResult,
+      appName: safeAppName,
+      textPreview,
+    });
+    return dedupResult;
   }
   if (cachedEntry) {
     completedNotificationIngests.delete(cacheKey);
@@ -342,10 +392,18 @@ export async function ingestNotification(params: {
   const existingInFlight = inFlightNotificationIngests.get(cacheKey);
   if (existingInFlight) {
     const sharedResult = await existingInFlight;
-    return {
+    const dedupResult: IngestNotificationResult = {
       ...sharedResult,
       deduplicated: true,
     };
+    logNotificationIngestOutcome({
+      status: 'deduplicated',
+      shouldPersist,
+      result: dedupResult,
+      appName: safeAppName,
+      textPreview,
+    });
+    return dedupResult;
   }
 
   const executionPromise = (async (): Promise<IngestNotificationResult> => {
@@ -480,8 +538,14 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
       }
 
       const effectiveParsed =
-        hasExplicitOutgoingPaymentSignal && !(rawAmount > 0)
-          ? { ...parsed, amount: heuristicCheck.amount }
+        hasExplicitOutgoingPaymentSignal
+          ? {
+              ...parsed,
+              ...(rawAmount > 0 ? {} : { amount: heuristicCheck.amount }),
+              ...(typeof parsed.merchant === 'string' && parsed.merchant.trim().length > 0
+                ? {}
+                : { merchant: heuristicCheck.title }),
+            }
           : parsed;
 
       const normalized = normalizeNotificationExpense(
@@ -571,6 +635,19 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
     completedNotificationIngests.set(cacheKey, {
       expiresAt: completedAt + NOTIFICATION_IDEMPOTENCY_TTL_MS,
       result,
+    });
+    logNotificationIngestOutcome({
+      status: result.ignored
+        ? 'ignored'
+        : result.deduplicated
+          ? 'deduplicated'
+          : result.persisted
+            ? 'persisted'
+            : 'preview',
+      shouldPersist,
+      result,
+      appName: safeAppName,
+      textPreview,
     });
     return result;
   } finally {

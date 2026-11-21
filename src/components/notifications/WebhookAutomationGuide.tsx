@@ -16,8 +16,8 @@ export const WebhookAutomationGuide: React.FC<WebhookAutomationGuideProps> = ({
   const copyWebhookCode = () => {
     const payload = JSON.stringify(
       {
-        notificationText: '%notification_text%',
-        appName: '%notification_app_name%',
+        notificationText: '{notification_text}',
+        appName: '{notification_app_name}',
         payer: 'user',
       },
       null,

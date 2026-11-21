@@ -410,6 +410,36 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(aiFilteredResult.ignored).toBe(true);
       expect(aiFilteredResult.reason).toContain('Offerta commerciale');
       expect(notificationInMemoryDb.expenses).toHaveLength(0);
+
+      // Se invece il testo è un pagamento sintetico come " pagamento 12 euro bar roma " e Gemini dovesse rispondere isExpense: false, la salvaguardia lo salva comunque in SQLite
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: false,
+            ignoreReason: 'Messaggio troppo breve',
+            merchant: '',
+            amount: 0,
+            currency: 'EUR',
+            category: 'Altro',
+          }),
+        },
+      });
+
+      const barRomaResult = await ingestNotification({
+        notificationText: ' pagamento 12 euro bar roma ',
+        appName: 'MacroDroid',
+        payer: 'user',
+        shouldPersist: true,
+      });
+
+      expect(barRomaResult.success).toBe(true);
+      expect(barRomaResult.isExpense).toBe(true);
+      expect(barRomaResult.persisted).toBe(true);
+      expect(barRomaResult.ignored).toBe(false);
+      expect(barRomaResult.expense?.amount).toBe(12);
+      expect(barRomaResult.expense?.title.toLowerCase()).toBe('bar roma');
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
     });
 
     it('deduplica una doppia chiamata concorrente e sequenziale a ingestNotification con lo stesso testo producendo una sola riga in SQLite', async () => {

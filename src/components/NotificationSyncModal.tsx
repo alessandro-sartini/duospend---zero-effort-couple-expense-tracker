@@ -64,7 +64,7 @@ export const NotificationSyncModal: React.FC<NotificationSyncModalProps> = ({
 
         const body = isMultiLine
           ? { historyText: rawText, payer: selectedPayer }
-          : { notificationText: rawText, payer: selectedPayer, appName: 'Banca/SMS' };
+          : { notificationText: rawText, payer: selectedPayer, appName: 'Banca/SMS', persist: false };
 
         const res = await fetch(endpoint, {
           method: 'POST',
