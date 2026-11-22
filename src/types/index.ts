@@ -97,6 +97,33 @@ export interface GmailRecurringRule {
   category: ExpenseCategory;
 }
 
+export type GmailSearchMode =
+  | 'tracking_start'
+  | 'month_start'
+  | 'prev_month_start'
+  | 'year_start'
+  | 'custom_date'
+  | 'days';
+
+export interface GmailScanInterval {
+  from: string; // YYYY-MM-DD
+  until: string; // YYYY-MM-DD
+}
+
+export interface GmailAccountScanHistory {
+  lastCompletedScanAt: string; // ISO timestamp
+  lastScanStartDate: string; // YYYY-MM-DD
+  lastScanEndDate: string; // YYYY-MM-DD
+  coverageIntervals: GmailScanInterval[];
+}
+
+export interface GmailScanState {
+  searchMode: GmailSearchMode;
+  lookbackDays: number;
+  customStartDate?: string;
+  accounts?: Record<string, GmailAccountScanHistory>;
+}
+
 export interface Settlement {
   id: string;
   date: string;
@@ -116,6 +143,7 @@ export interface CoupleProfile {
   userEmail?: string;
   partnerEmail?: string;
   trackingStartDate?: string; // YYYY-MM-DD ("Punto Zero" globale spese/Gmail)
+  gmailScanState?: GmailScanState;
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
   customCategories?: string[];
   hiddenCategories?: string[];

@@ -588,3 +588,20 @@ body,
   border: 1px solid var(--theme-border-subtle);
   color: var(--theme-text-muted);
 }
+
+/* Barra inferiore mobile flottante moderna (Material You / Fintech pill) */
+.ds-bottom-dock {
+  background-color: rgba(251, 249, 245, 0.9);
+  border-color: rgba(213, 205, 192, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 14px 36px -14px rgba(28, 25, 23, 0.22);
+}
+
+[data-theme='dark'] .ds-bottom-dock {
+  background-color: rgba(27, 24, 21, 0.9);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 42px -12px rgba(0, 0, 0, 0.72);
+}

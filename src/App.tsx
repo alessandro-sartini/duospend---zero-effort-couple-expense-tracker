@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { Mail } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { DashboardOverview } from './components/DashboardOverview';
 import { LoginGate } from './components/LoginGate';
@@ -7,7 +8,14 @@ import { QuickActionsFab } from './components/layout/QuickActionsFab';
 import { ZeroAmountBanner } from './components/layout/ZeroAmountBanner';
 import { UndoToast, type UndoToastNotice } from './components/ui/UndoToast';
 import { formatCurrency } from './constants/categories';
-import { loadGmailDraft, loadOcrDraft } from './services/storage';
+import { evaluateGmailScanFreshness, formatDateItShort } from './services/gmail-scan-history';
+import {
+  loadDismissedGmailStaleKey,
+  loadGmailDraft,
+  loadGmailScanState,
+  loadOcrDraft,
+  saveDismissedGmailStaleKey,
+} from './services/storage';
 import { getAuthConfig } from './services/auth';
 import { FullScreenLoader } from './components/ui/Loader';
 import { useDuoSpendData } from './hooks/useDuoSpendData';
@@ -129,6 +137,9 @@ export default function App() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [onlyZeroAmountFilter, setOnlyZeroAmountFilter] = useState(false);
   const [undoNotice, setUndoNotice] = useState<UndoToastNotice | null>(null);
+  const [dismissedGmailStaleKey, setDismissedGmailStaleKey] = useState<string | null>(
+    () => loadDismissedGmailStaleKey()
+  );
   const [hasOpenedGmailDrawer, setHasOpenedGmailDrawer] = useState(false);
   const [hasOpenedReceiptModal, setHasOpenedReceiptModal] = useState(false);
   const [gmailBgState, setGmailBgState] = useState<{
@@ -403,6 +414,12 @@ export default function App() {
     [settlements, handleDeleteSettlement, handleRestoreSettlement, profile.currency]
   );
 
+  const gmailFreshness = evaluateGmailScanFreshness({
+    gmailScanState: profile.gmailScanState ?? loadGmailScanState(),
+    accountEmail: userEmail,
+    trackingStartDate: profile.trackingStartDate,
+  });
+
   if (isCheckingAuth) {
     return (
       <div data-theme={theme}>
@@ -455,7 +472,7 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
       />
 
-      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-10 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
+      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-10 pt-4 pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
         {reconciliationNotice && (
           <div
             role="status"
@@ -487,6 +504,51 @@ export default function App() {
             }
           }}
         />
+
+        {gmailFreshness?.isStale &&
+          dismissedGmailStaleKey !== gmailFreshness.lastScannedDate && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-amber-950 sm:px-5 sm:py-3.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex items-start gap-2.5 min-w-0">
+                <Mail className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
+                <div className="space-y-0.5 min-w-0">
+                  <p className="text-sm font-semibold">
+                    Scansione Gmail ferma al {formatDateItShort(gmailFreshness.lastScannedDate)} (
+                    {gmailFreshness.daysSinceLastScan} giorni fa)
+                  </p>
+                  <p className="text-xs text-amber-900/80">
+                    Potrebbero mancare ricevute recenti. Riprendi la ricerca dal{' '}
+                    <span className="font-mono font-semibold">
+                      {formatDateItShort(gmailFreshness.suggestedResumeDate)}
+                    </span>{' '}
+                    senza ripescare il passato.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsGmailSyncOpen(true)}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-amber-800 px-3.5 text-xs font-semibold text-white hover:bg-amber-900 transition-colors cursor-pointer"
+                >
+                  Scansiona dal {formatDateItShort(gmailFreshness.suggestedResumeDate)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveDismissedGmailStaleKey(gmailFreshness.lastScannedDate);
+                    setDismissedGmailStaleKey(gmailFreshness.lastScannedDate);
+                  }}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl px-2.5 text-xs font-semibold text-amber-900 hover:bg-amber-200/60 transition-colors cursor-pointer"
+                >
+                  Più tardi
+                </button>
+              </div>
+            </div>
+          )}
 
         <div key={currentTab} className="ds-anim-view">
           {currentTab === 'not_found' && (
@@ -647,6 +709,7 @@ export default function App() {
             isSignedIn={isSignedIn}
             userEmail={userEmail}
             onAuthChanged={handleAuthChanged}
+            onUpdateProfile={handleUpdateProfile}
             onOpenStartingPoint={() => setIsStartingPointOpen(true)}
             onBackgroundStateChange={setGmailBgState}
           />

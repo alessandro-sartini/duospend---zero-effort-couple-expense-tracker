@@ -12,6 +12,7 @@ import type {
   SplitType,
   TripProject,
 } from '../../src/types';
+import { sanitizeGmailScanState } from '../../src/services/gmail-scan-history';
 
 export const ALLOWED_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Spesa',
@@ -1085,6 +1086,20 @@ export function sanitizeProfileRecord(
     result.hiddenCategories = hiddenCategories;
   } else {
     delete result.hiddenCategories;
+  }
+
+  if (raw.gmailScanState !== undefined) {
+    const cleanGmailState = sanitizeGmailScanState(
+      raw.gmailScanState,
+      currentProfile.gmailScanState
+    );
+    if (cleanGmailState) {
+      result.gmailScanState = cleanGmailState;
+    } else {
+      delete result.gmailScanState;
+    }
+  } else if (currentProfile.gmailScanState) {
+    result.gmailScanState = currentProfile.gmailScanState;
   }
 
   return result;

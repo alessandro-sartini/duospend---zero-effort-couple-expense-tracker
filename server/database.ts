@@ -31,6 +31,7 @@ import {
   sanitizeYearMonth,
   stripDangerousKeys,
 } from './utils/security';
+import { sanitizeGmailScanState } from '../src/services/gmail-scan-history';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SAFE_GMAIL_CACHE_MESSAGE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
@@ -620,6 +621,7 @@ function initializeSchema(db: DatabaseSync): void {
       custom_categories_json TEXT,
       hidden_categories_json TEXT,
       tracking_start_date TEXT,
+      gmail_scan_state_json TEXT,
       last_updated TEXT NOT NULL
     );
 
@@ -779,6 +781,9 @@ function initializeSchema(db: DatabaseSync): void {
   if (!profileColNames.has('tracking_start_date')) {
     db.exec('ALTER TABLE profile ADD COLUMN tracking_start_date TEXT');
   }
+  if (!profileColNames.has('gmail_scan_state_json')) {
+    db.exec('ALTER TABLE profile ADD COLUMN gmail_scan_state_json TEXT');
+  }
 }
 
 export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): SqliteDatabaseHandle {
@@ -897,8 +902,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
     INSERT INTO profile (
       id, user_name, partner_name, monthly_budget, currency, wedding_budget_goal,
       user_email, partner_email, category_budgets_json, custom_categories_json,
-      hidden_categories_json, tracking_start_date, last_updated
-    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      hidden_categories_json, tracking_start_date, gmail_scan_state_json, last_updated
+    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       user_name = excluded.user_name,
       partner_name = excluded.partner_name,
@@ -911,6 +916,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       custom_categories_json = excluded.custom_categories_json,
       hidden_categories_json = excluded.hidden_categories_json,
       tracking_start_date = excluded.tracking_start_date,
+      gmail_scan_state_json = excluded.gmail_scan_state_json,
       last_updated = excluded.last_updated
   `);
 
@@ -1046,6 +1052,10 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       profile.hiddenCategories && profile.hiddenCategories.length > 0
         ? JSON.stringify(profile.hiddenCategories)
         : null;
+    const sanitizedGmailScanState = sanitizeGmailScanState(profile.gmailScanState);
+    const gmailScanStateJson = sanitizedGmailScanState
+      ? JSON.stringify(sanitizedGmailScanState)
+      : null;
     upsertProfileStmt.run(
       profile.userName,
       profile.partnerName,
@@ -1058,6 +1068,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       customCategoriesJson,
       hiddenCategoriesJson,
       profile.trackingStartDate ?? null,
+      gmailScanStateJson,
       lastUpdated
     );
   };
@@ -1341,6 +1352,9 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       const hiddenCategories = parseJsonSafe<string[]>(
         profileRow?.hidden_categories_json
       );
+      const gmailScanState = sanitizeGmailScanState(
+        parseJsonSafe<unknown>(profileRow?.gmail_scan_state_json)
+      );
 
       const trackingStartDateRaw =
         typeof profileRow?.tracking_start_date === 'string'
@@ -1362,6 +1376,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
             userEmail: String(profileRow.user_email ?? ''),
             partnerEmail: String(profileRow.partner_email ?? ''),
             ...(trackingStartDate ? { trackingStartDate } : {}),
+            ...(gmailScanState ? { gmailScanState } : {}),
             ...(categoryBudgets && Object.keys(categoryBudgets).length > 0
               ? { categoryBudgets }
               : {}),

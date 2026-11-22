@@ -5,12 +5,26 @@ import {
   Expense,
   ExpenseCategory,
   GmailRecurringRule,
+  GmailScanState,
   Payer,
   SavingGoal,
 } from '../types';
 import { getActiveCategories } from '../constants/categories';
 import { getAccessToken, googleSignIn, hasGmailAccess, logout, usesServerSideOAuth } from '../services/auth';
-import { loadGmailDraft, saveGmailDraft } from '../services/storage';
+import {
+  computeSmartIncrementalProposal,
+  evaluateGmailScanFreshness,
+  getLocalIsoDate,
+  recordCompletedGmailScan,
+  resolveRequestedScanStartDate,
+} from '../services/gmail-scan-history';
+import {
+  loadGmailDraft,
+  loadGmailScanState,
+  saveDismissedGmailStaleKey,
+  saveGmailDraft,
+  saveGmailScanState,
+} from '../services/storage';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { ModalShell } from './ui/ModalShell';
 import { PayerSelector } from './ui/PayerSelector';
@@ -46,6 +60,7 @@ interface GmailSyncDrawerProps {
   isSignedIn: boolean;
   userEmail?: string;
   onAuthChanged: (signedIn: boolean, email?: string) => void;
+  onUpdateProfile?: (patch: Partial<CoupleProfile>) => void;
   onOpenStartingPoint?: () => void;
   onBackgroundStateChange?: (state: {
     isSyncing: boolean;
@@ -70,12 +85,14 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
   isSignedIn,
   userEmail,
   onAuthChanged,
+  onUpdateProfile,
   onOpenStartingPoint,
   onBackgroundStateChange,
 }) => {
   const initialGmailDraft = useRef(
     loadGmailDraft<DetectedGmailReceipt, GmailReviewCandidate, GmailScanStats>(),
   ).current;
+  const initialScanState = useRef(profile.gmailScanState ?? loadGmailScanState()).current;
   const [isSyncing, setIsSyncing] = useState<boolean>(() =>
     Boolean(initialGmailDraft?.wasSyncing && hasGmailAccess()),
   );
@@ -93,63 +110,112 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
     () => initialGmailDraft?.nextPageToken ?? null,
   );
   const [lookbackDays, setLookbackDays] = useState(
-    () => initialGmailDraft?.lookbackDays ?? 30,
+    () => initialGmailDraft?.lookbackDays ?? initialScanState?.lookbackDays ?? 30,
   );
   const [searchMode, setSearchMode] = useState<GmailSearchMode>(() => {
-    if (initialGmailDraft?.searchMode) {
-      if (initialGmailDraft.searchMode === 'tracking_start' && !profile.trackingStartDate) {
+    const preferredMode = initialGmailDraft?.searchMode ?? initialScanState?.searchMode;
+    if (preferredMode) {
+      if (preferredMode === 'tracking_start' && !profile.trackingStartDate) {
         return 'month_start';
       }
-      return initialGmailDraft.searchMode;
+      return preferredMode;
     }
     return profile.trackingStartDate ? 'tracking_start' : 'month_start';
   });
   const [customStartDate, setCustomStartDate] = useState<string>(
-    () => initialGmailDraft?.customStartDate || profile.trackingStartDate || ''
+    () =>
+      initialGmailDraft?.customStartDate ||
+      initialScanState?.customStartDate ||
+      profile.trackingStartDate ||
+      ''
+  );
+  const [isSmartOverrideDisabled, setIsSmartOverrideDisabled] = useState(false);
+
+  const activeGmailScanState = profile.gmailScanState ?? loadGmailScanState();
+
+  const requestedStartDate = React.useMemo(
+    () =>
+      resolveRequestedScanStartDate({
+        searchMode,
+        lookbackDays,
+        customStartDate,
+        trackingStartDate: profile.trackingStartDate,
+      }),
+    [searchMode, lookbackDays, customStartDate, profile.trackingStartDate]
   );
 
-  const effectiveStartDate = React.useMemo(() => {
-    const maxIsoDate = (candidate?: string, floor?: string): string | undefined => {
-      if (!candidate) return floor;
-      if (!floor) return candidate;
-      return candidate >= floor ? candidate : floor;
+  const smartProposal = React.useMemo(
+    () =>
+      computeSmartIncrementalProposal({
+        gmailScanState: activeGmailScanState,
+        accountEmail: userEmail,
+        searchMode,
+        requestedStartDate,
+      }),
+    [activeGmailScanState, userEmail, searchMode, requestedStartDate]
+  );
+
+  const effectiveStartDate =
+    !isSmartOverrideDisabled && smartProposal?.shouldApply
+      ? smartProposal.proposedStartDate
+      : requestedStartDate;
+
+  const freshness = React.useMemo(
+    () =>
+      evaluateGmailScanFreshness({
+        gmailScanState: activeGmailScanState,
+        accountEmail: userEmail,
+        trackingStartDate: profile.trackingStartDate,
+      }),
+    [activeGmailScanState, userEmail, profile.trackingStartDate]
+  );
+
+  const modeRef = useRef(searchMode);
+  const daysRef = useRef(lookbackDays);
+  const customDateRef = useRef(customStartDate);
+  modeRef.current = searchMode;
+  daysRef.current = lookbackDays;
+  customDateRef.current = customStartDate;
+
+  const lastHydratedScanStateRef = useRef<string | null>(
+    profile.gmailScanState
+      ? `${profile.gmailScanState.searchMode}:${profile.gmailScanState.lookbackDays}:${profile.gmailScanState.customStartDate ?? ''}`
+      : null
+  );
+
+  useEffect(() => {
+    const incoming = profile.gmailScanState;
+    if (!incoming || isSyncing) return;
+    const signature = `${incoming.searchMode}:${incoming.lookbackDays}:${incoming.customStartDate ?? ''}`;
+    if (signature === lastHydratedScanStateRef.current) return;
+    lastHydratedScanStateRef.current = signature;
+    const safeMode =
+      incoming.searchMode === 'tracking_start' && !profile.trackingStartDate
+        ? 'month_start'
+        : incoming.searchMode;
+    setSearchMode(safeMode);
+    setLookbackDays(incoming.lookbackDays);
+    if (incoming.customStartDate !== undefined) {
+      setCustomStartDate(incoming.customStartDate);
+    }
+  }, [profile.gmailScanState, profile.trackingStartDate, isSyncing]);
+
+  const persistGmailPreferences = (
+    nextMode: GmailSearchMode,
+    nextDays: number,
+    nextCustom: string
+  ) => {
+    const baseState = profile.gmailScanState ?? loadGmailScanState();
+    const nextState: GmailScanState = {
+      ...(baseState || {}),
+      searchMode: nextMode,
+      lookbackDays: nextDays,
+      ...(nextCustom ? { customStartDate: nextCustom } : {}),
     };
-
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth() + 1;
-    const floorDate =
-      profile.trackingStartDate && /^\d{4}-\d{2}-\d{2}$/.test(profile.trackingStartDate)
-        ? profile.trackingStartDate
-        : undefined;
-
-    if (searchMode === 'tracking_start') {
-      return floorDate || `${y}-${String(m).padStart(2, '0')}-01`;
-    }
-    if (searchMode === 'month_start') {
-      return maxIsoDate(`${y}-${String(m).padStart(2, '0')}-01`, floorDate);
-    }
-    if (searchMode === 'prev_month_start') {
-      const prev = new Date(y, m - 2, 1);
-      return maxIsoDate(
-        `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`,
-        floorDate
-      );
-    }
-    if (searchMode === 'year_start') {
-      return maxIsoDate(`${y}-01-01`, floorDate);
-    }
-    if (searchMode === 'custom_date') {
-      const cleanCustom = /^\d{4}-\d{2}-\d{2}$/.test(customStartDate) ? customStartDate : undefined;
-      return maxIsoDate(cleanCustom, floorDate);
-    }
-    if (floorDate) {
-      const lookbackStart = new Date(y, m - 1, now.getDate() - Math.max(0, lookbackDays));
-      const lookbackIso = `${lookbackStart.getFullYear()}-${String(lookbackStart.getMonth() + 1).padStart(2, '0')}-${String(lookbackStart.getDate()).padStart(2, '0')}`;
-      return maxIsoDate(lookbackIso, floorDate);
-    }
-    return undefined;
-  }, [searchMode, customStartDate, lookbackDays, profile.trackingStartDate]);
+    lastHydratedScanStateRef.current = `${nextState.searchMode}:${nextState.lookbackDays}:${nextState.customStartDate ?? ''}`;
+    saveGmailScanState(nextState);
+    onUpdateProfile?.({ gmailScanState: nextState });
+  };
   const [scanStats, setScanStats] = useState<GmailScanStats | null>(
     () => initialGmailDraft?.scanStats ?? null,
   );
@@ -302,6 +368,9 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
     setScanStatus(null);
     setStopRequested(false);
     stopAfterCurrentBatchRef.current = false;
+
+    const scanWindowStartDate =
+      effectiveStartDate || requestedStartDate || getLocalIsoDate();
 
     if (!pageToken) {
       setScanStats(null);
@@ -500,7 +569,24 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
         });
       } while (currentPageToken && !stopAfterCurrentBatchRef.current);
 
-      setScanStatus(currentPageToken ? 'stopped' : 'complete');
+      const nextStatus = currentPageToken ? 'stopped' : 'complete';
+      setScanStatus(nextStatus);
+      if (nextStatus === 'complete') {
+        const baseState = profile.gmailScanState ?? loadGmailScanState();
+        const updatedScanState = recordCompletedGmailScan(baseState, {
+          accountEmail: userEmail,
+          searchMode: modeRef.current,
+          lookbackDays: daysRef.current,
+          customStartDate: customDateRef.current,
+          scanStartDate: scanWindowStartDate,
+          scanEndDate: getLocalIsoDate(),
+        });
+        lastHydratedScanStateRef.current = `${updatedScanState.searchMode}:${updatedScanState.lookbackDays}:${updatedScanState.customStartDate ?? ''}`;
+        saveGmailScanState(updatedScanState);
+        onUpdateProfile?.({ gmailScanState: updatedScanState });
+        saveDismissedGmailStaleKey(null);
+        setIsSmartOverrideDisabled(false);
+      }
     } catch (err: any) {
       console.error('Gmail scan error:', err);
       setError(err.message || 'Impossibile completare la scansione Gmail.');
@@ -778,31 +864,51 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
                 customStartDate={customStartDate}
                 trackingStartDate={profile.trackingStartDate}
                 effectiveStartDate={effectiveStartDate}
+                smartProposal={smartProposal}
+                isSmartOverrideDisabled={isSmartOverrideDisabled}
+                onToggleSmartOverride={() => {
+                  setIsSmartOverrideDisabled((prev) => !prev);
+                  setDetectedReceipts([]);
+                  setReviewCandidates([]);
+                  setSelectedIds({});
+                  setScanStats(null);
+                  setNextPageToken(null);
+                }}
+                freshness={freshness}
                 onScan={() => runGmailScan(undefined, nextPageToken || undefined)}
                 onSignOut={handleSignOut}
                 onChangeSearchMode={(mode) => {
+                  modeRef.current = mode;
                   setSearchMode(mode);
+                  setIsSmartOverrideDisabled(false);
                   setDetectedReceipts([]);
                   setReviewCandidates([]);
                   setSelectedIds({});
                   setScanStats(null);
                   setNextPageToken(null);
+                  persistGmailPreferences(mode, daysRef.current, customDateRef.current);
                 }}
                 onChangeLookbackDays={(days) => {
+                  daysRef.current = days;
                   setLookbackDays(days);
+                  setIsSmartOverrideDisabled(false);
                   setDetectedReceipts([]);
                   setReviewCandidates([]);
                   setSelectedIds({});
                   setScanStats(null);
                   setNextPageToken(null);
+                  persistGmailPreferences(modeRef.current, days, customDateRef.current);
                 }}
                 onChangeCustomStartDate={(date) => {
+                  customDateRef.current = date;
                   setCustomStartDate(date);
+                  setIsSmartOverrideDisabled(false);
                   setDetectedReceipts([]);
                   setReviewCandidates([]);
                   setSelectedIds({});
                   setScanStats(null);
                   setNextPageToken(null);
+                  persistGmailPreferences(modeRef.current, daysRef.current, date);
                 }}
                 onOpenStartingPoint={
                   onOpenStartingPoint

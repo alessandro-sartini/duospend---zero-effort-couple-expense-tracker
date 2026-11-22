@@ -239,6 +239,7 @@ export const DeveloperModal: React.FC<DeveloperModalProps> = ({
         icon={Terminal}
         iconClassName="bg-orange-500/15 text-orange-600 border-orange-500/30"
         maxWidth="2xl"
+        mobileBottomSheet
         headerExtra={
           <div className="flex items-center gap-2">
             <span className="hidden sm:inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">

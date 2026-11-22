@@ -4,10 +4,12 @@ import type {
   CoupleProfile,
   SavingGoal,
   GmailRecurringRule,
+  GmailScanState,
   ExpenseCategory,
   TripProject,
   RecurringExpenseItem,
 } from '../types';
+import { sanitizeGmailScanState } from './gmail-scan-history';
 import {
   defaultProfile,
   initialExpenses,
@@ -36,6 +38,8 @@ const STORAGE_KEYS = {
   RECURRING_EXPENSES: 'duospend_recurring_expenses_v1',
   GMAIL_IGNORED_MESSAGES: 'duospend_gmail_ignored_messages_v1',
   GMAIL_RECURRING_RULES: 'duospend_gmail_recurring_rules_v1',
+  GMAIL_SCAN_STATE: 'duospend_gmail_scan_state_v1',
+  GMAIL_STALE_DISMISSED: 'duospend_gmail_stale_dismissed_v1',
   DIRTY_SYNC: 'duospend_dirty_sync_v1',
   OCR_DRAFT: 'duospend_ocr_draft_v1',
   GMAIL_DRAFT: 'duospend_gmail_draft_v1',
@@ -246,6 +250,49 @@ export const saveGmailRecurringRules = (rules: GmailRecurringRule[]) => {
   safeSetLocalStorageItem(STORAGE_KEYS.GMAIL_RECURRING_RULES, JSON.stringify(rules));
 };
 
+export const loadGmailScanState = (): GmailScanState | undefined => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.GMAIL_SCAN_STATE);
+    if (!raw) return undefined;
+    return sanitizeGmailScanState(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+};
+
+export const saveGmailScanState = (state: GmailScanState | undefined): void => {
+  try {
+    const clean = sanitizeGmailScanState(state);
+    if (!clean) {
+      localStorage.removeItem(STORAGE_KEYS.GMAIL_SCAN_STATE);
+      return;
+    }
+    safeSetLocalStorageItem(STORAGE_KEYS.GMAIL_SCAN_STATE, JSON.stringify(clean));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
+export const loadDismissedGmailStaleKey = (): string | null => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.GMAIL_STALE_DISMISSED);
+  } catch {
+    return null;
+  }
+};
+
+export const saveDismissedGmailStaleKey = (key: string | null): void => {
+  try {
+    if (!key) {
+      localStorage.removeItem(STORAGE_KEYS.GMAIL_STALE_DISMISSED);
+      return;
+    }
+    safeSetLocalStorageItem(STORAGE_KEYS.GMAIL_STALE_DISMISSED, key);
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 export const UNAUTHORIZED_EVENT = 'duospend:unauthorized';
 
 function notifyUnauthorizedIfNeeded(status: number): void {
@@ -438,13 +485,21 @@ export const syncWithServerDatabase = async (): Promise<{
       safeSetLocalStorageItem(STORAGE_KEYS.GOALS, JSON.stringify(serverGoals));
       safeSetLocalStorageItem(STORAGE_KEYS.TRIPS, JSON.stringify(serverTrips));
       safeSetLocalStorageItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(serverRecurring));
-      safeSetLocalStorageItem(STORAGE_KEYS.PROFILE, JSON.stringify(serverProfile));
+      const localGmailState = loadGmailScanState();
+      const effectiveProfile =
+        !serverProfile.gmailScanState && localGmailState
+          ? { ...serverProfile, gmailScanState: localGmailState }
+          : serverProfile;
+      if (effectiveProfile.gmailScanState) {
+        saveGmailScanState(effectiveProfile.gmailScanState);
+      }
+      safeSetLocalStorageItem(STORAGE_KEYS.PROFILE, JSON.stringify(effectiveProfile));
 
       return {
         expenses: serverExps,
         settlements: serverStls,
         goals: serverGoals,
-        profile: serverProfile,
+        profile: effectiveProfile,
         trips: serverTrips,
         recurringExpenses: serverRecurring,
       };

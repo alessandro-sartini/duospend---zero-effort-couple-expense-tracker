@@ -321,14 +321,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         />
       )}
 
-      {/* Bottom Tab Bar Nativa Mobile (< LG) */}
+      {/* Bottom Tab Dock Flottante Moderna (< LG) */}
       <nav
         aria-label="Navigazione mobile"
-        className={`fixed bottom-0 inset-x-0 lg:hidden ds-header backdrop-blur-xl border-t border-stone-200/80 pb-[env(safe-area-inset-bottom,0px)] ${
+        className={`fixed bottom-0 inset-x-0 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] lg:hidden pointer-events-none ${
           isMoreOpen ? 'z-[48]' : 'z-30'
         }`}
       >
-        <div className="grid grid-cols-5 h-16 max-w-lg mx-auto px-1.5">
+        <div className="pointer-events-auto ds-bottom-dock backdrop-blur-2xl border rounded-[22px] grid grid-cols-5 h-[62px] max-w-md mx-auto px-1.5 items-center">
           {mobilePrimaryItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
@@ -338,24 +338,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => selectTab(item.id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-0.5 min-w-0 py-1.5 rounded-xl transition-colors cursor-pointer ${
+                className={`relative flex flex-col items-center justify-center gap-1 min-w-0 h-[50px] rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
                   isActive
-                    ? 'text-orange-600'
+                    ? 'bg-orange-500/12 text-orange-500'
                     : 'text-stone-500 hover:text-stone-900'
                 }`}
               >
+                <Icon
+                  className={`h-[19px] w-[19px] shrink-0 transition-transform duration-200 ${
+                    isActive ? 'scale-105' : ''
+                  }`}
+                />
                 <span
-                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-all duration-200 ${
-                    isActive ? 'bg-orange-500/14 scale-100' : 'scale-95'
+                  className={`text-[10.5px] leading-none tracking-tight truncate max-w-full ${
+                    isActive ? 'font-bold' : 'font-medium'
                   }`}
                 >
-                  <Icon
-                    className={`h-[18px] w-[18px] shrink-0 transition-transform duration-200 ${
-                      isActive ? '-translate-y-px scale-105' : ''
-                    }`}
-                  />
-                </span>
-                <span className="text-[10px] font-semibold leading-none truncate max-w-full">
                   {item.mobileLabel}
                 </span>
               </button>
@@ -371,27 +369,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => setIsMoreOpen((open) => !open)}
-              className={`flex flex-1 flex-col items-center justify-center gap-0.5 min-w-0 py-1.5 rounded-xl transition-colors cursor-pointer ${
+              className={`relative flex flex-1 flex-col items-center justify-center gap-1 min-w-0 h-[50px] rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
                 isMobileSecondaryActive || isMoreOpen
-                  ? 'text-orange-600'
+                  ? 'bg-orange-500/12 text-orange-500'
                   : 'text-stone-500 hover:text-stone-900'
               }`}
               aria-haspopup="menu"
               aria-expanded={isMoreOpen}
               aria-controls="mobile-secondary-navigation"
             >
+              <MoreHorizontal
+                className={`h-[19px] w-[19px] shrink-0 transition-transform duration-200 ${
+                  isMobileSecondaryActive || isMoreOpen ? 'scale-105' : ''
+                }`}
+              />
               <span
-                className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-all duration-200 ${
-                  isMobileSecondaryActive || isMoreOpen ? 'bg-orange-500/14 scale-100' : 'scale-95'
+                className={`text-[10.5px] leading-none tracking-tight truncate max-w-full ${
+                  isMobileSecondaryActive || isMoreOpen ? 'font-bold' : 'font-medium'
                 }`}
               >
-                <MoreHorizontal
-                  className={`h-[18px] w-[18px] shrink-0 transition-transform duration-200 ${
-                    isMobileSecondaryActive || isMoreOpen ? '-translate-y-px scale-105' : ''
-                  }`}
-                />
-              </span>
-              <span className="text-[10px] font-semibold leading-none truncate max-w-full">
                 Altro
               </span>
             </button>
@@ -400,7 +396,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 id="mobile-secondary-navigation"
                 role="menu"
                 aria-label="Altre sezioni"
-                className="ds-anim-pop ds-card absolute right-1 bottom-full z-40 mb-2.5 min-w-52 p-1.5 shadow-2xl"
+                className="ds-anim-pop ds-card absolute right-0 bottom-full z-40 mb-3 min-w-52 p-1.5 shadow-2xl"
               >
                 {mobileSecondaryItems.map((item) => {
                   const Icon = item.icon;

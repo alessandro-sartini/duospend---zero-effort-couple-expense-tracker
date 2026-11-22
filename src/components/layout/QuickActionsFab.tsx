@@ -236,7 +236,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
       )}
 
       {!isAnyModalOpen && (
-        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-4 lg:bottom-6 lg:right-6 z-[45] flex flex-col items-end">
+        <div className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom,0px))] right-4 lg:bottom-6 lg:right-6 z-[45] flex flex-col items-end">
           {isMenuOpen && (
             <div
               role="menu"

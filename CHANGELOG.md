@@ -5,6 +5,8 @@ Tutte le modifiche rilevanti a **DuoSpend** sono documentate in questo file seco
 ## [1.1.0] - 2026-11-22
 
 ### Added
+- Barra di navigazione inferiore mobile modernizzata a dock flottante traslucido (`.ds-bottom-dock`) con indicatore attivo sottile e barra azioni superiore compatta.
+- Persistenza cross-dispositivo delle impostazioni e copertura scansioni Gmail (`gmailScanState` in `localStorage` e colonna SQLite `gmail_scan_state_json`), proposta automatica della data incrementale per evitare il ripescaggio di email già controllate e promemoria anti-falsi-positivi basato sui giorni effettivamente scansionati.
 - Chiusura nativa con il tasto Indietro (Android/browser) per tutte le modali bottom sheet (`ModalShell`), finestre di conferma (`ConfirmDialog`, `DeveloperResetConfirmDialog`), menu `⋮` (`RowActionMenu`), azioni rapide `+` (`QuickActionsFab`) e menu mobile `Altro` tramite stack LIFO sincronizzato con `window.history` (`overlayHistory` e `useOverlayBackHandler`).
 - Animazioni GPU CSS client-side a zero impatto sul server (`ds-anim-sheet`, `ds-anim-dialog`, `ds-anim-backdrop`, `ds-anim-view`, `ds-anim-pop`, `ds-anim-fab-stagger`, `ds-stagger`, `ds-expand-in`, contatori fluidi `useAnimatedNumber` e feedback tattile sui bottoni) con supporto automatico a `prefers-reduced-motion: reduce`.
 - Nuova schermata di accesso mobile-first (`LoginGate.tsx`) compatibile con tema chiaro/scuro e safe area.

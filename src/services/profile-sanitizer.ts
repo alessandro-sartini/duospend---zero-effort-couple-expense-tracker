@@ -1,5 +1,6 @@
 import { EXPENSE_CATEGORIES } from '../constants/categories';
 import type { CoupleProfile, ExpenseCategory } from '../types';
+import { sanitizeGmailScanState } from './gmail-scan-history';
 import { defaultProfile } from './seed-data';
 
 const LEGACY_USER_NAMES = new Set(['utente 1', 'legacy_user']);
@@ -136,6 +137,7 @@ export const sanitizeAndMigrateProfile = (
   const customCategories = sanitizeCustomCategories(raw.customCategories);
   const hiddenCategories = sanitizeHiddenCategories(raw.hiddenCategories);
   const trackingStartDate = sanitizeTrackingStartDate(raw.trackingStartDate);
+  const gmailScanState = sanitizeGmailScanState(raw.gmailScanState);
 
   return {
     userName,
@@ -146,6 +148,7 @@ export const sanitizeAndMigrateProfile = (
     userEmail,
     partnerEmail,
     ...(trackingStartDate ? { trackingStartDate } : {}),
+    ...(gmailScanState ? { gmailScanState } : {}),
     categoryBudgets: sanitizeCategoryBudgets(raw.categoryBudgets),
     ...(customCategories ? { customCategories } : {}),
     ...(hiddenCategories ? { hiddenCategories } : {}),

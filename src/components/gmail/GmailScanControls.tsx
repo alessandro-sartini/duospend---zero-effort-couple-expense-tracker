@@ -1,13 +1,13 @@
 import React from 'react';
-import { Calendar, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Calendar, RefreshCw, Sparkles } from 'lucide-react';
+import {
+  formatDateItShort,
+  type GmailScanFreshnessStatus,
+  type SmartGmailProposal,
+} from '../../services/gmail-scan-history';
+import type { GmailSearchMode } from '../../types';
 
-export type GmailSearchMode =
-  | 'tracking_start'
-  | 'month_start'
-  | 'prev_month_start'
-  | 'year_start'
-  | 'custom_date'
-  | 'days';
+export type { GmailSearchMode };
 
 interface GmailScanControlsProps {
   userEmail?: string;
@@ -18,18 +18,16 @@ interface GmailScanControlsProps {
   customStartDate: string;
   trackingStartDate?: string;
   effectiveStartDate?: string;
+  smartProposal?: SmartGmailProposal | null;
+  isSmartOverrideDisabled?: boolean;
+  onToggleSmartOverride?: () => void;
+  freshness?: GmailScanFreshnessStatus | null;
   onScan: () => void;
   onSignOut: () => void;
   onChangeSearchMode: (mode: GmailSearchMode) => void;
   onChangeLookbackDays: (days: number) => void;
   onChangeCustomStartDate: (date: string) => void;
   onOpenStartingPoint?: () => void;
-}
-
-function formatDateItShort(iso?: string): string {
-  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
 }
 
 /** Account connesso, avvio/ripresa scansione e scelta del periodo di ricerca. */
@@ -42,6 +40,10 @@ export const GmailScanControls: React.FC<GmailScanControlsProps> = ({
   customStartDate,
   trackingStartDate,
   effectiveStartDate,
+  smartProposal,
+  isSmartOverrideDisabled = false,
+  onToggleSmartOverride,
+  freshness,
   onScan,
   onSignOut,
   onChangeSearchMode,
@@ -173,11 +175,86 @@ export const GmailScanControls: React.FC<GmailScanControlsProps> = ({
             {effectiveStartDate
               ? trackingStartDate
                 ? `Scansione effettiva dal ${formatDateItShort(effectiveStartDate)}: le email precedenti al Punto Zero (${formatDateItShort(trackingStartDate)}) restano sempre escluse.`
-                : `Verranno incluse solo le email e ricevute dal ${formatDateItShort(effectiveStartDate)} in poi, evitando acquisti dei mesi precedenti.`
+                : `Verranno incluse solo le email e ricevute dal ${formatDateItShort(effectiveStartDate)} in poi, evitando acquisti già controllati.`
               : 'Cerca tutte le email con parole chiave negli ultimi giorni selezionati.'}{' '}
             A Gemini invia solo il testo delle candidate, mai gli allegati.
           </span>
         </div>
+
+        {smartProposal?.shouldApply && (
+          <div
+            role="status"
+            className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-[11px] text-blue-900 space-y-1.5"
+          >
+            <div className="flex items-start gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-orange-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div className="min-w-0 flex-1 leading-relaxed">
+                {!isSmartOverrideDisabled ? (
+                  smartProposal.alreadyScannedToday ? (
+                    <>
+                      Gmail già controllato fino ad oggi (
+                      <strong className="font-mono">
+                        {formatDateItShort(smartProposal.coveredUntilDate)}
+                      </strong>
+                      ). Ho impostato la partenza su oggi per evitare di ripescare le vecchie email.
+                    </>
+                  ) : (
+                    <>
+                      Scansione precedente completata fino al{' '}
+                      <strong className="font-mono">
+                        {formatDateItShort(smartProposal.coveredUntilDate)}
+                      </strong>{' '}
+                      ({smartProposal.daysSinceLastScan}{' '}
+                      {smartProposal.daysSinceLastScan === 1 ? 'giorno fa' : 'giorni fa'}). Data
+                      impostata automaticamente dal{' '}
+                      <strong className="font-mono">
+                        {formatDateItShort(smartProposal.proposedStartDate)}
+                      </strong>{' '}
+                      per evitare il ripescaggio di {smartProposal.savedDays} giorni già scansionati.
+                    </>
+                  )
+                ) : (
+                  <>
+                    Riscansione completa attiva dall’inizio periodo (
+                    <strong className="font-mono">
+                      {formatDateItShort(smartProposal.requestedStartDate)}
+                    </strong>
+                    ).
+                  </>
+                )}
+              </div>
+            </div>
+            {onToggleSmartOverride && (
+              <div className="pl-5">
+                <button
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={onToggleSmartOverride}
+                  className="font-semibold text-orange-600 hover:underline cursor-pointer disabled:opacity-50"
+                >
+                  {isSmartOverrideDisabled
+                    ? `Ripristina data consigliata (${formatDateItShort(smartProposal.proposedStartDate)})`
+                    : `Scansiona comunque tutto il periodo (dal ${formatDateItShort(smartProposal.requestedStartDate)})`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {freshness?.isStale && (
+          <div
+            role="status"
+            className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 flex items-start gap-2"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <span className="leading-relaxed">
+              Non esegui una scansione completa da{' '}
+              <strong>{freshness.daysSinceLastScan} giorni</strong> (ultimo controllo:{' '}
+              <span className="font-mono">{formatDateItShort(freshness.lastScannedDate)}</span>).
+              Potrebbero mancare ricevute nel frattempo.
+            </span>
+          </div>
+        )}
       </div>
     </>
   );

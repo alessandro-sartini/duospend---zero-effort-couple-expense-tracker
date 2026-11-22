@@ -14,6 +14,13 @@ import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { RowActionMenu } from '../src/components/ui/RowActionMenu';
 import { UndoToast } from '../src/components/ui/UndoToast';
 import { formatCompactSplitLabel, formatShortExpenseDate } from '../src/constants/categories';
+import {
+  computeSmartIncrementalProposal,
+  evaluateGmailScanFreshness,
+  recordCompletedGmailScan,
+  resolveRequestedScanStartDate,
+  sanitizeGmailScanState,
+} from '../src/services/gmail-scan-history';
 import type { CoupleProfile, Expense, Settlement } from '../src/types';
 import {
   getOverlayHistorySnapshot,
@@ -455,6 +462,7 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       );
       expect(navbarHtml).toContain('aria-label="Installa app DuoSpend su questo dispositivo"');
       expect(navbarHtml).toContain('aria-haspopup="menu"');
+      expect(navbarHtml).toContain('ds-bottom-dock');
     });
 
     it('formatta date e quote compatte, evita collisioni inline-flex/hidden su CategoryBadge e rende LoginGate completo', () => {
@@ -692,6 +700,113 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       );
       expect(modalShell).toContain('useOverlayBackHandler');
       expect(confirmDialog).toContain('useOverlayBackHandler');
+    });
+  });
+
+  describe('Persistenza Gmail, proposta incrementale anti-ripescaggio e avvisi anti-falsi-positivi', () => {
+    it('ricorda il periodo 30 giorni, propone la data incrementale dopo 15 gg ed evita falsi allarmi su giorni senza email', () => {
+      // 1. Nessuna scansione mai effettuata -> nessun avviso falso positivo
+      expect(
+        evaluateGmailScanFreshness({
+          gmailScanState: { searchMode: 'days', lookbackDays: 30 },
+          accountEmail: 'marco@example.com',
+          todayIso: '2026-11-22',
+        })
+      ).toBeNull();
+
+      // 2. Utente esegue scansione "Ultimi 30 giorni" il 07/11/2026
+      const scanNov07Start = resolveRequestedScanStartDate({
+        searchMode: 'days',
+        lookbackDays: 30,
+        todayIso: '2026-11-07',
+      });
+      expect(scanNov07Start).toBe('2026-10-08');
+
+      const stateAfterNov07 = recordCompletedGmailScan(undefined, {
+        accountEmail: 'marco@example.com',
+        searchMode: 'days',
+        lookbackDays: 30,
+        scanStartDate: scanNov07Start!,
+        scanEndDate: '2026-11-07',
+      });
+
+      const sanitizedRoundTrip = sanitizeGmailScanState(
+        JSON.parse(JSON.stringify(stateAfterNov07))
+      );
+      expect(sanitizedRoundTrip?.searchMode).toBe('days');
+      expect(sanitizedRoundTrip?.lookbackDays).toBe(30);
+
+      // 3. 15 giorni dopo (22/11/2026), la finestra 30 giorni partirebbe dal 23/10/2026:
+      // l'app propone in automatico il 07/11/2026 evitando 15 giorni già scansionati
+      const requestedOnNov22 = resolveRequestedScanStartDate({
+        searchMode: 'days',
+        lookbackDays: 30,
+        todayIso: '2026-11-22',
+      });
+      expect(requestedOnNov22).toBe('2026-10-23');
+
+      const proposal = computeSmartIncrementalProposal({
+        gmailScanState: sanitizedRoundTrip,
+        accountEmail: 'marco@example.com',
+        searchMode: 'days',
+        requestedStartDate: requestedOnNov22,
+        todayIso: '2026-11-22',
+      });
+      expect(proposal).toEqual({
+        shouldApply: true,
+        proposedStartDate: '2026-11-07',
+        requestedStartDate: '2026-10-23',
+        coveredUntilDate: '2026-11-07',
+        savedDays: 15,
+        daysSinceLastScan: 15,
+        alreadyScannedToday: false,
+      });
+
+      // E segnala i 15 giorni scoperti con proposta di ripresa dal 07/11/2026
+      expect(
+        evaluateGmailScanFreshness({
+          gmailScanState: sanitizedRoundTrip,
+          accountEmail: 'marco@example.com',
+          todayIso: '2026-11-22',
+        })
+      ).toEqual({
+        isStale: true,
+        daysSinceLastScan: 15,
+        lastScannedDate: '2026-11-07',
+        suggestedResumeDate: '2026-11-07',
+      });
+
+      // 4. Scansione completata il 20/11 (anche con 0 email/spese trovate):
+      // al 22/11 (2 giorni dopo) NON deve scattare nessun falso allarme!
+      const stateAfterEmptyScan = recordCompletedGmailScan(sanitizedRoundTrip, {
+        accountEmail: 'marco@example.com',
+        searchMode: 'days',
+        lookbackDays: 30,
+        scanStartDate: '2026-11-07',
+        scanEndDate: '2026-11-20',
+      });
+      expect(
+        stateAfterEmptyScan.accounts?.['marco@example.com']?.coverageIntervals
+      ).toEqual([{ from: '2026-10-08', until: '2026-11-20' }]);
+      expect(
+        evaluateGmailScanFreshness({
+          gmailScanState: stateAfterEmptyScan,
+          accountEmail: 'marco@example.com',
+          todayIso: '2026-11-22',
+        })
+      ).toBeNull();
+
+      // 5. Se l'utente estende la ricerca indietro prima dell'intervallo coperto (90 gg = 24/08),
+      // la proposta NON salta la parte non ancora scansionata
+      expect(
+        computeSmartIncrementalProposal({
+          gmailScanState: stateAfterEmptyScan,
+          accountEmail: 'marco@example.com',
+          searchMode: 'days',
+          requestedStartDate: '2026-08-24',
+          todayIso: '2026-11-22',
+        })
+      ).toBeNull();
     });
   });
 });
