@@ -7,6 +7,7 @@ import { NotFoundView } from './components/layout/NotFoundView';
 import { QuickActionsFab } from './components/layout/QuickActionsFab';
 import { ZeroAmountBanner } from './components/layout/ZeroAmountBanner';
 import { UndoToast, type UndoToastNotice } from './components/ui/UndoToast';
+import { PullToRefreshBanner } from './components/ui/PullToRefreshBanner';
 import { formatCurrency } from './constants/categories';
 import { evaluateGmailScanFreshness, formatDateItShort } from './services/gmail-scan-history';
 import {
@@ -19,7 +20,9 @@ import {
 import { getAuthConfig } from './services/auth';
 import { FullScreenLoader } from './components/ui/Loader';
 import { useDuoSpendData } from './hooks/useDuoSpendData';
+import { useWakeLock } from './hooks/useWakeLock';
 import { pushAppRouteHistory } from './utils/overlayHistory';
+import { scrollViewportToTop, syncPwaAppBadge } from './utils/mobileFeedback';
 import {
   applyThemePreference,
   loadThemePreference,
@@ -366,6 +369,7 @@ export default function App() {
     if (normalizePath(window.location.pathname) !== targetPath) {
       pushAppRouteHistory({ tab }, targetPath);
     }
+    scrollViewportToTop(true);
   }, []);
 
   const openNewExpenseModal = () => {
@@ -420,6 +424,35 @@ export default function App() {
     trackingStartDate: profile.trackingStartDate,
   });
 
+  const isAnyModalOpen =
+    isAddExpenseOpen ||
+    isScanReceiptOpen ||
+    isGmailSyncOpen ||
+    isNotificationSyncOpen ||
+    isSettlementOpen ||
+    isSecurityModalOpen ||
+    isStartingPointOpen ||
+    isTripsModalOpen ||
+    isRecurringModalOpen ||
+    isDevModalOpen;
+
+  useWakeLock(gmailBgState.isSyncing || receiptBgState.isAnalyzing);
+
+  useEffect(() => {
+    if (!isVaultUnlocked) {
+      syncPwaAppBadge(0);
+      return;
+    }
+    syncPwaAppBadge(
+      zeroAmountExpenses.length + gmailBgState.detectedCount + gmailBgState.reviewCount
+    );
+  }, [
+    isVaultUnlocked,
+    zeroAmountExpenses.length,
+    gmailBgState.detectedCount,
+    gmailBgState.reviewCount,
+  ]);
+
   if (isCheckingAuth) {
     return (
       <div data-theme={theme}>
@@ -470,6 +503,12 @@ export default function App() {
         onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
         canInstallPwa={Boolean(installPromptEvent)}
         onInstallPwa={handleInstallPwa}
+      />
+
+      <PullToRefreshBanner
+        isRefreshing={isSyncingData}
+        disabled={isAnyModalOpen}
+        onRefresh={handleRefreshData}
       />
 
       <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-10 pt-4 pb-[calc(9.5rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
@@ -815,18 +854,7 @@ export default function App() {
       <UndoToast notice={undoNotice} onDismiss={() => setUndoNotice(null)} />
 
       <QuickActionsFab
-        isAnyModalOpen={
-          isAddExpenseOpen ||
-          isScanReceiptOpen ||
-          isGmailSyncOpen ||
-          isNotificationSyncOpen ||
-          isSettlementOpen ||
-          isSecurityModalOpen ||
-          isStartingPointOpen ||
-          isTripsModalOpen ||
-          isRecurringModalOpen ||
-          isDevModalOpen
-        }
+        isAnyModalOpen={isAnyModalOpen}
         isGmailSyncOpen={isGmailSyncOpen}
         isScanReceiptOpen={isScanReceiptOpen}
         gmailBgState={gmailBgState}

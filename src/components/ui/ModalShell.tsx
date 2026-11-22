@@ -1,8 +1,9 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useOverlayBackHandler } from '../../hooks/useOverlayBackHandler';
 import { useScrollLock } from '../../hooks/useScrollLock';
+import { prefersReducedMotion } from '../../utils/mobileFeedback';
 
 interface ModalShellProps {
   isOpen: boolean;
@@ -44,13 +45,12 @@ export const ModalShell: React.FC<ModalShellProps> = ({
 }) => {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  useScrollLock(isOpen);
-  useFocusTrap(dialogRef, isOpen);
-  useOverlayBackHandler(isOpen, onClose);
-
   const [isExpanded, setIsExpanded] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const isClosingRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
   const dragStartRef = useRef<{
     x: number;
     y: number;
@@ -60,25 +60,58 @@ export const ModalShell: React.FC<ModalShellProps> = ({
     axis: 'pending' | 'vertical' | 'aborted';
   } | null>(null);
 
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const requestAnimatedClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    if (typeof window === 'undefined' || prefersReducedMotion()) {
+      onClose();
+      return;
+    }
+    isClosingRef.current = true;
+    setIsClosing(true);
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      isClosingRef.current = false;
+      setIsClosing(false);
+      onClose();
+    }, 185);
+  }, [clearCloseTimer, onClose]);
+
+  useScrollLock(isOpen);
+  useFocusTrap(dialogRef, isOpen);
+  useOverlayBackHandler(isOpen, requestAnimatedClose);
+
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
+
   useEffect(() => {
     if (!isOpen) {
+      clearCloseTimer();
+      isClosingRef.current = false;
+      setIsClosing(false);
       setIsExpanded(false);
       setDragOffsetY(0);
       setIsDragging(false);
       dragStartRef.current = null;
     }
-  }, [isOpen]);
+  }, [isOpen, clearCloseTimer]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        requestAnimatedClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, requestAnimatedClose]);
 
   if (!isOpen) return null;
 
@@ -180,9 +213,24 @@ export const ModalShell: React.FC<ModalShellProps> = ({
         return;
       }
       if (deltaY >= (isExpanded ? 160 : 75) || velocityY > 0.65) {
-        setDragOffsetY(0);
-        setIsExpanded(false);
-        onClose();
+        if (typeof window !== 'undefined' && !prefersReducedMotion()) {
+          isClosingRef.current = true;
+          setIsClosing(true);
+          setDragOffsetY(window.innerHeight || 640);
+          clearCloseTimer();
+          closeTimerRef.current = window.setTimeout(() => {
+            closeTimerRef.current = null;
+            isClosingRef.current = false;
+            setIsClosing(false);
+            setIsExpanded(false);
+            setDragOffsetY(0);
+            onClose();
+          }, 185);
+        } else {
+          setDragOffsetY(0);
+          setIsExpanded(false);
+          onClose();
+        }
         return;
       }
     }
@@ -194,9 +242,19 @@ export const ModalShell: React.FC<ModalShellProps> = ({
     ? 'rounded-t-3xl rounded-b-none sm:rounded-2xl h-[94dvh] max-h-[94dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)]'
     : 'rounded-t-3xl rounded-b-none sm:rounded-2xl max-h-[78dvh] sm:max-h-[calc(100dvh-2rem)]';
 
+  const cardMotionClass = mobileBottomSheet
+    ? isClosing
+      ? dragOffsetY > 0
+        ? mobileHeightClass
+        : `ds-anim-sheet-out ${mobileHeightClass}`
+      : `ds-anim-sheet ${mobileHeightClass}`
+    : `${isClosing ? 'ds-anim-dialog-out' : 'ds-anim-dialog'} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]`;
+
   return (
     <div
-      className={`ds-anim-backdrop fixed inset-0 z-50 flex justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs ${
+      className={`${
+        isClosing ? 'ds-anim-backdrop-out' : 'ds-anim-backdrop'
+      } fixed inset-0 z-50 flex justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs ${
         mobileBottomSheet ? 'items-end sm:items-center p-0 sm:p-4' : 'items-center p-3 sm:p-4'
       }`}
       role="dialog"
@@ -206,7 +264,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
         closeOnBackdrop
           ? (event) => {
               if (event.target === event.currentTarget) {
-                onClose();
+                requestAnimatedClose();
               }
             }
           : undefined
@@ -214,11 +272,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
     >
       <div
         ref={dialogRef}
-        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col outline-none transition-[max-height,height] duration-200 ease-out ${
-          mobileBottomSheet
-            ? `ds-anim-sheet ${mobileHeightClass}`
-            : 'ds-anim-dialog max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
-        }`}
+        className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col outline-none transition-[max-height,height] duration-200 ease-out ${cardMotionClass}`}
         style={
           mobileBottomSheet
             ? {
@@ -291,7 +345,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
             {headerExtra}
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestAnimatedClose}
               className="min-h-10 min-w-10 rounded-xl hover:bg-stone-200/60 text-stone-500 hover:text-stone-900 transition-colors inline-flex items-center justify-center cursor-pointer"
               aria-label={closeLabel}
             >

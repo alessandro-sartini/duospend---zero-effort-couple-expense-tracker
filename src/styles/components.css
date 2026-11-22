@@ -80,6 +80,15 @@
   }
 }
 
+@keyframes dsFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes dsDialogIn {
   from {
     opacity: 0;
@@ -91,6 +100,17 @@
   }
 }
 
+@keyframes dsDialogOut {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.96);
+  }
+}
+
 @keyframes dsSheetIn {
   from {
     opacity: 0.9;
@@ -99,6 +119,17 @@
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dsSheetOut {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0.85;
+    transform: translate3d(0, 100%, 0);
   }
 }
 
@@ -128,17 +159,33 @@
   animation: dsFadeIn 190ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
+.ds-anim-backdrop-out {
+  animation: dsFadeOut 185ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 .ds-anim-dialog {
   animation: dsDialogIn 210ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.ds-anim-dialog-out {
+  animation: dsDialogOut 175ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .ds-anim-sheet {
   animation: dsSheetIn 290ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
+.ds-anim-sheet-out {
+  animation: dsSheetOut 190ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 @media (min-width: 640px) {
   .ds-anim-sheet {
     animation: dsDialogIn 210ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  .ds-anim-sheet-out {
+    animation: dsDialogOut 175ms cubic-bezier(0.4, 0, 1, 1) forwards;
   }
 }
 

@@ -19,6 +19,7 @@ import {
 import { CoupleProfile } from '../types';
 import type { Theme } from '../services/theme';
 import { useOverlayBackHandler } from '../hooks/useOverlayBackHandler';
+import { scrollViewportToTop, triggerLightHaptic } from '../utils/mobileFeedback';
 import { DuoSpendLogo } from './ui/DuoSpendLogo';
 import { SyncStatusBadge } from './ui/Loader';
 
@@ -75,7 +76,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const mobileSecondaryItems = NAV_ITEMS.slice(4);
 
   const selectTab = (tab: string) => {
-    onTabChange(tab);
+    triggerLightHaptic(8);
+    if (tab === currentTab) {
+      scrollViewportToTop(true);
+    } else {
+      onTabChange(tab);
+    }
     setIsMoreOpen(false);
   };
 

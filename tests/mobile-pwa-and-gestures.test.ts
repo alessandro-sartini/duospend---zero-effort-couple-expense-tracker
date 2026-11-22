@@ -11,8 +11,14 @@ import { NotificationSyncModal } from '../src/components/NotificationSyncModal';
 import { SettlementView } from '../src/components/SettlementView';
 import { CategoryBadge } from '../src/components/ui/CategoryBadge';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
+import { PullToRefreshBanner } from '../src/components/ui/PullToRefreshBanner';
 import { RowActionMenu } from '../src/components/ui/RowActionMenu';
 import { UndoToast } from '../src/components/ui/UndoToast';
+import {
+  scrollViewportToTop,
+  syncPwaAppBadge,
+  triggerLightHaptic,
+} from '../src/utils/mobileFeedback';
 import { formatCompactSplitLabel, formatShortExpenseDate } from '../src/constants/categories';
 import {
   computeSmartIncrementalProposal,
@@ -689,6 +695,54 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       expect(css).toContain('.ds-anim-fab-stagger');
       expect(css).toContain('.ds-stagger');
       expect(css).toContain('.ds-expand-in');
+      expect(css).toContain('.ds-anim-sheet-out');
+      expect(css).toContain('.ds-anim-dialog-out');
+      expect(css).toContain('.ds-anim-backdrop-out');
+
+      const ptrRefreshingHtml = renderToStaticMarkup(
+        React.createElement(PullToRefreshBanner, {
+          isRefreshing: true,
+          onRefresh: () => {},
+        })
+      );
+      expect(ptrRefreshingHtml).toContain('Sincronizzazione...');
+
+      const ptrIdleHtml = renderToStaticMarkup(
+        React.createElement(PullToRefreshBanner, {
+          isRefreshing: false,
+          onRefresh: () => {},
+        })
+      );
+      expect(ptrIdleHtml).toBe('');
+
+      const vibrateSpy = vi.fn();
+      const setAppBadgeSpy = vi.fn().mockResolvedValue(undefined);
+      const clearAppBadgeSpy = vi.fn().mockResolvedValue(undefined);
+      const scrollSpy = vi.fn();
+      vi.stubGlobal('navigator', {
+        vibrate: vibrateSpy,
+        setAppBadge: setAppBadgeSpy,
+        clearAppBadge: clearAppBadgeSpy,
+      });
+      vi.stubGlobal('window', {
+        matchMedia: () => ({ matches: false }),
+        scrollTo: scrollSpy,
+      });
+      try {
+        triggerLightHaptic(8);
+        expect(vibrateSpy).toHaveBeenCalledWith(8);
+
+        syncPwaAppBadge(3);
+        expect(setAppBadgeSpy).toHaveBeenCalledWith(3);
+
+        syncPwaAppBadge(0);
+        expect(clearAppBadgeSpy).toHaveBeenCalledTimes(1);
+
+        scrollViewportToTop(true);
+        expect(scrollSpy).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+      } finally {
+        vi.unstubAllGlobals();
+      }
 
       const modalShell = fs.readFileSync(
         path.resolve(process.cwd(), 'src/components/ui/ModalShell.tsx'),

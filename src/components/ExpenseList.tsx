@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
+  Check,
   ChevronDown,
   Download,
   Edit3,
@@ -27,6 +28,7 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { RowActionMenu, type RowActionMenuItem } from './ui/RowActionMenu';
 import { SourceBadge } from './ui/SourceBadge';
 import { SwipeableActionRow } from './ui/SwipeableActionRow';
+import { triggerLightHaptic } from '../utils/mobileFeedback';
 
 function escapeCsvCell(value: string | number): string {
   const raw = String(value ?? '');
@@ -111,6 +113,13 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     side: Exclude<SwipeOpenSide, null>;
   } | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [csvExported, setCsvExported] = useState(false);
+
+  useEffect(() => {
+    if (!csvExported) return;
+    const timer = window.setTimeout(() => setCsvExported(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [csvExported]);
 
   useEffect(() => {
     setOpenSwipe(null);
@@ -184,6 +193,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    triggerLightHaptic(10);
+    setCsvExported(true);
   };
 
   return (
@@ -217,13 +228,19 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               type="button"
               onClick={handleExportCsv}
               disabled={filteredExpenses.length === 0}
-              className="ds-btn-secondary min-h-10 px-3 py-2 text-xs shrink-0 disabled:opacity-50"
+              className={`ds-btn-secondary min-h-10 px-3 py-2 text-xs shrink-0 disabled:opacity-50 ${
+                csvExported ? 'border-emerald-500/40 text-emerald-700' : ''
+              }`}
               title="Esporta spese filtrate in CSV"
               aria-label="Esporta CSV"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span className="sm:hidden">CSV</span>
-              <span className="hidden sm:inline">Esporta CSV</span>
+              {csvExported ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span className="sm:hidden">{csvExported ? 'Fatto' : 'CSV'}</span>
+              <span className="hidden sm:inline">{csvExported ? 'Esportato' : 'Esporta CSV'}</span>
             </button>
           </div>
         </div>
