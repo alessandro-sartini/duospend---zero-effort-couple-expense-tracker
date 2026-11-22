@@ -258,7 +258,7 @@ export const GmailReceiptCard: React.FC<GmailReceiptCardProps> = ({
           <button
             type="button"
             onClick={openEditor}
-            className="min-h-9 rounded-lg px-2 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+            className="min-h-10 sm:min-h-9 rounded-lg px-2 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
             aria-label={`Modifica ${receipt.merchant || 'ricevuta rilevata'}`}
           >
             <Pencil className="mr-1 inline h-3.5 w-3.5" />
@@ -271,7 +271,7 @@ export const GmailReceiptCard: React.FC<GmailReceiptCardProps> = ({
             event.stopPropagation();
             onIgnore();
           }}
-          className="min-h-9 rounded-lg px-2 text-[11px] font-semibold text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+          className="min-h-10 sm:min-h-9 rounded-lg px-2 text-[11px] font-semibold text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
           aria-label={`Ignora email da ${receipt.merchant || 'questo messaggio'}`}
         >
           <Ban className="mr-1 inline h-3.5 w-3.5" />

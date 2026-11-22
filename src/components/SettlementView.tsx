@@ -205,10 +205,14 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
         title="Annullare questo rimborso?"
         description={
           settlementPendingDelete
-            ? `Il rimborso di ${formatCurrency(
+            ? `Il rimborso da ${
+                settlementPendingDelete.from === 'user' ? profile.userName : profile.partnerName
+              } a ${
+                settlementPendingDelete.to === 'user' ? profile.userName : profile.partnerName
+              } di ${formatCurrency(
                 settlementPendingDelete.amount,
                 settlementPendingDelete.currency || profile.currency
-              )} del ${settlementPendingDelete.date} verrà rimosso e il saldo netto verrà ricalcolato.`
+              )} del ${settlementPendingDelete.date} verrà rimosso e il saldo netto verrà ricalcolato. Potrai ripristinarlo subito dall’avviso in basso.`
             : ''
         }
         confirmLabel="Elimina"

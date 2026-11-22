@@ -42,7 +42,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
       <button
         type="button"
         onClick={onRetakePhoto}
-        className="text-[11px] text-stone-500 hover:text-stone-800 underline cursor-pointer"
+        className="min-h-9 inline-flex items-center text-[11px] text-stone-500 hover:text-stone-800 underline cursor-pointer"
       >
         Rifai Foto
       </button>
@@ -66,7 +66,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
             )
           }
           placeholder="Nome negozio o ristorante"
-          className="ds-input min-h-9 w-full px-2.5 text-xs font-semibold"
+          className="ds-input min-h-10 sm:min-h-9 w-full px-2.5 text-xs font-semibold"
         />
       </div>
       <div>
@@ -79,6 +79,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
         <input
           id="camera-receipt-total"
           type="number"
+          inputMode="decimal"
           min="0"
           step="0.01"
           value={Number.isFinite(draft.total) ? draft.total : 0}
@@ -90,7 +91,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
                 : prev
             );
           }}
-          className="ds-input min-h-9 w-full px-2.5 text-xs font-mono font-bold"
+          className="ds-input min-h-10 sm:min-h-9 w-full px-2.5 text-xs font-mono font-bold"
         />
       </div>
       <div>
@@ -109,7 +110,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
               prev ? { ...prev, date: e.target.value } : prev
             )
           }
-          className="ds-input min-h-9 w-full px-2.5 text-xs font-mono"
+          className="ds-input min-h-10 sm:min-h-9 w-full px-2.5 text-xs font-mono"
         />
       </div>
       <div>
@@ -131,7 +132,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
                   : prev
               )
             }
-            className="ds-input min-h-9 flex-1 px-2 text-xs font-medium"
+            className="ds-input min-h-10 sm:min-h-9 flex-1 px-2 text-xs font-medium"
           >
             {categoryOptions.map((categoryOption) => (
               <option key={categoryOption} value={categoryOption}>
@@ -185,7 +186,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
           <button
             type="button"
             onClick={() => onChangeSplitType('50_50')}
-            className={`py-1.5 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
+            className={`min-h-11 sm:min-h-10 py-1.5 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
               splitType === '50_50'
                 ? 'border-orange-500 bg-orange-100/60 text-orange-950 font-semibold'
                 : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-medium'
@@ -198,7 +199,7 @@ export const ReceiptDraftForm: React.FC<ReceiptDraftFormProps> = ({
             onClick={() =>
               onChangeSplitType(payer === 'user' ? '100_user' : '100_partner')
             }
-            className={`py-1.5 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
+            className={`min-h-11 sm:min-h-10 py-1.5 px-2 text-xs rounded-xl border text-center transition-all cursor-pointer ${
               splitType === '100_user' || splitType === '100_partner'
                 ? 'border-orange-500 bg-orange-100/60 text-orange-950 font-semibold'
                 : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-medium'

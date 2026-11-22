@@ -25,6 +25,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
 }) => {
   const titleId = useId();
+  const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   useScrollLock(isOpen);
   useFocusTrap(dialogRef, isOpen);
@@ -33,11 +34,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         onCancel();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
@@ -49,6 +53,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       role="alertdialog"
       aria-modal="true"
       aria-labelledby={titleId}
+      aria-describedby={descriptionId}
       className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
     >
       <div
@@ -74,7 +79,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             >
               {title}
             </h3>
-            <p className="break-words text-xs leading-relaxed text-stone-600">
+            <p
+              id={descriptionId}
+              className="break-words text-xs leading-relaxed text-stone-600"
+            >
               {description}
             </p>
           </div>

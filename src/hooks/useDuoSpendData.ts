@@ -518,6 +518,15 @@ export function useDuoSpendData() {
     });
   }, []);
 
+  const handleRestoreExpense = useCallback((expense: Expense) => {
+    setExpenses((current) => {
+      if (current.some((e) => e.id === expense.id)) return current;
+      const updated = [expense, ...current].sort((a, b) => b.date.localeCompare(a.date));
+      saveExpenses(updated);
+      return updated;
+    });
+  }, []);
+
   const handleImportGmailExpenses = useCallback(
     (newItems: Omit<Expense, 'id'>[]) => {
       let matchedCycles: Array<{ ruleId: string; cycle: string }> = [];
@@ -665,6 +674,15 @@ export function useDuoSpendData() {
     });
   }, []);
 
+  const handleUnignoreGmailMessage = useCallback((messageId: string) => {
+    setIgnoredGmailMessageIds((current) => {
+      if (!current.includes(messageId)) return current;
+      const updated = current.filter((id) => id !== messageId);
+      saveIgnoredGmailMessageIds(updated);
+      return updated;
+    });
+  }, []);
+
   const handleSaveGmailRecurringRule = useCallback((rule: GmailRecurringRule) => {
     setGmailRecurringRules((current) => {
       const updated = [
@@ -695,6 +713,15 @@ export function useDuoSpendData() {
   const handleDeleteSettlement = useCallback((id: string) => {
     setSettlements((current) => {
       const updated = current.filter((s) => s.id !== id);
+      saveSettlements(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleRestoreSettlement = useCallback((settlement: Settlement) => {
+    setSettlements((current) => {
+      if (current.some((s) => s.id === settlement.id)) return current;
+      const updated = [settlement, ...current].sort((a, b) => b.date.localeCompare(a.date));
       saveSettlements(updated);
       return updated;
     });
@@ -796,6 +823,7 @@ export function useDuoSpendData() {
     handleRefreshData,
     handleSaveExpense,
     handleDeleteExpense,
+    handleRestoreExpense,
     handleImportGmailExpenses,
     handleMergeZeroExpense,
     handleSaveTrip,
@@ -805,9 +833,11 @@ export function useDuoSpendData() {
     handleDeleteRecurringExpense,
     handleTriggerRecurringExpense,
     handleIgnoreGmailMessage,
+    handleUnignoreGmailMessage,
     handleSaveGmailRecurringRule,
     handleConfirmSettlement,
     handleDeleteSettlement,
+    handleRestoreSettlement,
     handleUpdateGoalImage,
     handleAddGoal,
     handleUpdateGoal,

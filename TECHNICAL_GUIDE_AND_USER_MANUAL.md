@@ -22,10 +22,11 @@
 │                   CLIENT LAYER (Installable Chrome PWA)                    │
 │                                                                            │
 │  - React 19 SPA + Vite 8 + Tailwind CSS v4 (dark-mode default, CSS tokens) │
-│  - Service Worker (public/sw.js, shell cache 'duospend-shell-v8')          │
+│  - Service Worker (public/sw.js, shell cache 'duospend-shell-v9')          │
 │  - Installable Manifest (display: standalone, shortcuts, share_target GET) │
-│  - Accessibility: preserved browser zoom, safe-area insets, useFocusTrap,  │
-│    Escape modal dismissal, prefers-reduced-motion support                  │
+│  - Mobile UX & Accessibility: bottom sheets, Android hybrid swipe rows +  │
+│    RowActionMenu (⋮) + UndoToast, preserved zoom, safe-area insets,        │
+│    useFocusTrap, capture-phase Escape, prefers-reduced-motion support      │
 │  - Offline write queue (serialized syncPatchToServer + duospend_dirty_sync)│
 │  - GIS OAuth popup (initCodeClient code model / Token fallback)            │
 └──────────────────────────────────┬─────────────────────────────────────────┘
@@ -86,16 +87,17 @@
 ## 3. Chrome PWA Evaluation vs. Native APK
 
 ### Chrome PWA Capabilities
-- **Installability & Manifest (`public/manifest.webmanifest`)**: `display: "standalone"` with `"minimal-ui"` fallback, `192x192` / `512x512` / maskable icons, 4 launcher shortcuts (`/?action=add-expense`, `/?action=paste-notification`, `/?action=scan-receipt`, `/saldo`), and Android Chrome `share_target` (`GET /?title=&text=&url=`).
+- **Installability & Manifest (`public/manifest.webmanifest`)**: `id: "/"`, `display: "standalone"` with `"minimal-ui"` fallback, `orientation: "any"`, `prefer_related_applications: false`, `192x192` / `512x512` / maskable icons, 4 launcher shortcuts (`/?action=add-expense`, `/?action=paste-notification`, `/?action=scan-receipt`, `/saldo`), and Android Chrome `share_target` (`GET /?title=&text=&url=`).
 - **Service Worker & Cache Headers (`public/sw.js` & `server/app.ts`)**:
-  - `CACHE_NAME = 'duospend-shell-v8'`.
-  - `/sw.js`, `/index.html`, and `/manifest.webmanifest` are served with `Cache-Control: no-cache, no-store, must-revalidate` so browser update checks always observe new deployments promptly.
-  - `/assets/*` are served with `Cache-Control: public, max-age=31536000, immutable`.
+  - `CACHE_NAME = 'duospend-shell-v9'`, registered with `updateViaCache: 'none'`.
+  - `/sw.js`, `/index.html`, and `/manifest.webmanifest` are served with `Cache-Control: no-cache, no-store, must-revalidate` (and `application/manifest+json; charset=utf-8` for the manifest) so browser update checks always observe new deployments promptly.
+  - `/manifest.webmanifest` uses network-first in the Service Worker; `/assets/*` are served with `Cache-Control: public, max-age=31536000, immutable`.
   - Navigation (`request.mode === 'navigate'`) uses network-first and refreshes `/index.html` cleanly in cache only for clean non-query navigation requests; `/api/*` responses (including `/api/savings-challenges*`) are bypassed and never stored in Cache Storage.
-- **Mobile Viewport, Safe Areas & Accessibility**:
+- **Mobile Viewport, Touch Gestures, Safe Areas & Accessibility**:
   - `viewport` meta preserves user zoom (no `user-scalable=no`).
-  - Layout, floating quick actions, bottom sheets, and alert dialogs include `env(safe-area-inset-*)` spacing and `100dvh` sizing.
-  - `useFocusTrap` traps `Tab`/`Shift+Tab` inside open modals and dialogs and restores triggering focus on close; all dialogs close on `Escape`.
+  - Layout, floating quick actions, undo toast, bottom sheets, and alert dialogs include `env(safe-area-inset-*)` spacing and `100dvh` sizing.
+  - Android-style hybrid lateral swipe in `ExpenseList` and `DashboardOverview` recent expenses (`SwipeableActionRow` + `src/utils/swipeGestures.ts`) prioritizes vertical scroll (`determineSwipeAxis`), latches side action buttons on short swipe, triggers on long swipe with optional `navigator.vibrate(14)`, pairs with compact mobile `RowActionMenu` (`⋮`) and desktop buttons, requires `ConfirmDialog` confirmation before any deletion, and pairs deletions with `UndoToast` (**Ripristina**).
+  - `useFocusTrap` traps `Tab`/`Shift+Tab` inside open modals and dialogs and restores triggering focus on close; capture-phase `Escape` in `ConfirmDialog` / `DeveloperResetConfirmDialog` closes only the top overlay.
   - `@media (prefers-reduced-motion: reduce)` and `scrollIntoView` guards respect OS motion preferences.
 - **Offline Queue & Conflict Precedence (`src/services/storage.ts`)**:
   - Mutations write locally first, set `duospend_dirty_sync_v1`, and enqueue `POST /api/data` calls through `syncPatchToServer` (`syncQueuePromise` with `pendingSyncCount` and `batchHadFailure`, clearing the dirty flag only when all queued writes succeed).

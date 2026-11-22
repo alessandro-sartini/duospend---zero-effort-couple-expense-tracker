@@ -215,43 +215,53 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         subtitle="Registrata nel fondo comune di coppia"
         icon={Receipt}
         closeLabel="Chiudi modifica spesa"
+        mobileBottomSheet
         footer={footer}
       >
         <form id="add-expense-form" onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {/* Importo e Titolo */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-1">
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label
+                htmlFor="expense-amount-input"
+                className="block text-xs font-semibold text-stone-700 mb-1"
+              >
                 Importo ({currency})
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs text-stone-400 font-mono">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 font-mono pointer-events-none">
                   {currency === 'EUR' ? '€' : currency}
                 </span>
                 <input
+                  id="expense-amount-input"
                   type="number"
+                  inputMode="decimal"
                   min="0.01"
                   step="0.01"
                   required
                   placeholder="0.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="ds-input w-full pl-7 pr-3 py-2 text-base font-mono font-bold"
+                  className="ds-input w-full min-h-10 pl-7 pr-3 py-2 text-base font-mono font-bold"
                 />
               </div>
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label
+                htmlFor="expense-title-input"
+                className="block text-xs font-semibold text-stone-700 mb-1"
+              >
                 Esercente / Descrizione
               </label>
               <input
+                id="expense-title-input"
                 type="text"
                 required
                 placeholder="es. Esselunga, Trattoria, Bolletta Luce"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="ds-input w-full px-3 py-2 text-sm"
+                className="ds-input w-full min-h-10 px-3 py-2 text-sm"
               />
             </div>
           </div>
@@ -259,10 +269,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           {/* Data & Categoria */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label
+                htmlFor="expense-date-input"
+                className="block text-xs font-semibold text-stone-700 mb-1"
+              >
                 Data
               </label>
               <input
+                id="expense-date-input"
                 type="date"
                 required
                 value={date}
@@ -272,10 +286,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label
+                htmlFor="expense-category-select"
+                className="block text-xs font-semibold text-stone-700 mb-1"
+              >
                 Categoria
               </label>
               <select
+                id="expense-category-select"
                 value={category}
                 onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
                 className="ds-input w-full px-3 py-2 text-xs min-h-10"
@@ -314,14 +332,18 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
           {trips.length > 0 && (
             <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label
+                htmlFor="expense-trip-select"
+                className="block text-xs font-semibold text-stone-700 mb-1"
+              >
                 Viaggio / Progetto Speciale (opzionale)
               </label>
               <select
+                id="expense-trip-select"
                 value={tripId}
                 onChange={(e) => setTripId(e.target.value)}
                 aria-label="Collega a viaggio o progetto"
-                className="ds-input w-full px-3 py-2 text-sm"
+                className="ds-input w-full min-h-10 px-3 py-2 text-sm"
               >
                 <option value="">Nessun viaggio / progetto</option>
                 {trips.map((trip) => (
@@ -412,10 +434,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
           {/* Note */}
           <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
+            <label
+              htmlFor="expense-notes-textarea"
+              className="block text-xs font-semibold text-stone-700 mb-1"
+            >
               Note Aggiuntive (Opzionale)
             </label>
             <textarea
+              id="expense-notes-textarea"
               rows={3}
               placeholder="es. pagato con buoni pasto, mancia inclusa"
               value={notes}
@@ -432,8 +458,11 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         title="Eliminare questa spesa?"
         description={
           initialData?.title
-            ? `La spesa "${initialData.title}" sarà rimossa definitivamente dal registro di coppia e il saldo verrà ricalcolato.`
-            : 'Questa spesa verrà rimossa definitivamente.'
+            ? `La spesa "${initialData.title}" (${formatCurrency(
+                Number(initialData.amount || 0),
+                initialData.currency || profile.currency
+              )}${initialData.date ? ` · ${initialData.date}` : ''}) sarà rimossa dal registro di coppia e il saldo verrà ricalcolato. Potrai ripristinarla subito dall’avviso in basso.`
+            : 'Questa spesa verrà rimossa dal registro.'
         }
         confirmLabel="Elimina Spesa"
         cancelLabel="Annulla"

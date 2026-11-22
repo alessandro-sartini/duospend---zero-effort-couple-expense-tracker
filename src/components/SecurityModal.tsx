@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, Check, Flag, Lock, Mail, ShieldCheck, Sparkles, Terminal, UserCheck, Users, Wallet } from 'lucide-react';
+import { Calendar, Check, Download, Flag, Lock, Mail, ShieldCheck, Smartphone, Sparkles, Terminal, UserCheck, Users, Wallet } from 'lucide-react';
 import { deriveNameFromEmail } from '../services/storage';
 import { formatAppVersionLabel } from '../services/version';
 import { CoupleProfile } from '../types';
@@ -15,6 +15,8 @@ interface SecurityModalProps {
   isDevelopmentSession?: boolean;
   onOpenDevModal?: () => void;
   onOpenStartingPoint?: () => void;
+  canInstallPwa?: boolean;
+  onInstallPwa?: () => void;
 }
 
 export const SecurityModal: React.FC<SecurityModalProps> = ({
@@ -27,6 +29,8 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
   isDevelopmentSession = false,
   onOpenDevModal,
   onOpenStartingPoint,
+  canInstallPwa = false,
+  onInstallPwa,
 }) => {
   const [userName, setUserName] = useState(profile.userName || 'Partner 1');
   const [partnerName, setPartnerName] = useState(profile.partnerName || 'Partner 2');
@@ -110,6 +114,11 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
       ? `Account Google: ${currentUserEmail || profile.userEmail}`
       : 'Sessione Google attiva';
 
+  const isStandalonePwa =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(display-mode: standalone)').matches;
+
   return (
     <ModalShell
       isOpen={isOpen}
@@ -120,6 +129,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
       iconClassName="bg-emerald-500/12 text-emerald-600 border-emerald-500/25"
       maxWidth="md"
       closeLabel="Chiudi impostazioni sicurezza"
+      mobileBottomSheet
     >
       <div className="p-4 sm:p-6 space-y-5 text-xs">
         <div className="ds-subcard p-3.5 flex items-center justify-between gap-3">
@@ -216,6 +226,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
               <input
                 id="security-monthly-budget"
                 type="number"
+                inputMode="decimal"
                 min="0"
                 step="any"
                 value={monthlyBudget}
@@ -297,6 +308,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
               <input
                 id="security-partner-email"
                 type="email"
+                autoComplete="email"
                 value={partnerEmail}
                 onChange={(e) => setPartnerEmail(e.target.value)}
                 disabled={!isOwner}
@@ -307,6 +319,36 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
             <span className="text-[10px] text-stone-500 mt-1 block">
               Solo il titolare può modificare l’account partner autorizzato sul server.
             </span>
+          </div>
+
+          <div className="ds-subcard p-3.5 flex items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-orange-500/12 border border-orange-500/25 text-orange-600 flex items-center justify-center shrink-0">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="font-bold text-stone-800 block">
+                  App PWA Android &amp; Desktop
+                </span>
+                <span className="text-[10px] text-stone-500 leading-relaxed block">
+                  {isStandalonePwa
+                    ? 'In esecuzione come app installata (modalità standalone).'
+                    : canInstallPwa
+                      ? 'Pronta per l’installazione nella schermata Home con scorciatoie e Condividi Android.'
+                      : 'Installabile dal menu di Chrome (Installa app / Aggiungi a schermata Home).'}
+                </span>
+              </div>
+            </div>
+            {canInstallPwa && onInstallPwa && (
+              <button
+                type="button"
+                onClick={onInstallPwa}
+                className="ds-btn-primary min-h-10 px-3 py-1.5 text-[11px] shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Installa app</span>
+              </button>
+            )}
           </div>
 
           <div className="ds-subcard p-3.5 space-y-1.5">

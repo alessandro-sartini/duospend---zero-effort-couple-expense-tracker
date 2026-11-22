@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
@@ -46,6 +46,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
   onOpenGmailSync,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const fabButtonRef = useRef<HTMLButtonElement>(null);
   const [dismissedNotifications, setDismissedNotifications] =
     useState<DismissedBackgroundNotifications>(loadDismissedBackgroundNotifications);
 
@@ -60,6 +61,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsMenuOpen(false);
+        fabButtonRef.current?.focus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -303,6 +305,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
           )}
 
           <button
+            ref={fabButtonRef}
             type="button"
             aria-label={isMenuOpen ? 'Chiudi azioni rapide' : 'Apri azioni rapide'}
             aria-expanded={isMenuOpen}

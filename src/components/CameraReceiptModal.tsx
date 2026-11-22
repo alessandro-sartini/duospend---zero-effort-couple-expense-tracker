@@ -261,6 +261,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
       subtitle="Acquisizione automatica con OCR Gemini Vision"
       icon={Camera}
       closeLabel="Chiudi scansione scontrino"
+      mobileBottomSheet
       footer={footer}
     >
       <div className="p-4 sm:p-6 space-y-4">
@@ -298,7 +299,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                className="ds-btn-primary px-4 py-2.5 text-xs"
+                className="ds-btn-primary min-h-11 px-4 py-2.5 text-xs"
               >
                 <Camera className="w-4 h-4" />
                 <span>Scatta Foto (Fotocamera Android)</span>
@@ -306,7 +307,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="ds-btn-secondary px-4 py-2.5 text-xs"
+                className="ds-btn-secondary min-h-11 px-4 py-2.5 text-xs"
               >
                 <Upload className="w-4 h-4" />
                 <span>Scegli Immagine / File</span>
@@ -357,7 +358,7 @@ export const CameraReceiptModal: React.FC<CameraReceiptModalProps> = ({
                     onClick={() =>
                       imagePreview && void analyzeReceipt(imagePreview, imageMimeType)
                     }
-                    className={`mt-2 font-bold underline hover:no-underline cursor-pointer ${
+                    className={`mt-2 min-h-9 inline-flex items-center font-bold underline hover:no-underline cursor-pointer ${
                       extractedData?.fallbackUsed ? 'text-amber-900' : 'text-rose-800'
                     }`}
                   >

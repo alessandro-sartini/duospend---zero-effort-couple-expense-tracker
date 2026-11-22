@@ -90,10 +90,10 @@ Per notifiche push o SMS bancari (**Revolut, Google Pay/Wallet, Intesa Sanpaolo,
 
 ## 3. Le Sezioni dell'Applicazione
 
-- **1. Panoramica (Dashboard)**: Banner del Saldo, riepilogo contributi, progresso budget mensile, categorie principali, scorciatoie rapide di acquisizione e ultime spese.
-- **2. Spese**: Elenco completo ricercabile e filtrabile (testo, categoria, pagante, spese a `0 €`), dettagli scontrino/IVA/foto allegata, modifica ed eliminazione con conferma esplicita ed **Esportazione CSV**.
+- **1. Panoramica (Dashboard)**: Banner del Saldo, riepilogo contributi, progresso budget mensile, categorie principali, scorciatoie rapide di acquisizione e **Ultime Spese di Coppia** (con **swipe laterale ibrido Android** e menu compatto `⋮` su smartphone).
+- **2. Spese**: Elenco completo ricercabile e filtrabile (testo, categoria, pagante, spese a `0 €`), dettagli scontrino/IVA/foto allegata, **swipe laterali ibridi in stile Android** (swipe corto per scoprire i pulsanti laterali, swipe lungo deciso per attivare l'azione: destra per modificare, sinistra per aprire la conferma di eliminazione con avviso **Ripristina** per annullare subito), menu `⋮` su smartphone, bottoni completi su desktop ed **Esportazione CSV**.
 - **3. Categorie e Trend**: Grafici e metriche per **Mese**, **Trimestre**, **Anno** e **Tutto lo storico**; creazione di **Categorie Personalizzate** con budget mensile dedicato, modifica massiva dei budget e possibilità di nascondere categorie non usate (proteggendo sempre `Altro`).
-- **4. Pareggio Saldo**: Dettaglio matematico completo dei totali, quota equa 50%, saldo netto e cronologia storica dei rimborsi.
+- **4. Pareggio Saldo**: Dettaglio matematico completo dei totali, quota equa 50%, saldo netto e cronologia storica dei rimborsi (con conferma esplicita prima della rimozione e opzione **Ripristina** immediata).
 - **5. Consulente AI**: Chat finanziaria Gemini collegata ai dati del registro comune. Modelli supportati: **Flash** (`gemini-3.8-flash` con fallback su `gemini-3.5-flash-lite`, `gemini-3.7-flash`, `gemini-3.1-flash-lite`), **Carbon** (`gemini-4-carbon`, audit approfondito), **Argon** (`gemini-4-argon`, scenari e matrimonio), **Hydrogen** (`gemini-4-hydrogen`) e **Flash-Lite** (`gemini-3.1-flash-lite`).
 - **6. Bacheca Obiettivi (Vision Board) & Sfide di Risparmio**: Schede obiettivi di risparmio, riquadro compatto **Copertina Obiettivi** con generazione AI **1K / 2K / 4K** (`gemini-3.1-flash-image-preview`, `gemini-2.5-flash-image`, `gemini-3-pro-image-preview` con switch automatico verso modelli `imagen-4.0-*` / `imagen-3.0-*`) oppure caricamento diretto **Carica foto** da galleria locale, e sezione integrata **Sfide di Risparmio di Coppia** ad **accordion compatti** (chiusi di default con indicatori colorati di stato, paginazione a 5 voci ed espansione inline).
 
@@ -118,12 +118,12 @@ Per notifiche push o SMS bancari (**Revolut, Google Pay/Wallet, Intesa Sanpaolo,
 ## 4. Installazione Chrome PWA, Uso Offline & Limiti rispetto ad APK Nativo
 
 ### Installazione da Chrome
-- **Chrome Android**: apri DuoSpend → tocca **`⋮`** → **Aggiungi a schermata Home / Installa app**. Abilita icona su schermata Home, scorciatoie rapide (*Nuova Spesa*, *Notifiche*, *Fotocamera*, *Saldo*) e **Condivisione Android (`share_target`)**.
+- **Chrome Android**: apri DuoSpend → tocca il pulsante **Installa app** nella barra superiore o in **Sicurezza** (oppure **`⋮`** → **Aggiungi a schermata Home / Installa app**). Abilita icona su schermata Home, scorciatoie rapide (*Nuova Spesa*, *Notifiche*, *Fotocamera*, *Saldo*) e **Condivisione Android (`share_target`)**.
 - **Chrome / Edge Desktop**: usa l'icona di installazione nella barra indirizzi (`⋮ → Installa DuoSpend`).
-- **Accessibilità & UX Mobile**: apertura in modalità standalone rispettando le safe area (`env(safe-area-inset-*)`), zoom del browser sempre preservato, navigazione da tastiera con focus trap nei modali (`useFocusTrap`), chiusura con `Escape` e supporto a `prefers-reduced-motion`.
+- **Accessibilità & UX Mobile**: apertura in modalità standalone rispettando le safe area (`env(safe-area-inset-*)`), pannelli bottom-sheet su smartphone, righe mobile compatte con menu `⋮`, gesti swipe laterali ibridi su **Spese** e **Ultime Spese** (con bottoni alternativi accessibili, conferma esplicita per eliminazioni e barra **Ripristina**), zoom del browser sempre preservato, navigazione da tastiera con focus trap nei modali (`useFocusTrap`), chiusura con `Escape` e supporto a `prefers-reduced-motion`.
 
 ### Comportamento Offline & Recupero Sincronizzazione
-- Il Service Worker (`duospend-shell-v8`) salva nella cache solo le risorse statiche dell'interfaccia (e il server serve `/sw.js`, `/index.html`, `/manifest.webmanifest` senza cache per garantire gli aggiornamenti); `/api/*` (incluse `/api/savings-challenges*`) e i dati privati non entrano mai nella cache del Service Worker.
+- Il Service Worker (`duospend-shell-v9`, registrato con `updateViaCache: 'none'`) salva nella cache solo le risorse statiche dell'interfaccia, legge il manifest in modalità network-first (e il server serve `/sw.js`, `/index.html`, `/manifest.webmanifest` senza cache per garantire gli aggiornamenti); `/api/*` (incluse `/api/savings-challenges*`) e i dati privati non entrano mai nella cache del Service Worker.
 - Le modifiche effettuate offline restano in `localStorage` con stato `duospend_dirty_sync_v1`; al ritorno della rete vengono inviate tramite coda serializzata dove le modifiche locali pendenti prevalgono sui record server obsoleti, preservando comunque eventuali foto `receiptUrl` dal server se rimosse localmente per `QuotaExceededError`.
 
 ### Supporto Browser & Funzioni che Richiedono un APK Nativo

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   formatCurrency,
@@ -18,9 +19,12 @@ import {
   getActiveCategories,
 } from '../constants/categories';
 import { CoupleProfile, Expense, SavingGoal, TripProject } from '../types';
+import type { SwipeOpenSide } from '../utils/swipeGestures';
 import { CategoryBadge } from './ui/CategoryBadge';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { RowActionMenu, type RowActionMenuItem } from './ui/RowActionMenu';
 import { SourceBadge } from './ui/SourceBadge';
+import { SwipeableActionRow } from './ui/SwipeableActionRow';
 
 function escapeCsvCell(value: string | number): string {
   const raw = String(value ?? '');
@@ -100,6 +104,21 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   const [selectedPayer, setSelectedPayer] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expensePendingDelete, setExpensePendingDelete] = useState<Expense | null>(null);
+  const [openSwipe, setOpenSwipe] = useState<{
+    id: string;
+    side: Exclude<SwipeOpenSide, null>;
+  } | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOpenSwipe(null);
+  }, [searchTerm, selectedYear, selectedMonth, selectedCategory, selectedPayer, onlyZeroAmount]);
+
+  useEffect(() => {
+    if (expensePendingDelete) {
+      setOpenSwipe(null);
+    }
+  }, [expensePendingDelete]);
 
   const filteredExpenses = expenses.filter((exp) => {
     const expYear = Number(exp.date.slice(0, 4));
@@ -182,7 +201,12 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               )
             </p>
             <p className="text-[11px] text-stone-400 mt-1">
-              Suggerimento: doppio clic su una riga (o tocca Modifica su smartphone) per modificarla al volo
+              <span className="sm:hidden">
+                Scorri a destra per modificare, a sinistra per eliminare, oppure tocca ⋮
+              </span>
+              <span className="hidden sm:inline">
+                Trascina una riga o fai doppio clic per modificare
+              </span>
             </p>
           </div>
 
@@ -191,11 +215,12 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               type="button"
               onClick={handleExportCsv}
               disabled={filteredExpenses.length === 0}
-              className="ds-btn-secondary px-3 py-2 text-xs shrink-0 disabled:opacity-50"
+              className="ds-btn-secondary min-h-10 px-3 py-2 text-xs shrink-0 disabled:opacity-50"
               title="Esporta spese filtrate in CSV"
               aria-label="Esporta CSV"
             >
               <Download className="w-3.5 h-3.5" />
+              <span className="sm:hidden">CSV</span>
               <span className="hidden sm:inline">Esporta CSV</span>
             </button>
           </div>
@@ -204,14 +229,27 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
         {/* Barre di filtro */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
           <div className="relative sm:col-span-2 lg:col-span-1">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
-              type="text"
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              aria-label="Cerca spese per negozio, articolo o nota"
               placeholder="Cerca per negozio, articolo o nota..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="ds-input w-full pl-9 pr-3 py-2 text-xs"
+              className={`ds-input w-full min-h-10 pl-9 ${searchTerm ? 'pr-9' : 'pr-3'} py-2 text-xs`}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Cancella ricerca"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 inline-flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <select
@@ -222,7 +260,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               if (val === 'all') setSelectedMonth('all');
             }}
             aria-label="Filtra per anno"
-            className="ds-input w-full px-3 py-2 text-xs"
+            className="ds-input w-full min-h-10 px-3 py-2 text-xs"
           >
             <option value="all">Tutti gli anni</option>
             {availableYears.map((y) => (
@@ -239,7 +277,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               setSelectedMonth(val === 'all' ? 'all' : Number(val));
             }}
             aria-label="Filtra per mese"
-            className="ds-input w-full px-3 py-2 text-xs"
+            className="ds-input w-full min-h-10 px-3 py-2 text-xs"
           >
             <option value="all">Tutti i mesi</option>
             {EXPENSE_MONTH_OPTIONS.map((opt) => (
@@ -253,7 +291,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             aria-label="Filtra per categoria"
-            className="ds-input w-full px-3 py-2 text-xs"
+            className="ds-input w-full min-h-10 px-3 py-2 text-xs"
           >
             <option value="all">Tutte le Categorie</option>
             {filterCategories.map((cat) => (
@@ -267,7 +305,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             value={selectedPayer}
             onChange={(e) => setSelectedPayer(e.target.value)}
             aria-label="Filtra per pagatore"
-            className="ds-input w-full px-3 py-2 text-xs"
+            className="ds-input w-full min-h-10 px-3 py-2 text-xs"
           >
             <option value="all">Tutti i Pagatori</option>
             <option value="user">Pagato da {profile.userName}</option>
@@ -336,22 +374,72 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
           <div className="divide-y divide-stone-100">
             {filteredExpenses.map((exp) => {
               const isExpanded = expandedId === exp.id;
+              const hasDetails = Boolean((exp.items && exp.items.length > 0) || exp.receiptUrl);
               const payerName = exp.payer === 'user' ? profile.userName : profile.partnerName;
+              const mobileMenuItems: RowActionMenuItem[] = [
+                ...(hasDetails
+                  ? [
+                      {
+                        id: 'details',
+                        label: isExpanded ? 'Nascondi dettagli' : 'Vedi dettagli scontrino',
+                        icon: <ChevronDown className={`w-4 h-4 ${isExpanded ? 'rotate-180' : ''}`} />,
+                        onSelect: () => setExpandedId(isExpanded ? null : exp.id),
+                      },
+                    ]
+                  : []),
+                {
+                  id: 'edit',
+                  label: 'Modifica spesa',
+                  icon: <Edit3 className="w-4 h-4 text-orange-600" />,
+                  onSelect: () => onEditExpense(exp),
+                },
+                {
+                  id: 'delete',
+                  label: 'Elimina spesa',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  tone: 'danger',
+                  onSelect: () => setExpensePendingDelete(exp),
+                },
+              ];
 
               return (
-                <div
+                <SwipeableActionRow
                   key={exp.id}
-                  onDoubleClick={(e) => {
-                    if (!(e.target as HTMLElement).closest('button')) {
-                      onEditExpense(exp);
-                    }
+                  disabled={isExpanded || openMenuId === exp.id}
+                  openSide={openSwipe?.id === exp.id ? openSwipe.side : null}
+                  onOpenSideChange={(side) => {
+                    setOpenSwipe((current) => {
+                      if (side) return { id: exp.id, side };
+                      return current?.id === exp.id ? null : current;
+                    });
                   }}
-                  title="Doppio clic per modificare questa spesa"
-                  className={`p-3.5 sm:p-4 hover:bg-stone-50/50 transition-colors ${
+                  leftAction={{
+                    label: 'Modifica',
+                    armedLabel: 'Modifica',
+                    icon: <Edit3 className="w-5 h-5" />,
+                    tone: 'primary',
+                    onTrigger: () => onEditExpense(exp),
+                  }}
+                  rightAction={{
+                    label: 'Elimina',
+                    armedLabel: 'Elimina',
+                    icon: <Trash2 className="w-5 h-5" />,
+                    tone: 'danger',
+                    onTrigger: () => setExpensePendingDelete(exp),
+                  }}
+                  contentClassName={`p-3.5 sm:p-4 hover:bg-stone-50/50 transition-colors ${
                     exp.amount <= 0 ? 'border-l-4 border-amber-400 bg-amber-50/40' : ''
                   }`}
                 >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div
+                    onDoubleClick={(e) => {
+                      if (!(e.target as HTMLElement).closest('button')) {
+                        onEditExpense(exp);
+                      }
+                    }}
+                    title="Trascina o fai doppio clic per modificare questa spesa"
+                  >
+                  <div className="flex items-center justify-between gap-2.5 sm:items-start sm:gap-4">
                     <div
                       className="flex items-start gap-3 min-w-0 flex-1 sm:cursor-auto cursor-pointer"
                       onClick={() => {
@@ -360,9 +448,10 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                         }
                       }}
                     >
-                      <CategoryBadge category={exp.category} size="lg" />
+                      <CategoryBadge category={exp.category} size="md" className="sm:hidden mt-0.5" />
+                      <CategoryBadge category={exp.category} size="lg" className="hidden sm:flex" />
 
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <h4 className="min-w-0 text-sm font-bold text-stone-900 break-words sm:truncate">
                             {exp.title}
@@ -412,19 +501,34 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                         </div>
 
                         {exp.notes && (
-                          <p className="mt-1 break-words text-xs italic text-stone-600">
+                          <p className="mt-1 break-words text-xs italic text-stone-600 line-clamp-2 sm:line-clamp-none">
                             {exp.notes}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex w-full shrink-0 items-center justify-between sm:w-auto sm:flex-col sm:items-end sm:text-right">
-                      <div className="text-base font-bold font-mono text-stone-900 tabular-nums">
-                        {formatCurrency(exp.amount, exp.currency)}
+                    <div className="flex items-center gap-1 sm:flex-col sm:items-end sm:gap-1.5 sm:text-right shrink-0">
+                      <div className="text-right">
+                        <div className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
+                          {formatCurrency(exp.amount, exp.currency)}
+                        </div>
+                        {hasDetails && (
+                          <span className="sm:hidden block text-[10px] font-medium text-orange-600">
+                            {isExpanded ? 'Dettagli aperti' : 'Con allegato'}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center justify-end gap-1 sm:mt-1.5">
-                        {((exp.items && exp.items.length > 0) || exp.receiptUrl) && (
+
+                      <RowActionMenu
+                        label={`Azioni per ${exp.title}`}
+                        items={mobileMenuItems}
+                        onOpenChange={(open) => setOpenMenuId(open ? exp.id : null)}
+                        className="sm:hidden"
+                      />
+
+                      <div className="hidden sm:flex items-center justify-end gap-1">
+                        {hasDetails && (
                           <button
                             type="button"
                             onClick={() => setExpandedId(isExpanded ? null : exp.id)}
@@ -442,12 +546,11 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                         <button
                           type="button"
                           onClick={() => onEditExpense(exp)}
-                          className="min-h-10 min-w-10 px-2.5 sm:px-2 py-2 rounded-xl text-stone-600 sm:text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="min-h-10 min-w-10 px-2 py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                           title="Modifica spesa"
                           aria-label={`Modifica ${exp.title}`}
                         >
                           <Edit3 className="w-3.5 h-3.5" />
-                          <span className="sm:hidden text-[11px] font-semibold">Modifica</span>
                         </button>
                         <button
                           type="button"
@@ -509,7 +612,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                       )}
                     </div>
                   )}
-                </div>
+                  </div>
+                </SwipeableActionRow>
               );
             })}
           </div>
@@ -522,7 +626,12 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
         title="Eliminare questa spesa?"
         description={
           expensePendingDelete
-            ? `“${expensePendingDelete.title}” verrà rimossa dal registro. L’azione non può essere annullata.`
+            ? `“${expensePendingDelete.title}” (${formatCurrency(
+                expensePendingDelete.amount,
+                expensePendingDelete.currency
+              )} · ${expensePendingDelete.date} · pagata da ${
+                expensePendingDelete.payer === 'user' ? profile.userName : profile.partnerName
+              }) verrà rimossa dal registro. Potrai ripristinarla subito dall’avviso in basso.`
             : ''
         }
         confirmLabel="Elimina"

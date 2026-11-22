@@ -119,12 +119,12 @@ All 4 capture tools are reachable from the **floating `+` Quick Actions button**
 ## 4. Chrome PWA Installation, Offline Behavior & Native APK Limitations
 
 ### Installing DuoSpend on Chrome
-- **Android Chrome**: Open DuoSpend → tap **`⋮`** → **Add to Home screen / Install app** (or use the in-app **Installa app** banner when shown). Adds app launcher icon + long-press **Shortcuts** (*Nuova Spesa*, *Notifiche*, *Fotocamera*, *Saldo*) and enables Android **Share Target** for SMS/alerts.
+- **Android Chrome**: Open DuoSpend → tap the in-app **Installa app** icon in the top bar or **Sicurezza** modal (or **`⋮`** → **Add to Home screen / Install app**). Adds app launcher icon + long-press **Shortcuts** (*Nuova Spesa*, *Notifiche*, *Fotocamera*, *Saldo*) and enables Android **Share Target** for SMS/alerts.
 - **Desktop Chrome / Edge**: Click the install icon in the address bar (`⋮ → Install DuoSpend`).
-- **Accessibility & Mobile UX**: Opens in standalone mode respecting mobile notches/safe areas (`env(safe-area-inset-*)`), preserves pinch-to-zoom, supports keyboard navigation, traps focus (`useFocusTrap`) with `Escape` closing across modals and dialogs, and honors system `prefers-reduced-motion`.
+- **Accessibility & Mobile UX**: Opens in standalone mode with mobile bottom-sheet dialogs, clean smartphone rows with an accessible `⋮` menu, Android-style hybrid lateral swipe actions in **Spese** and Dashboard **Ultime Spese** (short swipe to reveal action buttons, long swipe to trigger with haptic feedback, always paired with visible controls, explicit `ConfirmDialog` deletion confirmation, and an immediate **Ripristina** undo toast), mobile notches/safe areas (`env(safe-area-inset-*)`), preserved pinch-to-zoom, keyboard navigation, focus traps (`useFocusTrap`) with capture-phase `Escape` closing, and `prefers-reduced-motion`.
 
 ### Offline Behavior & Sync Recovery
-- Static shell files are cached offline by the Service Worker (`duospend-shell-v8`), while private `/api/*` data (including `/api/savings-challenges*`) is **never** cached in the Service Worker.
+- Static shell files are cached offline by the Service Worker (`duospend-shell-v9`, registered with `updateViaCache: 'none'`, network-first `/manifest.webmanifest`), while private `/api/*` data (including `/api/savings-challenges*`) is **never** cached in the Service Worker.
 - Expenses, settlements, goals, and profile edits made offline save to `localStorage` and mark `duospend_dirty_sync_v1`. On reconnect, `syncWithServerDatabase()` merges changes through a serialized queue where pending local edits take precedence per record ID while restoring server `receiptUrl` photos if stripped locally due to `QuotaExceededError`.
 
 ### Browser Support & What Requires a Native APK

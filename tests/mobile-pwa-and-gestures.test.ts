@@ -1,0 +1,446 @@
+import fs from 'fs';
+import path from 'path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { DashboardOverview } from '../src/components/DashboardOverview';
+import { ExpenseList } from '../src/components/ExpenseList';
+import { Navbar } from '../src/components/Navbar';
+import { NotificationSyncModal } from '../src/components/NotificationSyncModal';
+import { SettlementView } from '../src/components/SettlementView';
+import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
+import { RowActionMenu } from '../src/components/ui/RowActionMenu';
+import { UndoToast } from '../src/components/ui/UndoToast';
+import type { CoupleProfile, Expense, Settlement } from '../src/types';
+import {
+  computeHybridSwipeOffset,
+  computeHybridSwipeVisual,
+  determineSwipeAxis,
+  getFullSwipeThreshold,
+  resolveHybridSwipeRelease,
+} from '../src/utils/swipeGestures';
+
+const sampleProfile: CoupleProfile = {
+  userName: 'Marco',
+  partnerName: 'Giulia',
+  monthlyBudget: 2800,
+  currency: 'EUR',
+};
+
+const sampleExpense: Expense = {
+  id: 'exp-mobile-1',
+  title: 'Esselunga Spesa',
+  amount: 64.5,
+  currency: 'EUR',
+  date: `${new Date().getFullYear()}-11-18`,
+  category: 'Spesa',
+  payer: 'user',
+  splitType: '50_50',
+  source: 'manual',
+};
+
+const sampleSettlement: Settlement = {
+  id: 'stl-mobile-1',
+  amount: 32.25,
+  currency: 'EUR',
+  date: `${new Date().getFullYear()}-11-19`,
+  from: 'partner',
+  to: 'user',
+  note: 'Pareggio Revolut',
+};
+
+describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
+  describe('Motore swipe ibrido (swipeGestures)', () => {
+    it('dà priorità allo scroll verticale rispetto allo swipe orizzontale sui conflitti assiali', () => {
+      expect(determineSwipeAxis(4, 5)).toBe('pending');
+      expect(determineSwipeAxis(8, 8)).toBe('vertical');
+      expect(determineSwipeAxis(5, 12)).toBe('vertical');
+      expect(determineSwipeAxis(12, 5)).toBe('horizontal');
+      expect(determineSwipeAxis(-14, 3)).toBe('horizontal');
+    });
+
+    it('calcola soglia full-swipe e offset con smorzamento elastico e resistenza nelle direzioni disabilitate', () => {
+      expect(getFullSwipeThreshold(240)).toBe(152);
+      expect(getFullSwipeThreshold(360)).toBeCloseTo(172.8, 5);
+      expect(getFullSwipeThreshold(600)).toBe(220);
+
+      expect(
+        computeHybridSwipeOffset({
+          baseOffset: 0,
+          rawDx: 0,
+          allowLeft: true,
+          allowRight: true,
+          width: 360,
+        })
+      ).toBe(0);
+
+      expect(
+        computeHybridSwipeOffset({
+          baseOffset: 0,
+          rawDx: 90,
+          allowLeft: true,
+          allowRight: true,
+          width: 360,
+        })
+      ).toBe(90);
+
+      // Oltre fullThreshold (172.8 su width=360) applica smorzamento elastico
+      const damped = computeHybridSwipeOffset({
+        baseOffset: 0,
+        rawDx: 232.8,
+        allowLeft: true,
+        allowRight: true,
+        width: 360,
+      });
+      expect(damped).toBeCloseTo(193.8, 1);
+
+      // Direzione disabilitata limitata a resistenza minima (±18)
+      expect(
+        computeHybridSwipeOffset({
+          baseOffset: 0,
+          rawDx: 200,
+          allowLeft: true,
+          allowRight: false,
+          width: 360,
+        })
+      ).toBe(18);
+      expect(
+        computeHybridSwipeOffset({
+          baseOffset: 0,
+          rawDx: -200,
+          allowLeft: false,
+          allowRight: true,
+          width: 360,
+        })
+      ).toBe(-18);
+    });
+
+    it('gestisce swipe corto (apertura bottoni), swipe lungo/veloce (azione diretta) e chiusura', () => {
+      // Swipe corto verso sinistra -> apre cassetto destro (side: 'left')
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: -65,
+          baseOffset: 0,
+          velocityX: -0.1,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: 'left', trigger: 'none' });
+
+      // Swipe corto verso destra -> apre cassetto sinistro (side: 'right')
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: 65,
+          baseOffset: 0,
+          velocityX: 0.1,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: 'right', trigger: 'none' });
+
+      // Drag insufficiente -> richiude
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: -22,
+          baseOffset: 0,
+          velocityX: -0.05,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: null, trigger: 'none' });
+
+      // Swipe lungo deciso verso sinistra -> attiva trigger 'left' e chiude
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: -180,
+          baseOffset: 0,
+          velocityX: -0.2,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: null, trigger: 'left' });
+
+      // Lancio veloce verso destra -> attiva trigger 'right'
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: 120,
+          baseOffset: 0,
+          velocityX: 0.9,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: null, trigger: 'right' });
+
+      // Ritorno da stato aperto verso chiusura
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: -72,
+          baseOffset: -88,
+          velocityX: 0.35,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: null, trigger: 'none' });
+
+      // Secondo swipe deciso mentre era aperto -> attiva trigger 'left'
+      expect(
+        resolveHybridSwipeRelease({
+          offsetX: -175,
+          baseOffset: -88,
+          velocityX: -0.2,
+          width: 360,
+          allowLeft: true,
+          allowRight: true,
+        })
+      ).toEqual({ openSide: null, trigger: 'left' });
+
+      expect(computeHybridSwipeVisual(0, 360)).toEqual({
+        direction: 'none',
+        revealRatio: 0,
+        fullRatio: 0,
+        armed: false,
+      });
+      expect(computeHybridSwipeVisual(-180, 360)).toEqual({
+        direction: 'left',
+        revealRatio: 1,
+        fullRatio: 1,
+        armed: true,
+      });
+    });
+  });
+
+  describe('Manifest PWA Android, Service Worker e intestazioni server', () => {
+    it('valida public/manifest.webmanifest rispetto ad asset reali, rotte e icone maskable', () => {
+      const publicDir = path.resolve(process.cwd(), 'public');
+      const manifestRaw = fs.readFileSync(path.join(publicDir, 'manifest.webmanifest'), 'utf8');
+      const manifest = JSON.parse(manifestRaw) as {
+        id: string;
+        name: string;
+        short_name: string;
+        start_url: string;
+        scope: string;
+        display: string;
+        orientation: string;
+        prefer_related_applications: boolean;
+        categories: string[];
+        icons: Array<{ src: string; sizes: string; type: string; purpose?: string }>;
+        shortcuts: Array<{ name: string; url: string; icons?: Array<{ src: string }> }>;
+        share_target: {
+          action: string;
+          method: string;
+          params: Record<string, string>;
+        };
+      };
+
+      expect(manifest.id).toBe('/');
+      expect(manifest.name).toContain('DuoSpend');
+      expect(manifest.short_name).toBe('DuoSpend');
+      expect(manifest.start_url).toBe('/?source=pwa');
+      expect(manifest.scope).toBe('/');
+      expect(manifest.display).toBe('standalone');
+      expect(manifest.orientation).toBe('any');
+      expect(manifest.prefer_related_applications).toBe(false);
+      expect(manifest.categories.length).toBeGreaterThan(0);
+
+      for (const icon of manifest.icons) {
+        const cleanFile = icon.src.split('?')[0].replace(/^\/+/, '');
+        expect(fs.existsSync(path.join(publicDir, cleanFile))).toBe(true);
+      }
+
+      const maskableIcons = manifest.icons.filter((i) => i.purpose === 'maskable');
+      const anyIcons = manifest.icons.filter((i) => i.purpose === 'any');
+      expect(maskableIcons.length).toBeGreaterThan(0);
+      expect(anyIcons.some((i) => i.sizes === '192x192')).toBe(true);
+      expect(anyIcons.some((i) => i.sizes === '512x512')).toBe(true);
+      expect(maskableIcons.every((i) => i.src !== anyIcons[1]?.src)).toBe(true);
+
+      const appTsx = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+      const hookTs = fs.readFileSync(
+        path.resolve(process.cwd(), 'src/hooks/useDuoSpendData.ts'),
+        'utf8'
+      );
+
+      for (const shortcut of manifest.shortcuts) {
+        const parsed = new URL(shortcut.url, 'https://duospend.local');
+        if (parsed.pathname !== '/') {
+          expect(appTsx).toContain(`'${parsed.pathname}'`);
+        }
+        const actionParam = parsed.searchParams.get('action');
+        if (actionParam) {
+          expect(hookTs).toContain(actionParam);
+        }
+        for (const sIcon of shortcut.icons ?? []) {
+          const cleanFile = sIcon.src.split('?')[0].replace(/^\/+/, '');
+          expect(fs.existsSync(path.join(publicDir, cleanFile))).toBe(true);
+        }
+      }
+
+      expect(manifest.share_target.action).toBe('/');
+      expect(manifest.share_target.method).toBe('GET');
+      expect(manifest.share_target.params).toMatchObject({
+        title: 'title',
+        text: 'text',
+        url: 'url',
+      });
+    });
+
+    it('preserva regole sicurezza Service Worker, zoom in index.html, updateViaCache e header server', () => {
+      const swSource = fs.readFileSync(path.resolve(process.cwd(), 'public/sw.js'), 'utf8');
+      expect(swSource).toContain("const CACHE_NAME = 'duospend-shell-v9'");
+      expect(swSource).toContain("url.pathname.startsWith('/api/')");
+      expect(swSource).toContain("url.pathname === '/manifest.webmanifest'");
+      expect(swSource).toContain('!url.search');
+
+      const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf8');
+      expect(indexHtml).toContain('/manifest.webmanifest?v=4');
+      expect(indexHtml).not.toContain('user-scalable=no');
+      expect(indexHtml).not.toContain('maximum-scale=1');
+
+      const mainTsx = fs.readFileSync(path.resolve(process.cwd(), 'src/main.tsx'), 'utf8');
+      expect(mainTsx).toContain("updateViaCache: 'none'");
+
+      const serverApp = fs.readFileSync(path.resolve(process.cwd(), 'server/app.ts'), 'utf8');
+      expect(serverApp).toContain("normalized.endsWith('/manifest.webmanifest')");
+      expect(serverApp).toContain('no-cache, no-store, must-revalidate');
+      expect(serverApp).toContain('application/manifest+json; charset=utf-8');
+    });
+  });
+
+  describe('Accessibilità UI SSR, menu compatto ⋮ e alternative ai gesti', () => {
+    it('rende ConfirmDialog, UndoToast e RowActionMenu con attributi ARIA completi', () => {
+      const confirmHtml = renderToStaticMarkup(
+        React.createElement(ConfirmDialog, {
+          isOpen: true,
+          title: 'Eliminare questa spesa?',
+          description: 'Esselunga Spesa verrà rimossa.',
+          confirmLabel: 'Elimina',
+          onConfirm: () => {},
+          onCancel: () => {},
+        })
+      );
+      expect(confirmHtml).toContain('role="alertdialog"');
+      expect(confirmHtml).toContain('aria-modal="true"');
+      expect(confirmHtml).toContain('aria-describedby=');
+      expect(confirmHtml).toContain('Esselunga Spesa verrà rimossa.');
+
+      const toastHtml = renderToStaticMarkup(
+        React.createElement(UndoToast, {
+          notice: {
+            id: 'undo-1',
+            message: 'Spesa "Esselunga Spesa" eliminata.',
+            onUndo: () => {},
+          },
+          onDismiss: () => {},
+        })
+      );
+      expect(toastHtml).toContain('role="status"');
+      expect(toastHtml).toContain('aria-live="polite"');
+      expect(toastHtml).toContain('Ripristina');
+      expect(toastHtml).toContain('Chiudi avviso di ripristino');
+
+      const menuHtml = renderToStaticMarkup(
+        React.createElement(RowActionMenu, {
+          label: 'Azioni per Esselunga Spesa',
+          items: [
+            { id: 'edit', label: 'Modifica spesa', icon: null, onSelect: () => {} },
+            {
+              id: 'delete',
+              label: 'Elimina spesa',
+              icon: null,
+              tone: 'danger',
+              onSelect: () => {},
+            },
+          ],
+        })
+      );
+      expect(menuHtml).toContain('aria-label="Azioni per Esselunga Spesa"');
+      expect(menuHtml).toContain('aria-haspopup="menu"');
+      expect(menuHtml).toContain('aria-expanded="false"');
+      expect(menuHtml).toContain('data-no-swipe="true"');
+    });
+
+    it('mantiene controlli accessibili su ExpenseList, DashboardOverview, SettlementView, NotificationSyncModal e Navbar', () => {
+      const expenseListHtml = renderToStaticMarkup(
+        React.createElement(ExpenseList, {
+          expenses: [sampleExpense],
+          profile: sampleProfile,
+          onEditExpense: () => {},
+          onDeleteExpense: () => {},
+          onOpenScanReceipt: () => {},
+        })
+      );
+      expect(expenseListHtml).toContain('aria-label="Cerca spese per negozio, articolo o nota"');
+      expect(expenseListHtml).toContain('aria-label="Azioni per Esselunga Spesa"');
+      expect(expenseListHtml).toContain('aria-label="Modifica Esselunga Spesa"');
+      expect(expenseListHtml).toContain('aria-label="Elimina Esselunga Spesa"');
+
+      const dashboardHtml = renderToStaticMarkup(
+        React.createElement(DashboardOverview, {
+          expenses: [sampleExpense],
+          profile: sampleProfile,
+          netBalance: 32.25,
+          totalSharedSpend: 64.5,
+          userTotalPaid: 64.5,
+          partnerTotalPaid: 0,
+          onOpenSettlement: () => {},
+          onNavigateTab: () => {},
+          onSelectExpense: () => {},
+          onDeleteExpense: () => {},
+        })
+      );
+      expect(dashboardHtml).toContain('Ultime Spese di Coppia');
+      expect(dashboardHtml).toContain('aria-label="Azioni per Esselunga Spesa"');
+      expect(dashboardHtml).toContain('aria-label="Elimina Esselunga Spesa"');
+
+      const settlementHtml = renderToStaticMarkup(
+        React.createElement(SettlementView, {
+          expenses: [sampleExpense],
+          settlements: [sampleSettlement],
+          profile: sampleProfile,
+          netBalance: 0,
+          totalSharedSpend: 64.5,
+          userTotalPaid: 64.5,
+          partnerTotalPaid: 0,
+          onOpenSettlement: () => {},
+          onDeleteSettlement: () => {},
+        })
+      );
+      expect(settlementHtml).toContain(`aria-label="Annulla rimborso del ${sampleSettlement.date}"`);
+
+      const notifHtml = renderToStaticMarkup(
+        React.createElement(NotificationSyncModal, {
+          isOpen: true,
+          onClose: () => {},
+          onImportExpenses: () => {},
+          profile: sampleProfile,
+        })
+      );
+      expect(notifHtml).toContain('role="dialog"');
+      expect(notifHtml).toContain('aria-modal="true"');
+      expect(notifHtml).toContain('Espandi pannello o trascina giù per chiudere');
+      expect(notifHtml).toContain('role="tablist"');
+
+      const navbarHtml = renderToStaticMarkup(
+        React.createElement(Navbar, {
+          currentTab: 'dashboard',
+          onTabChange: () => {},
+          profile: sampleProfile,
+          onOpenSecurityModal: () => {},
+          onLockVault: () => {},
+          theme: 'dark',
+          onToggleTheme: () => {},
+          canInstallPwa: true,
+          onInstallPwa: () => {},
+        })
+      );
+      expect(navbarHtml).toContain('aria-label="Installa app DuoSpend su questo dispositivo"');
+      expect(navbarHtml).toContain('aria-haspopup="menu"');
+    });
+  });
+});

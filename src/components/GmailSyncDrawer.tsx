@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Mail, Sparkles } from 'lucide-react';
+import { Check, Mail, RotateCcw, Sparkles, X } from 'lucide-react';
 import {
   CoupleProfile,
   Expense,
@@ -38,6 +38,7 @@ interface GmailSyncDrawerProps {
   existingGmailSourceReferences: string[];
   ignoredGmailSourceReferences: string[];
   onIgnoreGmailMessage: (messageId: string) => void;
+  onUnignoreGmailMessage?: (messageId: string) => void;
   gmailRecurringRules: GmailRecurringRule[];
   onSaveRecurringRule: (rule: GmailRecurringRule) => void;
   profile: CoupleProfile;
@@ -61,6 +62,7 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
   existingGmailSourceReferences,
   ignoredGmailSourceReferences,
   onIgnoreGmailMessage,
+  onUnignoreGmailMessage,
   gmailRecurringRules,
   onSaveRecurringRule,
   profile,
@@ -168,6 +170,11 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
   const [confirmZeroImport, setConfirmZeroImport] = useState(false);
   const [confirmIgnoreAll, setConfirmIgnoreAll] = useState(false);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const [lastIgnoredItem, setLastIgnoredItem] = useState<{
+    kind: 'receipt' | 'candidate';
+    item: DetectedGmailReceipt | GmailReviewCandidate;
+    wasSelected?: boolean;
+  } | null>(null);
 
   const recurringRulesRef = useRef(gmailRecurringRules);
   const ignoredIdsRef = useRef(ignoredGmailSourceReferences);
@@ -557,6 +564,21 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
   };
 
   const handleIgnoreReceipt = (messageId: string) => {
+    const detectedItem = detectedReceipts.find((receipt) => receipt.id === messageId);
+    const candidateItem = reviewCandidates.find((candidate) => candidate.id === messageId);
+    if (detectedItem) {
+      setLastIgnoredItem({
+        kind: 'receipt',
+        item: detectedItem,
+        wasSelected: Boolean(selectedIds[messageId]),
+      });
+    } else if (candidateItem) {
+      setLastIgnoredItem({
+        kind: 'candidate',
+        item: candidateItem,
+      });
+    }
+
     ignoredIdsRef.current = [...new Set([...ignoredIdsRef.current, messageId])];
     onIgnoreGmailMessage(messageId);
     setDetectedReceipts((current) => current.filter((receipt) => receipt.id !== messageId));
@@ -566,6 +588,30 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
       delete updated[messageId];
       return updated;
     });
+  };
+
+  const handleUndoIgnoreLast = () => {
+    if (!lastIgnoredItem) return;
+    const { kind, item, wasSelected } = lastIgnoredItem;
+    ignoredIdsRef.current = ignoredIdsRef.current.filter((id) => id !== item.id);
+    onUnignoreGmailMessage?.(item.id);
+    if (kind === 'receipt') {
+      const receipt = item as DetectedGmailReceipt;
+      setDetectedReceipts((current) =>
+        current.some((existing) => existing.id === receipt.id) ? current : [receipt, ...current]
+      );
+      if (wasSelected) {
+        setSelectedIds((current) => ({ ...current, [receipt.id]: true }));
+      }
+    } else {
+      const candidate = item as GmailReviewCandidate;
+      setReviewCandidates((current) =>
+        current.some((existing) => existing.id === candidate.id)
+          ? current
+          : [candidate, ...current]
+      );
+    }
+    setLastIgnoredItem(null);
   };
 
   const handleIgnoreAllReviewCandidates = () => {
@@ -715,6 +761,7 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
         subtitle="Rilevamento automatico di fatture e ordini digitali"
         icon={Mail}
         closeLabel="Chiudi sincronizzazione Gmail"
+        mobileBottomSheet
         footer={footer}
       >
         <div className="p-4 sm:p-6 space-y-4">
@@ -780,6 +827,42 @@ export const GmailSyncDrawer: React.FC<GmailSyncDrawerProps> = ({
                 scanStats={scanStats}
                 scanStatus={scanStatus}
               />
+
+              {lastIgnoredItem && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700"
+                >
+                  <span className="min-w-0 truncate">
+                    Email ignorata:{' '}
+                    <strong className="text-stone-900">
+                      {lastIgnoredItem.kind === 'receipt'
+                        ? (lastIgnoredItem.item as DetectedGmailReceipt).merchant || 'Ricevuta'
+                        : (lastIgnoredItem.item as GmailReviewCandidate).subject ||
+                          (lastIgnoredItem.item as GmailReviewCandidate).sender}
+                    </strong>
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleUndoIgnoreLast}
+                      className="min-h-9 px-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Annulla</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLastIgnoredItem(null)}
+                      aria-label="Chiudi avviso email ignorata"
+                      className="min-h-9 min-w-9 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-200/60 inline-flex items-center justify-center cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {detectedReceipts.length > 0 && (
                 <div className="space-y-3">

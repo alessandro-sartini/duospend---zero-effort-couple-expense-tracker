@@ -37,6 +37,7 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
   onCancel,
 }) => {
   const resetDialogTitleId = useId();
+  const resetDialogDescriptionId = useId();
   const dialogRef = useRef<HTMLFormElement>(null);
   useScrollLock(isOpen);
   useFocusTrap(dialogRef, isOpen);
@@ -45,11 +46,14 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         onCancel();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
@@ -61,6 +65,7 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
       role="alertdialog"
       aria-modal="true"
       aria-labelledby={resetDialogTitleId}
+      aria-describedby={resetDialogDescriptionId}
       className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
     >
       <form
@@ -76,7 +81,10 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
             <h3 id={resetDialogTitleId} className="font-bold text-sm font-display text-stone-900">
               Sei sicuro di voler procedere?
             </h3>
-            <p className="text-xs leading-relaxed text-stone-600">
+            <p
+              id={resetDialogDescriptionId}
+              className="text-xs leading-relaxed text-stone-600"
+            >
               Questa azione sostituirà i dati attuali del database SQLite ({expensesCount}{' '}
               spese, {settlementsCount} pareggi, {goalsCount} obiettivi). Le email autorizzate
               della coppia verranno mantenute.

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Check, Plus, Sparkles, X } from 'lucide-react';
+import { formatCurrency } from '../constants/categories';
 import { computeGoalsSavingsOverview } from '../services/analytics-math';
 import {
   CoupleProfile,
@@ -351,7 +352,13 @@ export const VisionBoard: React.FC<VisionBoardProps> = ({
         title="Eliminare questo obiettivo?"
         description={
           goalPendingDelete
-            ? `L’obiettivo “${goalPendingDelete.title}” verrà rimosso dalla bacheca. L’azione non può essere annullata.`
+            ? `L’obiettivo “${goalPendingDelete.title}” (${formatCurrency(
+                goalPendingDelete.currentAmount,
+                profile.currency
+              )} / ${formatCurrency(
+                goalPendingDelete.targetAmount,
+                profile.currency
+              )}) verrà rimosso dalla bacheca. L’azione non può essere annullata.`
             : ''
         }
         confirmLabel="Elimina"

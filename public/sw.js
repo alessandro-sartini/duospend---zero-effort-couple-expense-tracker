@@ -1,8 +1,8 @@
-const CACHE_NAME = 'duospend-shell-v8';
+const CACHE_NAME = 'duospend-shell-v9';
 const APP_SHELL_URLS = [
   '/',
   '/index.html',
-  '/manifest.webmanifest?v=3',
+  '/manifest.webmanifest?v=4',
   '/icon.svg?v=3',
   '/logo.svg',
   '/favicon-32.png?v=3',
@@ -43,7 +43,33 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Sicurezza: non intercettare né salvare mai risposte /api/* o endpoint di autenticazione
-  if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
+
+  // Manifest PWA: network-first per propagare rapidamente aggiornamenti su Android
+  if (url.pathname === '/manifest.webmanifest') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok && response.type === 'basic') {
+            const copy = response.clone();
+            caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(request, copy))
+              .catch(() => {});
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          return (
+            (await cache.match(request)) ||
+            (await cache.match('/manifest.webmanifest?v=4')) ||
+            Response.error()
+          );
+        })
+    );
+    return;
+  }
 
   // Navigazione HTML (incluse chiamate Share Target /?text=...): network-first, mai caching della query
   if (request.mode === 'navigate') {
@@ -71,7 +97,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Asset statici same-origin (JS/CSS/icone/manifest): stale-while-revalidate
+  // Asset statici same-origin (JS/CSS/icone): stale-while-revalidate
   const isStaticAsset =
     url.pathname.startsWith('/assets/') ||
     url.pathname === '/icon.svg' ||
@@ -81,8 +107,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/apple-touch-icon.png' ||
     url.pathname === '/icon-192.png' ||
     url.pathname === '/icon-512.png' ||
-    url.pathname === '/icon-maskable-512.png' ||
-    url.pathname === '/manifest.webmanifest';
+    url.pathname === '/icon-maskable-512.png';
 
   if (isStaticAsset) {
     event.respondWith(

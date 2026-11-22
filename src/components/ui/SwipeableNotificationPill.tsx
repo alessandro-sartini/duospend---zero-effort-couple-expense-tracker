@@ -58,6 +58,14 @@ export const SwipeableNotificationPill: React.FC<SwipeableNotificationPillProps>
   const triggerDismiss = useCallback(() => {
     if (isDismissingRef.current) return;
     isDismissingRef.current = true;
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) {
+      onDismiss();
+      return;
+    }
     const width = containerRef.current?.getBoundingClientRect().width || 280;
     const exitDistance = Math.max(width + 48, 320);
 
@@ -190,6 +198,10 @@ export const SwipeableNotificationPill: React.FC<SwipeableNotificationPillProps>
     : offsetX > 0
       ? Math.max(0.25, 1 - offsetX / (widthForOpacity * 1.15))
       : 1;
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   return (
     <div
@@ -202,11 +214,12 @@ export const SwipeableNotificationPill: React.FC<SwipeableNotificationPillProps>
       style={{
         transform: `translate3d(${offsetX}px, 0, 0)`,
         opacity: computedOpacity,
-        transition: isDragging
-          ? 'none'
-          : isExiting
-            ? `transform ${EXIT_DURATION_MS}ms ease-out, opacity ${EXIT_DURATION_MS}ms ease-out`
-            : 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out',
+        transition:
+          isDragging || reducedMotion
+            ? 'none'
+            : isExiting
+              ? `transform ${EXIT_DURATION_MS}ms ease-out, opacity ${EXIT_DURATION_MS}ms ease-out`
+              : 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out',
       }}
       className={`pointer-events-auto touch-pan-y select-none max-w-full sm:max-w-md flex items-center rounded-full border text-xs font-semibold shadow-lg ${className}`}
     >
@@ -226,7 +239,7 @@ export const SwipeableNotificationPill: React.FC<SwipeableNotificationPillProps>
         }}
         aria-label={dismissLabel}
         title={dismissLabel}
-        className="h-7 w-7 mr-1.5 rounded-full flex items-center justify-center shrink-0 text-current opacity-75 hover:opacity-100 hover:bg-current/10 transition-colors cursor-pointer"
+        className="h-9 w-9 mr-1 rounded-full flex items-center justify-center shrink-0 text-current opacity-75 hover:opacity-100 hover:bg-current/10 transition-colors cursor-pointer"
       >
         <X className="w-3.5 h-3.5" />
       </button>

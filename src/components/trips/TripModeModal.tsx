@@ -80,9 +80,10 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
         subtitle="Etichetta automaticamente le spese del periodo con mini-saldo 50/50 isolato"
         icon={Plane}
         maxWidth="2xl"
+        mobileBottomSheet
         closeOnBackdrop
       >
-        <div className="space-y-5">
+        <div className="p-4 sm:p-6 space-y-5">
           {/* Elenco Viaggi / Progetti con mini-saldo isolato */}
           {tripSummaries.length > 0 && (
             <div className="space-y-3">
@@ -94,7 +95,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowNewTripForm(true)}
-                    className="ds-btn-secondary min-h-8 px-2.5 py-1 text-xs inline-flex items-center gap-1.5"
+                    className="ds-btn-secondary min-h-10 sm:min-h-9 px-3 py-1 text-xs inline-flex items-center gap-1.5"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>Nuovo Viaggio</span>
@@ -144,7 +145,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                             onClick={() => onToggleTripActive(trip.id)}
                             className={`${
                               trip.isActive ? 'ds-btn-secondary' : 'ds-btn-primary'
-                            } min-h-9 px-3 py-1.5 text-xs`}
+                            } min-h-10 sm:min-h-9 px-3 py-1.5 text-xs`}
                           >
                             {trip.isActive ? 'Metti in pausa' : 'Attiva ora'}
                           </button>
@@ -152,7 +153,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                             type="button"
                             onClick={() => setTripPendingDelete(trip)}
                             aria-label={`Elimina viaggio ${trip.name}`}
-                            className="ds-icon-btn h-9 w-9 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400"
+                            className="ds-icon-btn h-10 w-10 sm:h-9 sm:w-9 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -237,7 +238,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="es. Weekend a Barcellona, Ristrutturazione Bagno..."
-                    className="ds-input w-full px-3 py-2 text-xs"
+                    className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                   />
                 </div>
 
@@ -250,7 +251,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                     required
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="ds-input w-full px-3 py-2 text-xs"
+                    className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                   />
                 </div>
 
@@ -263,7 +264,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                     value={endDate}
                     min={startDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="ds-input w-full px-3 py-2 text-xs"
+                    className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                   />
                 </div>
 
@@ -273,12 +274,13 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                   </label>
                   <input
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     step="0.01"
                     value={budget}
                     onChange={(e) => setBudget(e.target.value)}
                     placeholder="es. 800"
-                    className="ds-input w-full px-3 py-2 text-xs font-mono"
+                    className="ds-input w-full min-h-10 px-3 py-2 text-xs font-mono"
                   />
                 </div>
 
@@ -289,7 +291,7 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                   <select
                     value={defaultCategory}
                     onChange={(e) => setDefaultCategory(e.target.value)}
-                    className="ds-input w-full px-3 py-2 text-xs"
+                    className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                   >
                     {categories.map((cat) => (
                       <option key={cat} value={cat}>
@@ -317,12 +319,12 @@ export const TripModeModal: React.FC<TripModeModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowNewTripForm(false)}
-                    className="ds-btn-secondary px-3 py-2 text-xs"
+                    className="ds-btn-secondary min-h-10 px-3 py-2 text-xs"
                   >
                     Annulla
                   </button>
                 )}
-                <button type="submit" className="ds-btn-primary px-4 py-2 text-xs">
+                <button type="submit" className="ds-btn-primary min-h-10 px-4 py-2 text-xs">
                   <Plus className="h-3.5 w-3.5" />
                   <span>Crea e Attiva Viaggio</span>
                 </button>

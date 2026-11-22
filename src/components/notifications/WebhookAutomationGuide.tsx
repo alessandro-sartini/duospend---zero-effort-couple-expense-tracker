@@ -51,7 +51,8 @@ export const WebhookAutomationGuide: React.FC<WebhookAutomationGuideProps> = ({
           <button
             type="button"
             onClick={copyWebhookCode}
-            className="p-1.5 bg-white border border-stone-300 rounded text-stone-700 hover:bg-stone-50 shrink-0 flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+            aria-label="Copia configurazione webhook"
+            className="min-h-9 px-2.5 py-1.5 bg-white border border-stone-300 rounded text-stone-700 hover:bg-stone-50 shrink-0 flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
             title="Copia configurazione"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -102,7 +103,7 @@ export const WebhookAutomationGuide: React.FC<WebhookAutomationGuideProps> = ({
             <button
               type="button"
               onClick={onInstallPwa}
-              className="min-h-8 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-[11px] shrink-0 cursor-pointer"
+              className="min-h-10 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-[11px] shrink-0 cursor-pointer"
             >
               Installa App sulla Home
             </button>

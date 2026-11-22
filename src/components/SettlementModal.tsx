@@ -84,6 +84,7 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({
       icon={Scale}
       maxWidth="md"
       closeLabel="Chiudi pareggio saldo"
+      mobileBottomSheet
       footer={footer}
     >
       <form id="settlement-form" onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
@@ -109,28 +110,33 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">
+          <label
+            htmlFor="settlement-amount-input"
+            className="block text-xs font-semibold text-stone-700 mb-1"
+          >
             Importo del Bonifico / Pagamento ({profile.currency})
           </label>
           <div className="relative">
-            <span className="absolute left-3 top-2.5 text-xs text-stone-400 font-mono">
-              €
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 font-mono pointer-events-none">
+              {profile.currency === 'EUR' ? '€' : profile.currency}
             </span>
             <input
+              id="settlement-amount-input"
               type="number"
+              inputMode="decimal"
               min="0.01"
               step="0.01"
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="ds-input w-full pl-7 pr-3 py-2 text-base font-mono font-bold"
+              className="ds-input w-full min-h-10 pl-7 pr-3 py-2 text-base font-mono font-bold"
             />
           </div>
           {defaultAmount > 0 && (
             <button
               type="button"
               onClick={() => setAmount(defaultAmount.toFixed(2))}
-              className="mt-1.5 text-[11px] text-orange-600 hover:underline font-semibold cursor-pointer"
+              className="mt-1.5 min-h-9 inline-flex items-center text-[11px] text-orange-600 hover:underline font-semibold cursor-pointer"
             >
               Imposta saldo esatto completo: {formatCurrency(defaultAmount, profile.currency)}
             </button>
@@ -139,23 +145,33 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({
 
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">Data</label>
+            <label
+              htmlFor="settlement-date-input"
+              className="block text-xs font-semibold text-stone-700 mb-1"
+            >
+              Data
+            </label>
             <input
+              id="settlement-date-input"
               type="date"
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="ds-input w-full px-3 py-2 text-xs font-mono"
+              className="ds-input w-full min-h-10 px-3 py-2 text-xs font-mono"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
+            <label
+              htmlFor="settlement-method-select"
+              className="block text-xs font-semibold text-stone-700 mb-1"
+            >
               Metodo
             </label>
             <select
+              id="settlement-method-select"
               value={method}
               onChange={(e) => setMethod(e.target.value)}
-              className="ds-input w-full px-3 py-2 text-xs"
+              className="ds-input w-full min-h-10 px-3 py-2 text-xs"
             >
               <option value="Revolut">Revolut</option>
               <option value="Bonifico Bancario">Bonifico Bancario</option>
@@ -168,15 +184,19 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">
+          <label
+            htmlFor="settlement-note-input"
+            className="block text-xs font-semibold text-stone-700 mb-1"
+          >
             Causale / Nota
           </label>
           <input
+            id="settlement-note-input"
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="es. Pareggio spese spesa e cene novembre"
-            className="ds-input w-full px-3 py-2 text-xs"
+            className="ds-input w-full min-h-10 px-3 py-2 text-xs"
           />
         </div>
       </form>

@@ -220,6 +220,9 @@ export async function startServer() {
             normalized.endsWith('/manifest.webmanifest')
           ) {
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            if (normalized.endsWith('/manifest.webmanifest')) {
+              res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+            }
           } else if (normalized.includes('/assets/')) {
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
           }

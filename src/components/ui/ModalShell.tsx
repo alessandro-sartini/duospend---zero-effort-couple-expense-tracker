@@ -50,10 +50,12 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{
+    x: number;
     y: number;
     time: number;
     pointerId: number;
     fromHandle: boolean;
+    axis: 'pending' | 'vertical' | 'aborted';
   } | null>(null);
 
   useEffect(() => {
@@ -84,22 +86,49 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   ) => {
     if (!mobileBottomSheet) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (!fromHandle && (event.pointerType === 'mouse' || window.innerWidth >= 640)) {
+      return;
+    }
     if (!fromHandle && event.target instanceof Element && event.target.closest('button, a, input, select, textarea')) {
       return;
     }
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    if (fromHandle) {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
     dragStartRef.current = {
+      x: event.clientX,
       y: event.clientY,
       time: Date.now(),
       pointerId: event.pointerId,
       fromHandle,
+      axis: fromHandle ? 'vertical' : 'pending',
     };
-    setIsDragging(true);
+    if (fromHandle) {
+      setIsDragging(true);
+    }
   };
 
   const handleSheetPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragStartRef.current || dragStartRef.current.pointerId !== event.pointerId) return;
-    const deltaY = event.clientY - dragStartRef.current.y;
+    const drag = dragStartRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || drag.axis === 'aborted') return;
+
+    const deltaX = event.clientX - drag.x;
+    const deltaY = event.clientY - drag.y;
+
+    if (drag.axis === 'pending') {
+      if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        drag.axis = 'aborted';
+        return;
+      }
+      if (Math.abs(deltaY) >= 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+        drag.axis = 'vertical';
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        setIsDragging(true);
+      } else {
+        return;
+      }
+    }
+
     if (deltaY >= 0) {
       setDragOffsetY(deltaY);
     } else {
@@ -108,10 +137,23 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   };
 
   const handleSheetPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragStartRef.current || dragStartRef.current.pointerId !== event.pointerId) return;
-    const { y, time, fromHandle } = dragStartRef.current;
+    const drag = dragStartRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const { y, time, fromHandle, axis } = drag;
+    try {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Ignore pointer capture release errors
+    }
     dragStartRef.current = null;
     setIsDragging(false);
+
+    if (axis === 'aborted') {
+      setDragOffsetY(0);
+      return;
+    }
 
     const deltaY = event.clientY - y;
     const dt = Math.max(1, Date.now() - time);
@@ -193,6 +235,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
           <div
             role="button"
             tabIndex={0}
+            aria-expanded={isExpanded}
             aria-label={
               isExpanded
                 ? 'Riduci pannello o trascina giù per chiudere'
@@ -255,7 +298,13 @@ export const ModalShell: React.FC<ModalShellProps> = ({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        <div
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${
+            mobileBottomSheet && !footer ? 'pb-[env(safe-area-inset-bottom,0px)] sm:pb-0' : ''
+          }`}
+        >
+          {children}
+        </div>
 
         {footer && (
           <div

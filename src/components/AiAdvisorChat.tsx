@@ -210,8 +210,9 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={handleClearHistory}
-            className="p-2 rounded-lg border border-stone-200 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+            className="min-h-10 px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
             title="Azzera Conversazione"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -233,7 +234,7 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
                   key={opt.id}
                   type="button"
                   onClick={() => setSelectedModel(opt.id)}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
                     isSelected
                       ? 'border-orange-500 bg-orange-50/50 shadow-xs'
                       : 'border-stone-200 bg-white hover:bg-stone-50'
@@ -259,7 +260,7 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
       </div>
 
       {/* Contenitore Messaggi Chat */}
-      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs flex flex-col h-[min(560px,70dvh)] min-h-[420px] overflow-hidden">
+      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs flex flex-col h-[min(560px,65dvh)] min-h-[300px] sm:min-h-[420px] overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {messages.map((msg) => {
             const isUser = msg.role === 'user';
@@ -333,9 +334,10 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
           {quickPrompts.map((qp, idx) => (
             <button
               key={idx}
+              type="button"
               onClick={() => handleSendMessage(qp)}
               disabled={isLoading}
-              className="whitespace-nowrap px-2.5 py-1 rounded-md bg-white border border-stone-200 text-stone-700 hover:bg-stone-100 transition-colors text-[11px]"
+              className="min-h-9 whitespace-nowrap px-2.5 py-1 rounded-md bg-white border border-stone-200 text-stone-700 hover:bg-stone-100 transition-colors text-[11px] cursor-pointer"
             >
               {qp}
             </button>
@@ -343,7 +345,7 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
         </div>
 
         {/* Barra di Input */}
-        <div className="p-4 bg-white border-t border-stone-100">
+        <div className="p-3 sm:p-4 bg-white border-t border-stone-100">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -353,16 +355,19 @@ export const AiAdvisorChat: React.FC<AiAdvisorChatProps> = ({
           >
             <input
               type="text"
+              enterKeyHint="send"
+              aria-label="Messaggio per il consulente AI"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               placeholder="Chiedi a Gemini del budget, delle spese o di un obiettivo..."
               disabled={isLoading}
-              className="min-w-0 flex-1 px-3 sm:px-4 py-2.5 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+              className="ds-input min-w-0 min-h-11 flex-1 px-3 sm:px-4 py-2.5 text-xs sm:text-sm"
             />
             <button
               type="submit"
+              aria-label="Invia messaggio"
               disabled={isLoading || !inputPrompt.trim()}
-              className="shrink-0 px-3 sm:px-4 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs"
+              className="shrink-0 min-h-11 min-w-11 px-3 sm:px-4 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Invia</span>

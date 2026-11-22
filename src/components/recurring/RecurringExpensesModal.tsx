@@ -102,9 +102,10 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
         subtitle="Riconcilia in automatico notifiche bancarie e fatture Gmail evitando doppi inserimenti"
         icon={RefreshCw}
         maxWidth="2xl"
+        mobileBottomSheet
         closeOnBackdrop
       >
-        <div className="space-y-6">
+        <div className="p-4 sm:p-6 space-y-6">
           <div className="ds-subcard p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-stone-500 dark:text-stone-400">
@@ -184,7 +185,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                             ? 'Registra rata ora (con controllo anti-doppione)'
                             : 'Le utenze a importo variabile si riconciliano quando arriva notifica o email'
                         }
-                        className="ds-btn-secondary min-h-9 px-3 py-1.5 text-xs disabled:opacity-50"
+                        className="ds-btn-secondary min-h-10 sm:min-h-9 px-3 py-1.5 text-xs disabled:opacity-50"
                       >
                         <Play className="h-3.5 w-3.5" />
                         <span>Registra rata</span>
@@ -193,7 +194,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                         type="button"
                         onClick={() => setRulePendingDelete(rule)}
                         aria-label={`Elimina regola ${rule.title}`}
-                        className="ds-icon-btn h-9 w-9 text-stone-500 hover:text-rose-600"
+                        className="ds-icon-btn h-10 w-10 sm:h-9 sm:w-9 text-stone-500 hover:text-rose-600"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -221,7 +222,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="es. Affitto Casa, Netflix, Enel Luce..."
-                  className="ds-input w-full px-3 py-2 text-xs"
+                  className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                 />
               </div>
 
@@ -234,7 +235,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                   value={aliasesInput}
                   onChange={(e) => setAliasesInput(e.target.value)}
                   placeholder="es. netflix.com, enel energia, sdd"
-                  className="ds-input w-full px-3 py-2 text-xs"
+                  className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                 />
               </div>
 
@@ -244,12 +245,13 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="0.01"
                   value={expectedAmount}
                   onChange={(e) => setExpectedAmount(e.target.value)}
                   placeholder="es. 17.99 o 0"
-                  className="ds-input w-full px-3 py-2 text-xs font-mono"
+                  className="ds-input w-full min-h-10 px-3 py-2 text-xs font-mono"
                 />
               </div>
 
@@ -263,7 +265,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                     onChange={(e) =>
                       setFrequency(e.target.value as RecurringExpenseItem['frequency'])
                     }
-                    className="ds-input w-full px-2.5 py-2 text-xs"
+                    className="ds-input w-full min-h-10 px-2.5 py-2 text-xs"
                   >
                     <option value="monthly">Mensile</option>
                     <option value="bimonthly">Bimestrale</option>
@@ -276,11 +278,12 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                   </label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min="1"
                     max="31"
                     value={dayOfMonth}
                     onChange={(e) => setDayOfMonth(e.target.value)}
-                    className="ds-input w-full px-2.5 py-2 text-xs font-mono"
+                    className="ds-input w-full min-h-10 px-2.5 py-2 text-xs font-mono"
                   />
                 </div>
               </div>
@@ -292,7 +295,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="ds-input w-full px-3 py-2 text-xs"
+                  className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                 >
                   {categories.map((cat) => (
                     <option key={cat} value={cat}>
@@ -309,7 +312,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
                 <select
                   value={splitType}
                   onChange={(e) => setSplitType(e.target.value as SplitType)}
-                  className="ds-input w-full px-3 py-2 text-xs"
+                  className="ds-input w-full min-h-10 px-3 py-2 text-xs"
                 >
                   <option value="50_50">Condivisa 50 / 50</option>
                   <option value="100_user">100% {profile.userName}</option>
@@ -338,7 +341,7 @@ export const RecurringExpensesModal: React.FC<RecurringExpensesModalProps> = ({
             </label>
 
             <div className="flex justify-end pt-1">
-              <button type="submit" className="ds-btn-primary px-4 py-2 text-xs">
+              <button type="submit" className="ds-btn-primary min-h-10 px-4 py-2 text-xs">
                 <Plus className="h-3.5 w-3.5" />
                 <span>Salva Spesa Ricorrente</span>
               </button>

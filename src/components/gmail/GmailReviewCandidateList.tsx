@@ -86,7 +86,7 @@ export const GmailReviewCandidateList: React.FC<GmailReviewCandidateListProps> =
                 <button
                   type="button"
                   onClick={() => onIgnoreCandidate(candidate.id)}
-                  className="min-h-9 shrink-0 rounded-lg px-2 text-[11px] font-semibold text-stone-600 hover:bg-stone-100 cursor-pointer"
+                  className="min-h-10 sm:min-h-9 shrink-0 rounded-lg px-2 text-[11px] font-semibold text-stone-600 hover:bg-stone-100 cursor-pointer"
                 >
                   Ignora email
                 </button>
@@ -103,7 +103,7 @@ export const GmailReviewCandidateList: React.FC<GmailReviewCandidateListProps> =
                 <button
                   type="button"
                   onClick={() => onPromoteCandidate(candidate)}
-                  className="min-h-9 rounded-lg bg-orange-50 px-3 text-[11px] font-semibold text-orange-800 hover:bg-orange-100 transition-colors cursor-pointer"
+                  className="min-h-10 sm:min-h-9 rounded-lg bg-orange-50 px-3 text-[11px] font-semibold text-orange-800 hover:bg-orange-100 transition-colors cursor-pointer"
                 >
                   Considera spesa e aggiungi
                 </button>
@@ -111,7 +111,7 @@ export const GmailReviewCandidateList: React.FC<GmailReviewCandidateListProps> =
                   <button
                     type="button"
                     onClick={() => onSetRecurringSetupId(candidate.id)}
-                    className="min-h-9 rounded-lg px-3 text-[11px] font-semibold text-orange-700 hover:bg-orange-50 transition-colors cursor-pointer"
+                    className="min-h-10 sm:min-h-9 rounded-lg px-3 text-[11px] font-semibold text-orange-700 hover:bg-orange-50 transition-colors cursor-pointer"
                   >
                     Imposta come spesa ricorrente
                   </button>

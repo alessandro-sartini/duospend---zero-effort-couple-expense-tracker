@@ -159,18 +159,18 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
       {/* Riga 2: Divisione puntuale per Anno e Mese */}
       <div className="space-y-1">
         <span className={SEGMENT_LABEL_CLASS}>Anno e Mese</span>
-        <div className="grid grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] sm:grid-cols-[40px_minmax(0,1fr)_minmax(0,1fr)_40px] items-center gap-2">
           <button
             type="button"
             onClick={() => onStepMonth(-1)}
             disabled={timeframe === 'all'}
             aria-label={selectedMonth === null ? 'Anno precedente' : 'Mese precedente'}
-            className="ds-icon-btn h-10 w-10 shrink-0"
+            className="ds-icon-btn h-10 w-11 sm:w-10 shrink-0 row-span-2 sm:row-span-1"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <div className="relative col-span-2 min-w-0">
+          <div className="relative min-w-0">
             <Calendar className="w-3.5 h-3.5 text-orange-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
               aria-label="Seleziona anno"
@@ -186,7 +186,7 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
             </select>
           </div>
 
-          <div className="col-span-2 min-w-0">
+          <div className="min-w-0 col-start-2 row-start-2 sm:col-start-auto sm:row-start-auto">
             <select
               aria-label="Seleziona mese"
               value={selectedMonth ?? ''}
@@ -209,7 +209,7 @@ export const AnalyticsFilterBar: React.FC<AnalyticsFilterBarProps> = ({
             onClick={() => onStepMonth(1)}
             disabled={timeframe === 'all'}
             aria-label={selectedMonth === null ? 'Anno successivo' : 'Mese successivo'}
-            className="ds-icon-btn h-10 w-10 shrink-0"
+            className="ds-icon-btn h-10 w-11 sm:w-10 shrink-0 col-start-3 row-start-1 row-span-2 sm:col-start-auto sm:row-start-auto sm:row-span-1"
           >
             <ChevronRight className="w-4 h-4" />
           </button>

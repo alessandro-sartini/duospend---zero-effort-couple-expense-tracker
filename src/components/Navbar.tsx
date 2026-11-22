@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
   Compass,
+  Download,
   Heart,
   LayoutDashboard,
   Lock,
@@ -30,6 +31,8 @@ interface NavbarProps {
   onLockVault: () => void;
   theme: Theme;
   onToggleTheme: () => void;
+  canInstallPwa?: boolean;
+  onInstallPwa?: () => void;
 }
 
 interface NavItem {
@@ -59,6 +62,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLockVault,
   theme,
   onToggleTheme,
+  canInstallPwa = false,
+  onInstallPwa,
 }) => {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const moreMenuRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -83,6 +88,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     pressed?: boolean;
     badgeDot?: boolean;
   }> = [
+    ...(canInstallPwa && onInstallPwa
+      ? [
+          {
+            id: 'install-pwa',
+            label: 'Installa app DuoSpend',
+            ariaLabel: 'Installa app DuoSpend su questo dispositivo',
+            icon: Download,
+            iconClass: 'text-orange-600',
+            onClick: onInstallPwa,
+          },
+        ]
+      : []),
     {
       id: 'theme',
       label: theme === 'dark' ? 'Tema chiaro' : 'Tema scuro',
@@ -222,6 +239,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? 'ds-nav-pill-active font-semibold text-stone-900 shadow-xs border border-stone-200/70'
                     : 'border border-transparent font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
                 }`}
+                aria-haspopup="menu"
                 aria-expanded={isMoreOpen}
                 aria-controls="secondary-navigation"
               >
@@ -231,6 +249,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               {isMoreOpen && (
                 <div
                   id="secondary-navigation"
+                  role="menu"
+                  aria-label="Altre sezioni"
                   className="ds-card absolute right-0 top-full z-40 mt-2 min-w-52 p-1.5 shadow-xl"
                 >
                   {lgSecondaryItems.map((item) => {
@@ -240,6 +260,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <button
                         key={item.id}
                         type="button"
+                        role="menuitem"
                         onClick={() => selectTab(item.id)}
                         className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
                           isActive
@@ -271,7 +292,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     title={action.label}
                     aria-label={action.ariaLabel || action.label}
                     aria-pressed={action.pressed}
-                    className="relative flex h-8 w-8 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-200/60 hover:text-stone-900 transition-colors cursor-pointer"
+                    className="relative flex h-10 w-10 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-200/60 hover:text-stone-900 transition-colors cursor-pointer"
                   >
                     <Icon className={`h-4 w-4 ${action.iconClass}`} />
                     {action.badgeDot && (
@@ -348,6 +369,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? 'text-orange-600'
                   : 'text-stone-500 hover:text-stone-900'
               }`}
+              aria-haspopup="menu"
               aria-expanded={isMoreOpen}
               aria-controls="mobile-secondary-navigation"
             >
@@ -365,6 +387,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             {isMoreOpen && (
               <div
                 id="mobile-secondary-navigation"
+                role="menu"
+                aria-label="Altre sezioni"
                 className="ds-card absolute right-1 bottom-full z-40 mb-2.5 min-w-52 p-1.5 shadow-2xl"
               >
                 {mobileSecondaryItems.map((item) => {
@@ -374,8 +398,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <button
                       key={item.id}
                       type="button"
+                      role="menuitem"
                       onClick={() => selectTab(item.id)}
-                      className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs transition-colors cursor-pointer ${
+                      className={`flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-orange-500/12 font-semibold text-orange-700'
                           : 'text-stone-700 hover:bg-stone-100'

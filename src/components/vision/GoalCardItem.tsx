@@ -153,11 +153,11 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
               <button
                 type="button"
                 onClick={onCancelEdit}
-                className="ds-btn-secondary min-h-8 px-2.5 text-[11px]"
+                className="ds-btn-secondary min-h-10 sm:min-h-9 px-2.5 text-[11px]"
               >
                 Annulla
               </button>
-              <button type="submit" className="ds-btn-primary min-h-8 px-3 text-[11px]">
+              <button type="submit" className="ds-btn-primary min-h-10 sm:min-h-9 px-3 text-[11px]">
                 <Check className="w-3 h-3" />
                 <span>Salva</span>
               </button>
@@ -178,7 +178,7 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
                 <button
                   type="button"
                   onClick={() => onStartEdit(goal)}
-                  className="min-h-8 min-w-8 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-200/60 flex items-center justify-center transition-colors cursor-pointer"
+                  className="min-h-10 min-w-10 sm:min-h-9 sm:min-w-9 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-200/60 flex items-center justify-center transition-colors cursor-pointer"
                   aria-label={`Modifica obiettivo ${goal.title}`}
                   title="Modifica obiettivo"
                 >
@@ -187,7 +187,7 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
                 <button
                   type="button"
                   onClick={() => onRequestDelete(goal)}
-                  className="min-h-8 min-w-8 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
+                  className="min-h-10 min-w-10 sm:min-h-9 sm:min-w-9 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
                   aria-label={`Elimina obiettivo ${goal.title}`}
                   title="Elimina obiettivo"
                 >
@@ -216,14 +216,14 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
                   <button
                     type="button"
                     onClick={() => onQuickAdd(goal, 50)}
-                    className="ds-btn-secondary min-h-8 px-2 py-0.5 text-[11px] font-mono"
+                    className="ds-btn-secondary min-h-10 sm:min-h-9 px-2.5 py-0.5 text-[11px] font-mono"
                   >
                     +€50
                   </button>
                   <button
                     type="button"
                     onClick={() => onQuickAdd(goal, 100)}
-                    className="ds-btn-secondary min-h-8 px-2 py-0.5 text-[11px] font-mono"
+                    className="ds-btn-secondary min-h-10 sm:min-h-9 px-2.5 py-0.5 text-[11px] font-mono"
                   >
                     +€100
                   </button>
@@ -231,7 +231,7 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
                     <button
                       type="button"
                       onClick={() => onCreateChallenge(goal.id)}
-                      className="ds-btn-secondary min-h-8 px-2 py-0.5 text-[11px]"
+                      className="ds-btn-secondary min-h-10 sm:min-h-9 px-2.5 py-0.5 text-[11px]"
                       title={`Crea sfida di risparmio per ${goal.title}`}
                     >
                       <Sparkles className="w-3 h-3 text-orange-600" aria-hidden="true" />

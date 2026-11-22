@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Calendar, ChevronLeft, ChevronRight, Flag, Plane, RefreshCw, RotateCcw } from 'lucide-react';
+import { ArrowRight, Calendar, ChevronLeft, ChevronRight, Edit3, Flag, Plane, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import {
   formatCurrency,
   formatSplitLabel,
@@ -16,6 +16,7 @@ import {
 } from '../services/analytics-math';
 import type { TripSummary } from '../services/reconciliation';
 import { CoupleProfile, Expense } from '../types';
+import type { SwipeOpenSide } from '../utils/swipeGestures';
 import { BurnRateAreaChart } from './charts/BurnRateAreaChart';
 import {
   ExpenseDrilldownModal,
@@ -27,7 +28,10 @@ import {
 } from './charts/InteractiveDonutChart';
 import { BalanceHeroCard } from './dashboard/BalanceHeroCard';
 import { CategoryBadge } from './ui/CategoryBadge';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import { RowActionMenu } from './ui/RowActionMenu';
 import { SourceBadge } from './ui/SourceBadge';
+import { SwipeableActionRow } from './ui/SwipeableActionRow';
 
 interface DashboardOverviewProps {
   expenses: Expense[];
@@ -47,6 +51,7 @@ interface DashboardOverviewProps {
   onOpenSecurityModal?: () => void;
   onNavigateTab: (tab: string) => void;
   onSelectExpense: (expense: Expense) => void;
+  onDeleteExpense?: (id: string) => void;
 }
 
 const DASHBOARD_MONTH_OPTIONS = [
@@ -88,6 +93,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onOpenSecurityModal,
   onNavigateTab,
   onSelectExpense,
+  onDeleteExpense,
 }) => {
   const realToday = new Date();
   const realYear = realToday.getFullYear();
@@ -102,6 +108,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [drilldown, setDrilldown] = useState<ExpenseDrilldownPayload | null>(
     null
   );
+  const [openSwipe, setOpenSwipe] = useState<{
+    id: string;
+    side: Exclude<SwipeOpenSide, null>;
+  } | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [expensePendingDelete, setExpensePendingDelete] = useState<Expense | null>(null);
   const budgetGoal = profile.monthlyBudget || 2800;
 
   const availableYears = useMemo(() => {
@@ -310,7 +322,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <button
               type="button"
               onClick={onOpenStartingPoint}
-              className="ds-btn-secondary min-h-9 px-3.5 py-2 text-xs shrink-0 self-start sm:self-auto"
+              className="ds-btn-secondary min-h-10 px-3.5 py-2 text-xs shrink-0 self-start sm:self-auto"
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>Modifica</span>
@@ -361,7 +373,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <button
                 type="button"
                 onClick={onOpenTrips}
-                className="ds-btn-secondary min-h-9 px-3 py-1.5 text-xs shrink-0"
+                className="ds-btn-secondary min-h-10 px-3 py-1.5 text-xs shrink-0"
               >
                 {activeTripSummary ? 'Riepilogo' : 'Gestisci'}
               </button>
@@ -388,7 +400,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <button
                 type="button"
                 onClick={onOpenRecurring}
-                className="ds-btn-secondary min-h-9 px-3 py-1.5 text-xs shrink-0"
+                className="ds-btn-secondary min-h-10 px-3 py-1.5 text-xs shrink-0"
               >
                 Apri
               </button>
@@ -407,12 +419,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2 w-full sm:w-auto sm:flex sm:flex-wrap sm:flex-initial sm:justify-end">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 w-full sm:w-auto sm:flex sm:flex-wrap sm:flex-initial sm:justify-end">
           <button
             type="button"
             onClick={() => stepDashboardMonth(-1)}
             aria-label="Mese precedente"
-            className="ds-icon-btn h-9 w-9 shrink-0 col-start-1 row-start-1"
+            className="ds-icon-btn h-10 w-11 sm:w-10 shrink-0 col-start-1 row-start-1 row-span-2 sm:row-span-1"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -424,7 +436,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               setSelectedMonth(Number(e.target.value));
               setSelectedMonthCategory(null);
             }}
-            className="ds-input col-start-2 row-start-1 w-full px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
+            className="ds-input col-start-2 row-start-1 w-full px-2.5 py-1.5 text-xs font-semibold min-h-10 cursor-pointer"
           >
             {DASHBOARD_MONTH_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -440,7 +452,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               setSelectedYear(Number(e.target.value));
               setSelectedMonthCategory(null);
             }}
-            className="ds-input col-start-2 row-start-2 w-full px-2.5 py-1.5 text-xs font-semibold min-h-9 cursor-pointer"
+            className="ds-input col-start-2 row-start-2 w-full px-2.5 py-1.5 text-xs font-semibold min-h-10 cursor-pointer"
           >
             {availableYears.map((y) => (
               <option key={y} value={y}>
@@ -453,7 +465,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             type="button"
             onClick={() => stepDashboardMonth(1)}
             aria-label="Mese successivo"
-            className="ds-icon-btn h-9 w-9 shrink-0 col-start-3 row-start-1"
+            className="ds-icon-btn h-10 w-11 sm:w-10 shrink-0 col-start-3 row-start-1 row-span-2 sm:row-span-1"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -466,7 +478,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 setSelectedMonth(realMonth);
                 setSelectedMonthCategory(null);
               }}
-                className="ds-btn-secondary col-span-3 min-h-9 px-2.5 py-1 text-xs justify-self-stretch sm:col-span-1 sm:justify-self-auto sm:w-auto"
+                className="ds-btn-secondary col-span-3 min-h-10 px-2.5 py-1 text-xs justify-self-stretch sm:col-span-1 sm:justify-self-auto sm:w-auto"
             >
               <RotateCcw className="w-3 h-3 text-orange-600" />
               <span>Attuale</span>
@@ -520,64 +532,152 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               Ultime Spese di Coppia
             </h3>
             <p className="text-xs text-stone-500">
-              Ultime spese divise tra {profile.userName} e {profile.partnerName}
+              Ultime spese divise tra {profile.userName} e {profile.partnerName} · Scorri per azioni rapide
             </p>
           </div>
           <button
             type="button"
             onClick={() => onNavigateTab('expenses')}
-            className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer shrink-0"
+            className="min-h-10 px-2 rounded-lg text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer shrink-0"
           >
             <span>Vedi Tutte ({expenses.length})</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="divide-y divide-stone-100">
+        <div className="divide-y divide-stone-100 -mx-1 sm:mx-0">
           {recentExpenses.map((exp) => (
-            <div
+            <SwipeableActionRow
               key={exp.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelectExpense(exp)}
-              onDoubleClick={() => onSelectExpense(exp)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelectExpense(exp);
-                }
+              disabled={openMenuId === exp.id}
+              openSide={openSwipe?.id === exp.id ? openSwipe.side : null}
+              onOpenSideChange={(side) => {
+                setOpenSwipe((current) => {
+                  if (side) return { id: exp.id, side };
+                  return current?.id === exp.id ? null : current;
+                });
               }}
-              title="Tocca o fai doppio clic per modificare questa spesa"
-              className="flex cursor-pointer items-center gap-3 rounded-xl px-2.5 py-3.5 transition-colors hover:bg-stone-50/70"
+              leftAction={{
+                label: 'Modifica',
+                armedLabel: 'Modifica',
+                icon: <Edit3 className="w-5 h-5" />,
+                tone: 'primary',
+                onTrigger: () => onSelectExpense(exp),
+              }}
+              rightAction={
+                onDeleteExpense
+                  ? {
+                      label: 'Elimina',
+                      armedLabel: 'Elimina',
+                      icon: <Trash2 className="w-5 h-5" />,
+                      tone: 'danger',
+                      onTrigger: () => setExpensePendingDelete(exp),
+                    }
+                  : undefined
+              }
+              contentClassName="hover:bg-stone-50/70 transition-colors"
             >
-              <CategoryBadge category={exp.category} size="md" />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectExpense(exp)}
+                onDoubleClick={() => onSelectExpense(exp)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectExpense(exp);
+                  }
+                }}
+                title="Tocca, trascina o fai doppio clic per modificare questa spesa"
+                className="flex cursor-pointer items-center gap-3 px-2.5 py-3.5"
+              >
+                <CategoryBadge category={exp.category} size="md" />
 
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="text-sm font-bold text-stone-900 truncate">
-                  {exp.title}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="text-sm font-bold text-stone-900 truncate">
+                    {exp.title}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-stone-500">
+                    <span className="font-mono">{exp.date}</span>
+                    <span aria-hidden="true">·</span>
+                    <strong className="text-stone-700">
+                      {exp.payer === 'user'
+                        ? profile.userName
+                        : profile.partnerName}
+                    </strong>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatSplitLabel(exp)}</span>
+                    <SourceBadge source={exp.source} compact />
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-stone-500">
-                  <span className="font-mono">{exp.date}</span>
-                  <span aria-hidden="true">·</span>
-                  <strong className="text-stone-700">
-                    {exp.payer === 'user'
-                      ? profile.userName
-                      : profile.partnerName}
-                  </strong>
-                  <span aria-hidden="true">·</span>
-                  <span>{formatSplitLabel(exp)}</span>
-                  <SourceBadge source={exp.source} compact />
+                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                  <span className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
+                    {formatCurrency(exp.amount, exp.currency)}
+                  </span>
+
+                  <RowActionMenu
+                    label={`Azioni per ${exp.title}`}
+                    onOpenChange={(open) => setOpenMenuId(open ? exp.id : null)}
+                    className="sm:hidden"
+                    items={[
+                      {
+                        id: 'edit',
+                        label: 'Modifica spesa',
+                        icon: <Edit3 className="w-4 h-4 text-orange-600" />,
+                        onSelect: () => onSelectExpense(exp),
+                      },
+                      ...(onDeleteExpense
+                        ? [
+                            {
+                              id: 'delete',
+                              label: 'Elimina spesa',
+                              icon: <Trash2 className="w-4 h-4" />,
+                              tone: 'danger' as const,
+                              onSelect: () => {
+                                setOpenSwipe(null);
+                                setExpensePendingDelete(exp);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+
+                  <div className="hidden sm:flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectExpense(exp);
+                      }}
+                      aria-label={`Modifica ${exp.title}`}
+                      title="Modifica spesa"
+                      className="h-9 w-9 rounded-xl text-stone-400 hover:text-stone-900 hover:bg-stone-100 inline-flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    {onDeleteExpense && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenSwipe(null);
+                          setExpensePendingDelete(exp);
+                        }}
+                        aria-label={`Elimina ${exp.title}`}
+                        title="Elimina spesa"
+                        className="h-9 w-9 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <ChevronRight className="hidden sm:inline w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
                 </div>
               </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
-                  {formatCurrency(exp.amount, exp.currency)}
-                </span>
-                <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
-              </div>
-            </div>
+            </SwipeableActionRow>
           ))}
         </div>
       </div>
@@ -587,6 +687,31 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         profile={profile}
         onClose={() => setDrilldown(null)}
         onSelectExpense={onSelectExpense}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(expensePendingDelete)}
+        variant="danger"
+        title="Eliminare questa spesa?"
+        description={
+          expensePendingDelete
+            ? `“${expensePendingDelete.title}” (${formatCurrency(
+                expensePendingDelete.amount,
+                expensePendingDelete.currency
+              )} · ${expensePendingDelete.date} · pagata da ${
+                expensePendingDelete.payer === 'user' ? profile.userName : profile.partnerName
+              }) verrà rimossa dal registro. Potrai ripristinarla subito dall’avviso in basso.`
+            : ''
+        }
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
+        onConfirm={() => {
+          if (expensePendingDelete && onDeleteExpense) {
+            onDeleteExpense(expensePendingDelete.id);
+          }
+          setExpensePendingDelete(null);
+        }}
+        onCancel={() => setExpensePendingDelete(null)}
       />
     </div>
   );

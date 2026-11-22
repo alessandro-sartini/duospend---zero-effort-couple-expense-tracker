@@ -5,6 +5,8 @@ import { LoginGate } from './components/LoginGate';
 import { NotFoundView } from './components/layout/NotFoundView';
 import { QuickActionsFab } from './components/layout/QuickActionsFab';
 import { ZeroAmountBanner } from './components/layout/ZeroAmountBanner';
+import { UndoToast, type UndoToastNotice } from './components/ui/UndoToast';
+import { formatCurrency } from './constants/categories';
 import { loadGmailDraft, loadOcrDraft } from './services/storage';
 import { getAuthConfig } from './services/auth';
 import { FullScreenLoader } from './components/ui/Loader';
@@ -125,6 +127,7 @@ export default function App() {
   const [isDevConsoleEnabled, setIsDevConsoleEnabled] = useState<boolean>(import.meta.env.DEV);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [onlyZeroAmountFilter, setOnlyZeroAmountFilter] = useState(false);
+  const [undoNotice, setUndoNotice] = useState<UndoToastNotice | null>(null);
   const [hasOpenedGmailDrawer, setHasOpenedGmailDrawer] = useState(false);
   const [hasOpenedReceiptModal, setHasOpenedReceiptModal] = useState(false);
   const [gmailBgState, setGmailBgState] = useState<{
@@ -184,6 +187,7 @@ export default function App() {
     handleRefreshData,
     handleSaveExpense,
     handleDeleteExpense,
+    handleRestoreExpense,
     handleImportGmailExpenses,
     handleMergeZeroExpense,
     handleSaveTrip,
@@ -193,9 +197,11 @@ export default function App() {
     handleDeleteRecurringExpense,
     handleTriggerRecurringExpense,
     handleIgnoreGmailMessage,
+    handleUnignoreGmailMessage,
     handleSaveGmailRecurringRule,
     handleConfirmSettlement,
     handleDeleteSettlement,
+    handleRestoreSettlement,
     handleUpdateGoalImage,
     handleAddGoal,
     handleUpdateGoal,
@@ -267,6 +273,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isVaultUnlocked) {
+      setUndoNotice(null);
       setHasOpenedGmailDrawer(false);
       setHasOpenedReceiptModal(false);
       setGmailBgState({
@@ -359,6 +366,42 @@ export default function App() {
     setIsAddExpenseOpen(true);
   };
 
+  const handleDeleteExpenseWithUndo = useCallback(
+    (id: string) => {
+      const target = allExpenses.find((e) => e.id === id);
+      handleDeleteExpense(id);
+      if (!target) return;
+      setUndoNotice({
+        id: `undo-exp-${id}-${Date.now()}`,
+        message: `Spesa "${target.title}" (${formatCurrency(
+          target.amount,
+          target.currency || profile.currency
+        )}) eliminata.`,
+        actionLabel: 'Ripristina',
+        onUndo: () => handleRestoreExpense(target),
+      });
+    },
+    [allExpenses, handleDeleteExpense, handleRestoreExpense, profile.currency]
+  );
+
+  const handleDeleteSettlementWithUndo = useCallback(
+    (id: string) => {
+      const target = settlements.find((s) => s.id === id);
+      handleDeleteSettlement(id);
+      if (!target) return;
+      setUndoNotice({
+        id: `undo-stl-${id}-${Date.now()}`,
+        message: `Rimborso del ${target.date} (${formatCurrency(
+          target.amount,
+          target.currency || profile.currency
+        )}) eliminato.`,
+        actionLabel: 'Ripristina',
+        onUndo: () => handleRestoreSettlement(target),
+      });
+    },
+    [settlements, handleDeleteSettlement, handleRestoreSettlement, profile.currency]
+  );
+
   if (isCheckingAuth) {
     return (
       <div data-theme={theme}>
@@ -405,16 +448,22 @@ export default function App() {
         onLockVault={handleLockVault}
         theme={theme}
         onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+        canInstallPwa={Boolean(installPromptEvent)}
+        onInstallPwa={handleInstallPwa}
       />
 
-      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-[calc(7.25rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
+      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
         {reconciliationNotice && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-950">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-950"
+          >
             <span>{reconciliationNotice}</span>
             <button
               type="button"
               onClick={clearReconciliationNotice}
-              className="shrink-0 font-bold text-emerald-800 hover:underline cursor-pointer"
+              className="min-h-10 px-2.5 shrink-0 font-bold text-emerald-800 hover:underline cursor-pointer rounded-lg"
             >
               Chiudi
             </button>
@@ -459,6 +508,7 @@ export default function App() {
             onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
             onNavigateTab={navigateToTab}
             onSelectExpense={handleEditExpense}
+            onDeleteExpense={handleDeleteExpenseWithUndo}
           />
         )}
 
@@ -476,7 +526,7 @@ export default function App() {
               goals={goals}
               trips={trips}
               onEditExpense={handleEditExpense}
-              onDeleteExpense={handleDeleteExpense}
+              onDeleteExpense={handleDeleteExpenseWithUndo}
               onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
               onlyZeroAmount={onlyZeroAmountFilter && zeroAmountExpenses.length > 0}
               onClearZeroAmountFilter={() => setOnlyZeroAmountFilter(false)}
@@ -504,7 +554,7 @@ export default function App() {
               userTotalPaid={balanceSummary.userTotalPaid}
               partnerTotalPaid={balanceSummary.partnerTotalPaid}
               onOpenSettlement={() => setIsSettlementOpen(true)}
-              onDeleteSettlement={handleDeleteSettlement}
+              onDeleteSettlement={handleDeleteSettlementWithUndo}
               onSelectExpense={handleEditExpense}
             />
           )}
@@ -543,7 +593,7 @@ export default function App() {
               setEditingExpense(null);
             }}
             onSave={(data) => handleSaveExpense(data, editingExpense?.id)}
-            onDelete={editingExpense ? handleDeleteExpense : undefined}
+            onDelete={editingExpense ? handleDeleteExpenseWithUndo : undefined}
             onCreditGoal={(goalId, delta) => {
               const target = goals.find((g) => g.id === goalId);
               if (target) {
@@ -584,6 +634,7 @@ export default function App() {
             existingGmailSourceReferences={knownGmailSourceReferences}
             ignoredGmailSourceReferences={ignoredGmailMessageIds}
             onIgnoreGmailMessage={handleIgnoreGmailMessage}
+            onUnignoreGmailMessage={handleUnignoreGmailMessage}
             gmailRecurringRules={gmailRecurringRules}
             onSaveRecurringRule={handleSaveGmailRecurringRule}
             profile={profile}
@@ -632,6 +683,8 @@ export default function App() {
             isDevelopmentSession={authMethod === 'development'}
             onOpenDevModal={isDevConsoleEnabled ? () => setIsDevModalOpen(true) : undefined}
             onOpenStartingPoint={() => setIsStartingPointOpen(true)}
+            canInstallPwa={Boolean(installPromptEvent)}
+            onInstallPwa={handleInstallPwa}
           />
         )}
 
@@ -690,6 +743,8 @@ export default function App() {
           />
         )}
       </Suspense>
+
+      <UndoToast notice={undoNotice} onDismiss={() => setUndoNotice(null)} />
 
       <QuickActionsFab
         isAnyModalOpen={
