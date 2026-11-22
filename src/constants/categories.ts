@@ -356,3 +356,44 @@ export function formatSplitLabel(expense: Pick<Expense, 'splitType' | 'customSpl
   }
   return 'Personale';
 }
+
+export function formatCompactSplitLabel(
+  expense: Pick<Expense, 'splitType' | 'customSplitRatio'>
+): string {
+  if (expense.splitType === '50_50') return '50/50';
+  if (expense.splitType === 'custom') {
+    return `${Math.round((expense.customSplitRatio ?? 0.5) * 100)}%`;
+  }
+  return 'Personale';
+}
+
+const IT_SHORT_MONTHS = [
+  'gen',
+  'feb',
+  'mar',
+  'apr',
+  'mag',
+  'giu',
+  'lug',
+  'ago',
+  'set',
+  'ott',
+  'nov',
+  'dic',
+];
+
+export function formatShortExpenseDate(
+  iso: string,
+  referenceYear = new Date().getFullYear()
+): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso || '').trim());
+  if (!match) return iso;
+  const year = Number(match[1]);
+  const monthIdx = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const monthLabel = IT_SHORT_MONTHS[monthIdx];
+  if (!monthLabel || !Number.isInteger(day) || day < 1 || day > 31) return iso;
+  return year === referenceYear
+    ? `${day} ${monthLabel}`
+    : `${day} ${monthLabel} ${String(year).slice(-2)}`;
+}

@@ -14,7 +14,9 @@ import {
   X,
 } from 'lucide-react';
 import {
+  formatCompactSplitLabel,
   formatCurrency,
+  formatShortExpenseDate,
   formatSplitLabel,
   getActiveCategories,
 } from '../constants/categories';
@@ -188,8 +190,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     <div className="space-y-6">
       {/* Intestazione e Controlli */}
       <div className="ds-card p-4 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+        <div className="flex items-start sm:items-center justify-between gap-3">
+          <div className="min-w-0">
             <h2 className="text-xl font-bold text-stone-900 font-display">
               Registro Spese di Coppia
             </h2>
@@ -210,7 +212,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleExportCsv}
@@ -227,8 +229,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
         </div>
 
         {/* Barre di filtro */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
-          <div className="relative sm:col-span-2 lg:col-span-1">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3 pt-1">
+          <div className="relative col-span-2 lg:col-span-1">
             <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
@@ -402,6 +404,15 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 },
               ];
 
+              const hasSecondaryBadges =
+                exp.source !== 'manual' ||
+                Boolean(exp.linkedSources && exp.linkedSources.length > 1) ||
+                Boolean(exp.recurringRuleId) ||
+                Boolean(exp.tripId && tripNameById.get(exp.tripId)) ||
+                exp.amount <= 0 ||
+                exp.reconciliationStatus === 'zero_quarantine';
+              const hasAnyTags = hasSecondaryBadges || hasDetails;
+
               return (
                 <SwipeableActionRow
                   key={exp.id}
@@ -427,7 +438,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                     tone: 'danger',
                     onTrigger: () => setExpensePendingDelete(exp),
                   }}
-                  contentClassName={`p-3.5 sm:p-4 hover:bg-stone-50/50 transition-colors ${
+                  contentClassName={`px-3.5 py-3 sm:px-4 sm:py-3.5 hover:bg-stone-50/50 transition-colors ${
                     exp.amount <= 0 ? 'border-l-4 border-amber-400 bg-amber-50/40' : ''
                   }`}
                 >
@@ -439,57 +450,96 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                     }}
                     title="Trascina o fai doppio clic per modificare questa spesa"
                   >
-                  <div className="flex items-center justify-between gap-2.5 sm:items-start sm:gap-4">
                     <div
-                      className="flex items-start gap-3 min-w-0 flex-1 sm:cursor-auto cursor-pointer"
-                      onClick={() => {
-                        if (window.innerWidth < 640) {
+                      className="flex items-start gap-3 cursor-pointer sm:cursor-auto"
+                      onClick={(e) => {
+                        if (
+                          window.innerWidth < 640 &&
+                          !(e.target as HTMLElement).closest('button')
+                        ) {
                           onEditExpense(exp);
                         }
                       }}
                     >
-                      <CategoryBadge category={exp.category} size="md" className="sm:hidden mt-0.5" />
-                      <CategoryBadge category={exp.category} size="lg" className="hidden sm:flex" />
+                      <CategoryBadge category={exp.category} size="lg" className="mt-0.5" />
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <h4 className="min-w-0 text-sm font-bold text-stone-900 break-words sm:truncate">
+                        {/* Riga 1: Titolo a tutta larghezza libera + Importo + Azioni */}
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="min-w-0 flex-1 truncate text-[14px] sm:text-[15px] font-bold leading-snug text-stone-900">
                             {exp.title}
                           </h4>
-                          {exp.source !== 'manual' && (
-                            <SourceBadge source={exp.source} compact />
-                          )}
-                          {exp.linkedSources && exp.linkedSources.length > 1 && (
-                            <span
-                              title={`Riconciliata su ${exp.linkedSources.length} canali`}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
-                            >
-                              <GitMerge className="h-3 w-3" />
-                              {exp.linkedSources.length} fonti
+
+                          <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+                            <span className="text-[14px] sm:text-base font-bold font-mono text-stone-900 tabular-nums">
+                              {formatCurrency(exp.amount, exp.currency)}
                             </span>
-                          )}
-                          {exp.recurringRuleId && (
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
-                              <RefreshCw className="h-2.5 w-2.5" />
-                              Fissa
-                            </span>
-                          )}
-                          {exp.tripId && tripNameById.get(exp.tripId) && (
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-500/25 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
-                              <Plane className="h-2.5 w-2.5" />
-                              {tripNameById.get(exp.tripId)}
-                            </span>
-                          )}
-                          {(exp.amount <= 0 || exp.reconciliationStatus === 'zero_quarantine') && (
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/25 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
-                              <AlertTriangle className="h-3 w-3" />
-                              Quarantena 0 €
-                            </span>
-                          )}
+
+                            <div className="sm:hidden shrink-0">
+                              <RowActionMenu
+                                label={`Azioni per ${exp.title}`}
+                                items={mobileMenuItems}
+                                onOpenChange={(open) => setOpenMenuId(open ? exp.id : null)}
+                                triggerClassName="-mr-2 -my-1.5"
+                              />
+                            </div>
+
+                            <div className="hidden sm:flex items-center justify-end gap-1">
+                              {hasDetails && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedId(isExpanded ? null : exp.id)}
+                                  className="min-h-10 min-w-10 p-2 rounded-xl text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors flex items-center justify-center cursor-pointer"
+                                  title="Vedi dettaglio articoli"
+                                  aria-label={`Vedi dettagli di ${exp.title}`}
+                                >
+                                  <ChevronDown
+                                    className={`w-3.5 h-3.5 transition-transform ${
+                                      isExpanded ? 'rotate-180' : ''
+                                    }`}
+                                  />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => onEditExpense(exp)}
+                                className="min-h-10 min-w-10 px-2 py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                title="Modifica spesa"
+                                aria-label={`Modifica ${exp.title}`}
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setExpensePendingDelete(exp)}
+                                className="min-h-10 min-w-10 p-2 rounded-xl text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-colors flex items-center justify-center cursor-pointer"
+                                title="Elimina spesa"
+                                aria-label={`Elimina ${exp.title}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-stone-500">
-                          <span className="font-mono text-[11px]">{exp.date}</span>
+                        {/* Riga 2: Metadati compatti su smartphone, completi su desktop */}
+                        <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-stone-500 sm:hidden">
+                          <div className="min-w-0 truncate">
+                            <time dateTime={exp.date}>{formatShortExpenseDate(exp.date)}</time>
+                            {' · '}
+                            <span className="font-medium text-stone-700">{payerName}</span>
+                            {' · '}
+                            <span>{exp.category}</span>
+                          </div>
+                          <span className="shrink-0 font-mono text-[11px] font-medium text-stone-500">
+                            {formatCompactSplitLabel(exp)}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 hidden sm:flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-stone-500">
+                          <time dateTime={exp.date} className="font-mono text-[11px]">
+                            {exp.date}
+                          </time>
                           <span aria-hidden="true">·</span>
                           <span>{exp.category}</span>
                           <span aria-hidden="true">·</span>
@@ -500,73 +550,73 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                           <span>{formatSplitLabel(exp)}</span>
                         </div>
 
+                        {/* Riga 3: Badge origine / stato / dettagli scontrino */}
+                        {hasAnyTags && (
+                          <div className={hasSecondaryBadges ? 'mt-1.5' : 'mt-1.5 sm:hidden'}>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {exp.source !== 'manual' && (
+                                <SourceBadge source={exp.source} compact />
+                              )}
+                              {exp.linkedSources && exp.linkedSources.length > 1 && (
+                                <span
+                                  title={`Riconciliata su ${exp.linkedSources.length} canali`}
+                                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                                >
+                                  <GitMerge className="h-3 w-3" />
+                                  {exp.linkedSources.length} fonti
+                                </span>
+                              )}
+                              {exp.recurringRuleId && (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-500/25 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                                  <RefreshCw className="h-2.5 w-2.5" />
+                                  Fissa
+                                </span>
+                              )}
+                              {exp.tripId && tripNameById.get(exp.tripId) && (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-500/25 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                                  <Plane className="h-2.5 w-2.5" />
+                                  {tripNameById.get(exp.tripId)}
+                                </span>
+                              )}
+                              {(exp.amount <= 0 || exp.reconciliationStatus === 'zero_quarantine') && (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/25 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Quarantena 0 €
+                                </span>
+                              )}
+                              {hasDetails && (
+                                <button
+                                  type="button"
+                                  data-no-swipe="true"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedId(isExpanded ? null : exp.id);
+                                  }}
+                                  className="sm:hidden inline-flex items-center gap-1 rounded-md border border-orange-500/25 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 cursor-pointer"
+                                >
+                                  <ChevronDown
+                                    className={`h-3 w-3 transition-transform ${
+                                      isExpanded ? 'rotate-180' : ''
+                                    }`}
+                                    aria-hidden="true"
+                                  />
+                                  <span>{isExpanded ? 'Nascondi scontrino' : 'Scontrino'}</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {exp.notes && (
-                          <p className="mt-1 break-words text-xs italic text-stone-600 line-clamp-2 sm:line-clamp-none">
+                          <p className="mt-1 break-words text-[11px] sm:text-xs text-stone-500 line-clamp-1 sm:line-clamp-2">
                             {exp.notes}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 sm:flex-col sm:items-end sm:gap-1.5 sm:text-right shrink-0">
-                      <div className="text-right">
-                        <div className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
-                          {formatCurrency(exp.amount, exp.currency)}
-                        </div>
-                        {hasDetails && (
-                          <span className="sm:hidden block text-[10px] font-medium text-orange-600">
-                            {isExpanded ? 'Dettagli aperti' : 'Con allegato'}
-                          </span>
-                        )}
-                      </div>
-
-                      <RowActionMenu
-                        label={`Azioni per ${exp.title}`}
-                        items={mobileMenuItems}
-                        onOpenChange={(open) => setOpenMenuId(open ? exp.id : null)}
-                        className="sm:hidden"
-                      />
-
-                      <div className="hidden sm:flex items-center justify-end gap-1">
-                        {hasDetails && (
-                          <button
-                            type="button"
-                            onClick={() => setExpandedId(isExpanded ? null : exp.id)}
-                            className="min-h-10 min-w-10 p-2 rounded-xl text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors flex items-center justify-center cursor-pointer"
-                            title="Vedi dettaglio articoli"
-                            aria-label={`Vedi dettagli di ${exp.title}`}
-                          >
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 transition-transform ${
-                                isExpanded ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => onEditExpense(exp)}
-                          className="min-h-10 min-w-10 px-2 py-2 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          title="Modifica spesa"
-                          aria-label={`Modifica ${exp.title}`}
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setExpensePendingDelete(exp)}
-                          className="min-h-10 min-w-10 p-2 rounded-xl text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-colors flex items-center justify-center cursor-pointer"
-                          title="Elimina spesa"
-                          aria-label={`Elimina ${exp.title}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-3 pt-3 border-t border-stone-100 bg-stone-50/50 -mx-3.5 sm:-mx-4 -mb-3.5 sm:-mb-4 p-4 rounded-b-xl space-y-3">
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-stone-100 bg-stone-50/50 -mx-3.5 sm:-mx-4 -mb-3 sm:-mb-3.5 p-4 rounded-b-xl space-y-3">
                       {exp.items && exp.items.length > 0 && (
                         <div>
                           <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-wide block mb-1">

@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, Edit3, Flag, Plane, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import {
+  formatCompactSplitLabel,
   formatCurrency,
+  formatShortExpenseDate,
   formatSplitLabel,
   getCategoryMeta,
 } from '../constants/categories';
@@ -525,13 +527,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       </div>
 
       {/* 3. Ultime Transazioni Registrate */}
-      <div className="ds-card p-4 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+      <div className="ds-card overflow-hidden">
+        <div className="flex items-start sm:items-center justify-between gap-3 px-4 pt-4 pb-3 sm:px-6 sm:pt-5 sm:pb-4">
+          <div className="min-w-0">
             <h3 className="text-base font-bold text-stone-900 font-display">
               Ultime Spese di Coppia
             </h3>
-            <p className="text-xs text-stone-500">
+            <p className="text-xs text-stone-500 mt-0.5">
               Ultime spese divise tra {profile.userName} e {profile.partnerName} · Scorri per azioni rapide
             </p>
           </div>
@@ -545,140 +547,160 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </button>
         </div>
 
-        <div className="divide-y divide-stone-100 -mx-1 sm:mx-0">
-          {recentExpenses.map((exp) => (
-            <SwipeableActionRow
-              key={exp.id}
-              disabled={openMenuId === exp.id}
-              openSide={openSwipe?.id === exp.id ? openSwipe.side : null}
-              onOpenSideChange={(side) => {
-                setOpenSwipe((current) => {
-                  if (side) return { id: exp.id, side };
-                  return current?.id === exp.id ? null : current;
-                });
-              }}
-              leftAction={{
-                label: 'Modifica',
-                armedLabel: 'Modifica',
-                icon: <Edit3 className="w-5 h-5" />,
-                tone: 'primary',
-                onTrigger: () => onSelectExpense(exp),
-              }}
-              rightAction={
-                onDeleteExpense
-                  ? {
-                      label: 'Elimina',
-                      armedLabel: 'Elimina',
-                      icon: <Trash2 className="w-5 h-5" />,
-                      tone: 'danger',
-                      onTrigger: () => setExpensePendingDelete(exp),
-                    }
-                  : undefined
-              }
-              contentClassName="hover:bg-stone-50/70 transition-colors"
-            >
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectExpense(exp)}
-                onDoubleClick={() => onSelectExpense(exp)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectExpense(exp);
-                  }
+        <div className="divide-y divide-stone-100 border-t border-stone-100">
+          {recentExpenses.map((exp) => {
+            const payerName = exp.payer === 'user' ? profile.userName : profile.partnerName;
+            return (
+              <SwipeableActionRow
+                key={exp.id}
+                disabled={openMenuId === exp.id}
+                openSide={openSwipe?.id === exp.id ? openSwipe.side : null}
+                onOpenSideChange={(side) => {
+                  setOpenSwipe((current) => {
+                    if (side) return { id: exp.id, side };
+                    return current?.id === exp.id ? null : current;
+                  });
                 }}
-                title="Tocca, trascina o fai doppio clic per modificare questa spesa"
-                className="flex cursor-pointer items-center gap-3 px-2.5 py-3.5"
+                leftAction={{
+                  label: 'Modifica',
+                  armedLabel: 'Modifica',
+                  icon: <Edit3 className="w-5 h-5" />,
+                  tone: 'primary',
+                  onTrigger: () => onSelectExpense(exp),
+                }}
+                rightAction={
+                  onDeleteExpense
+                    ? {
+                        label: 'Elimina',
+                        armedLabel: 'Elimina',
+                        icon: <Trash2 className="w-5 h-5" />,
+                        tone: 'danger',
+                        onTrigger: () => setExpensePendingDelete(exp),
+                      }
+                    : undefined
+                }
+                contentClassName="hover:bg-stone-50/70 transition-colors"
               >
-                <CategoryBadge category={exp.category} size="md" />
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectExpense(exp)}
+                  onDoubleClick={() => onSelectExpense(exp)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectExpense(exp);
+                    }
+                  }}
+                  title="Tocca, trascina o fai doppio clic per modificare questa spesa"
+                  className="flex cursor-pointer items-center gap-3 px-3.5 py-3 sm:px-6 sm:py-3.5"
+                >
+                  <CategoryBadge category={exp.category} size="lg" />
 
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="text-sm font-bold text-stone-900 truncate">
-                    {exp.title}
-                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 truncate text-[14px] font-bold text-stone-900">
+                        {exp.title}
+                      </div>
 
-                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-stone-500">
-                    <span className="font-mono">{exp.date}</span>
-                    <span aria-hidden="true">·</span>
-                    <strong className="text-stone-700">
-                      {exp.payer === 'user'
-                        ? profile.userName
-                        : profile.partnerName}
-                    </strong>
-                    <span aria-hidden="true">·</span>
-                    <span>{formatSplitLabel(exp)}</span>
-                    <SourceBadge source={exp.source} compact />
-                  </div>
-                </div>
+                      <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+                        <span className="text-[14px] sm:text-base font-bold font-mono text-stone-900 tabular-nums">
+                          {formatCurrency(exp.amount, exp.currency)}
+                        </span>
 
-                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                  <span className="text-sm sm:text-base font-bold font-mono text-stone-900 tabular-nums">
-                    {formatCurrency(exp.amount, exp.currency)}
-                  </span>
+                        <div className="sm:hidden shrink-0">
+                          <RowActionMenu
+                            label={`Azioni per ${exp.title}`}
+                            onOpenChange={(open) => setOpenMenuId(open ? exp.id : null)}
+                            triggerClassName="-mr-2 -my-1.5"
+                            items={[
+                              {
+                                id: 'edit',
+                                label: 'Modifica spesa',
+                                icon: <Edit3 className="w-4 h-4 text-orange-600" />,
+                                onSelect: () => onSelectExpense(exp),
+                              },
+                              ...(onDeleteExpense
+                                ? [
+                                    {
+                                      id: 'delete',
+                                      label: 'Elimina spesa',
+                                      icon: <Trash2 className="w-4 h-4" />,
+                                      tone: 'danger' as const,
+                                      onSelect: () => {
+                                        setOpenSwipe(null);
+                                        setExpensePendingDelete(exp);
+                                      },
+                                    },
+                                  ]
+                                : []),
+                            ]}
+                          />
+                        </div>
 
-                  <RowActionMenu
-                    label={`Azioni per ${exp.title}`}
-                    onOpenChange={(open) => setOpenMenuId(open ? exp.id : null)}
-                    className="sm:hidden"
-                    items={[
-                      {
-                        id: 'edit',
-                        label: 'Modifica spesa',
-                        icon: <Edit3 className="w-4 h-4 text-orange-600" />,
-                        onSelect: () => onSelectExpense(exp),
-                      },
-                      ...(onDeleteExpense
-                        ? [
-                            {
-                              id: 'delete',
-                              label: 'Elimina spesa',
-                              icon: <Trash2 className="w-4 h-4" />,
-                              tone: 'danger' as const,
-                              onSelect: () => {
+                        <div className="hidden sm:flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectExpense(exp);
+                            }}
+                            aria-label={`Modifica ${exp.title}`}
+                            title="Modifica spesa"
+                            className="h-9 w-9 rounded-xl text-stone-400 hover:text-stone-900 hover:bg-stone-100 inline-flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          {onDeleteExpense && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setOpenSwipe(null);
                                 setExpensePendingDelete(exp);
-                              },
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
+                              }}
+                              aria-label={`Elimina ${exp.title}`}
+                              title="Elimina spesa"
+                              className="h-9 w-9 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <ChevronRight
+                          className="hidden sm:inline w-4 h-4 text-stone-400 shrink-0"
+                          aria-hidden="true"
+                        />
+                      </div>
+                    </div>
 
-                  <div className="hidden sm:flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectExpense(exp);
-                      }}
-                      aria-label={`Modifica ${exp.title}`}
-                      title="Modifica spesa"
-                      className="h-9 w-9 rounded-xl text-stone-400 hover:text-stone-900 hover:bg-stone-100 inline-flex items-center justify-center transition-colors cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    {onDeleteExpense && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenSwipe(null);
-                          setExpensePendingDelete(exp);
-                        }}
-                        aria-label={`Elimina ${exp.title}`}
-                        title="Elimina spesa"
-                        className="h-9 w-9 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-stone-500">
+                      <div className="min-w-0 truncate">
+                        <span className="sm:hidden">
+                          <time dateTime={exp.date}>{formatShortExpenseDate(exp.date)}</time>
+                          {' · '}
+                          <strong className="font-medium text-stone-700">{payerName}</strong>
+                          {' · '}
+                          <span>{formatCompactSplitLabel(exp)}</span>
+                        </span>
+                        <span className="hidden sm:inline">
+                          <time dateTime={exp.date} className="font-mono">
+                            {exp.date}
+                          </time>
+                          {' · '}
+                          <strong className="text-stone-700">{payerName}</strong>
+                          {' · '}
+                          <span>{formatSplitLabel(exp)}</span>
+                        </span>
+                      </div>
+
+                      {exp.source !== 'manual' && <SourceBadge source={exp.source} compact />}
+                    </div>
                   </div>
-                  <ChevronRight className="hidden sm:inline w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
                 </div>
-              </div>
-            </SwipeableActionRow>
-          ))}
+              </SwipeableActionRow>
+            );
+          })}
         </div>
       </div>
 

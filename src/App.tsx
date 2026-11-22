@@ -417,6 +417,8 @@ export default function App() {
           profile={profile}
           onUnlock={handleUnlock}
           enableLocalDevelopmentLogin={import.meta.env.DEV}
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
         />
         {import.meta.env.DEV && isDevModalOpen && (
           <Suspense fallback={null}>
@@ -452,7 +454,7 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
       />
 
-      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
+      <main className="flex-1 min-w-0 max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-10 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] lg:pt-8 lg:pb-12">
         {reconciliationNotice && (
           <div
             role="status"

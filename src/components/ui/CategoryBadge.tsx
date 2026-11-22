@@ -31,11 +31,15 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
 }) => {
   const meta = getCategoryMeta(category, goals);
   const Icon = meta.icon;
+  const hasExplicitDisplay = /(?:^|\s)(hidden|block|inline|inline-block|flex|inline-flex|grid|inline-grid)\b/.test(
+    className
+  );
+  const displayClass = hasExplicitDisplay ? '' : 'inline-flex';
 
   if (showLabel) {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold ${meta.bgClass} ${meta.textClass} ${meta.borderClass} ${className}`}
+        className={`${displayClass} items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold ${meta.bgClass} ${meta.textClass} ${meta.borderClass} ${className}`.trim()}
       >
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{category}</span>
@@ -45,7 +49,7 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
 
   return (
     <div
-      className={`inline-flex shrink-0 items-center justify-center border ${BOX_SIZES[size]} ${meta.bgClass} ${meta.textClass} ${meta.borderClass} ${className}`}
+      className={`${displayClass} shrink-0 items-center justify-center border ${BOX_SIZES[size]} ${meta.bgClass} ${meta.textClass} ${meta.borderClass} ${className}`.trim()}
       title={category}
       aria-hidden="true"
     >

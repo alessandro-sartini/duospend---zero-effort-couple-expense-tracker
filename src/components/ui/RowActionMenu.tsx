@@ -15,6 +15,7 @@ interface RowActionMenuProps {
   items: RowActionMenuItem[];
   onOpenChange?: (open: boolean) => void;
   className?: string;
+  triggerClassName?: string;
 }
 
 interface MenuCoords {
@@ -32,12 +33,17 @@ export const RowActionMenu: React.FC<RowActionMenuProps> = ({
   items,
   onOpenChange,
   className = '',
+  triggerClassName = '',
 }) => {
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [coords, setCoords] = useState<MenuCoords>({ top: 0, right: 12 });
+  const hasExplicitDisplay = /(?:^|\s)(hidden|block|inline|inline-block|flex|inline-flex|grid|inline-grid)\b/.test(
+    className
+  );
+  const displayClass = hasExplicitDisplay ? '' : 'inline-flex';
 
   const setOpenState = useCallback(
     (next: boolean) => {
@@ -121,7 +127,7 @@ export const RowActionMenu: React.FC<RowActionMenuProps> = ({
   if (items.length === 0) return null;
 
   return (
-    <div className={`inline-flex ${className}`}>
+    <div className={`${displayClass} ${className}`.trim()}>
       <button
         ref={triggerRef}
         type="button"
@@ -137,7 +143,7 @@ export const RowActionMenu: React.FC<RowActionMenuProps> = ({
           }
           setOpenState(!isOpen);
         }}
-        className="min-h-10 min-w-10 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 inline-flex items-center justify-center transition-colors cursor-pointer"
+        className={`min-h-10 min-w-10 rounded-xl text-stone-500 hover:text-stone-900 hover:bg-stone-100 inline-flex items-center justify-center transition-colors cursor-pointer ${triggerClassName}`.trim()}
       >
         <MoreVertical className="w-4 h-4" aria-hidden="true" />
       </button>

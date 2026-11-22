@@ -512,3 +512,79 @@ body,
 [data-theme='dark'] .border-amber-400 {
   border-color: #a16207;
 }
+
+/* Schermata di accesso mobile-first e adattiva chiaro/scuro */
+.ds-login-page {
+  background-color: var(--theme-bg);
+  background-image: radial-gradient(
+    ellipse 85% 48% at 50% -6%,
+    rgba(249, 115, 22, 0.16),
+    rgba(251, 113, 133, 0.06) 46%,
+    transparent 74%
+  );
+}
+
+[data-theme='dark'] .ds-login-page {
+  background-color: var(--theme-bg);
+  background-image: radial-gradient(
+    ellipse 85% 48% at 50% -6%,
+    rgba(249, 115, 22, 0.17),
+    rgba(251, 113, 133, 0.07) 46%,
+    transparent 74%
+  );
+}
+
+.ds-login-card {
+  background-color: transparent;
+}
+
+@media (min-width: 640px) {
+  .ds-login-card {
+    background-color: var(--theme-surface);
+    border: 1px solid var(--theme-border);
+    box-shadow: 0 24px 60px -24px rgba(28, 25, 23, 0.18);
+  }
+
+  [data-theme='dark'] .ds-login-card {
+    box-shadow: 0 28px 70px -20px rgba(0, 0, 0, 0.72);
+  }
+}
+
+.ds-login-logo-halo {
+  background: radial-gradient(
+    circle,
+    rgba(249, 115, 22, 0.18) 0%,
+    rgba(251, 113, 133, 0.08) 55%,
+    transparent 75%
+  );
+}
+
+.ds-login-google-btn {
+  background-color: #ffffff;
+  color: #1c1917;
+  border: 1px solid #d5cdc0;
+  box-shadow: 0 8px 22px -10px rgba(28, 25, 23, 0.18);
+}
+
+.ds-login-google-btn:hover:not(:disabled) {
+  border-color: #ea580c;
+  background-color: #fffdfa;
+}
+
+[data-theme='dark'] .ds-login-google-btn {
+  background-color: #faf7f2;
+  color: #1c1917;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme='dark'] .ds-login-google-btn:hover:not(:disabled) {
+  background-color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.ds-login-pill {
+  background-color: var(--theme-surface-raised);
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-muted);
+}

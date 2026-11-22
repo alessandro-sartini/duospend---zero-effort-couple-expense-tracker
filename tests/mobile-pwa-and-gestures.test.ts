@@ -5,12 +5,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { DashboardOverview } from '../src/components/DashboardOverview';
 import { ExpenseList } from '../src/components/ExpenseList';
+import { LoginGate } from '../src/components/LoginGate';
 import { Navbar } from '../src/components/Navbar';
 import { NotificationSyncModal } from '../src/components/NotificationSyncModal';
 import { SettlementView } from '../src/components/SettlementView';
+import { CategoryBadge } from '../src/components/ui/CategoryBadge';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { RowActionMenu } from '../src/components/ui/RowActionMenu';
 import { UndoToast } from '../src/components/ui/UndoToast';
+import { formatCompactSplitLabel, formatShortExpenseDate } from '../src/constants/categories';
 import type { CoupleProfile, Expense, Settlement } from '../src/types';
 import {
   computeHybridSwipeOffset,
@@ -379,6 +382,7 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       expect(expenseListHtml).toContain('aria-label="Azioni per Esselunga Spesa"');
       expect(expenseListHtml).toContain('aria-label="Modifica Esselunga Spesa"');
       expect(expenseListHtml).toContain('aria-label="Elimina Esselunga Spesa"');
+      expect((expenseListHtml.match(/title="Spesa"/g) ?? []).length).toBe(1);
 
       const dashboardHtml = renderToStaticMarkup(
         React.createElement(DashboardOverview, {
@@ -397,6 +401,8 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       expect(dashboardHtml).toContain('Ultime Spese di Coppia');
       expect(dashboardHtml).toContain('aria-label="Azioni per Esselunga Spesa"');
       expect(dashboardHtml).toContain('aria-label="Elimina Esselunga Spesa"');
+      expect((dashboardHtml.match(/title="Spesa"/g) ?? []).length).toBe(1);
+      expect(dashboardHtml).not.toContain('Manuale');
 
       const settlementHtml = renderToStaticMarkup(
         React.createElement(SettlementView, {
@@ -441,6 +447,52 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       );
       expect(navbarHtml).toContain('aria-label="Installa app DuoSpend su questo dispositivo"');
       expect(navbarHtml).toContain('aria-haspopup="menu"');
+    });
+
+    it('formatta date e quote compatte, evita collisioni inline-flex/hidden su CategoryBadge e rende LoginGate completo', () => {
+      expect(formatCompactSplitLabel({ splitType: '50_50' })).toBe('50/50');
+      expect(formatCompactSplitLabel({ splitType: 'custom', customSplitRatio: 0.7 })).toBe('70%');
+      expect(formatCompactSplitLabel({ splitType: '100_user' })).toBe('Personale');
+      expect(formatCompactSplitLabel({ splitType: '100_partner' })).toBe('Personale');
+
+      expect(formatShortExpenseDate('2026-11-21', 2026)).toBe('21 nov');
+      expect(formatShortExpenseDate('2025-11-21', 2026)).toBe('21 nov 25');
+
+      const hiddenBadgeHtml = renderToStaticMarkup(
+        React.createElement(CategoryBadge, {
+          category: 'Spesa',
+          size: 'lg',
+          className: 'hidden sm:flex',
+        })
+      );
+      expect(hiddenBadgeHtml).not.toMatch(/\binline-flex\b/);
+      expect(hiddenBadgeHtml).toContain('hidden sm:flex');
+
+      const prodLoginHtml = renderToStaticMarkup(
+        React.createElement(LoginGate, {
+          profile: sampleProfile,
+          onUnlock: async () => true,
+          enableLocalDevelopmentLogin: false,
+          theme: 'dark',
+          onToggleTheme: () => {},
+        })
+      );
+      expect(prodLoginHtml).toContain('Duo');
+      expect(prodLoginHtml).toContain('Spend');
+      expect(prodLoginHtml).toContain('Accedi con Google');
+      expect(prodLoginHtml).toContain('Accesso verificato dal server');
+      expect(prodLoginHtml).toContain('aria-label="Attiva tema chiaro"');
+      expect(prodLoginHtml).not.toContain('Password di sviluppo locale');
+
+      const devLoginHtml = renderToStaticMarkup(
+        React.createElement(LoginGate, {
+          profile: sampleProfile,
+          onUnlock: async () => true,
+          enableLocalDevelopmentLogin: true,
+        })
+      );
+      expect(devLoginHtml).toContain('aria-label="Password di sviluppo locale"');
+      expect(devLoginHtml).toContain('Sviluppo locale');
     });
   });
 });
