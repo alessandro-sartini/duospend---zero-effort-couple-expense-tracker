@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "duospend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -12,6 +12,10 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "release": "node scripts/release.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major",
     "tunnel": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/secure-tunnel.ps1"
   },
   "dependencies": {

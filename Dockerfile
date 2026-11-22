@@ -9,7 +9,11 @@ RUN npm install
 COPY . .
 
 ARG VITE_GOOGLE_CLIENT_ID=""
-ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+ARG APP_BUILD_SHA="unknown"
+ARG APP_BUILD_TIME=""
+ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID} \
+    APP_BUILD_SHA=${APP_BUILD_SHA} \
+    APP_BUILD_TIME=${APP_BUILD_TIME}
 
 RUN npm run build
 
@@ -18,10 +22,15 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
+ARG APP_BUILD_SHA="unknown"
+ARG APP_BUILD_TIME=""
+
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
-    DB_PATH=/app/data/duospend.sqlite
+    DB_PATH=/app/data/duospend.sqlite \
+    APP_BUILD_SHA=${APP_BUILD_SHA} \
+    APP_BUILD_TIME=${APP_BUILD_TIME}
 
 COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force

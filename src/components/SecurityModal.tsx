@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Calendar, Check, Flag, Lock, Mail, ShieldCheck, Sparkles, Terminal, UserCheck, Users, Wallet } from 'lucide-react';
 import { deriveNameFromEmail } from '../services/storage';
+import { formatAppVersionLabel } from '../services/version';
 import { CoupleProfile } from '../types';
 import { ModalShell } from './ui/ModalShell';
 
@@ -349,7 +350,8 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
               </span>
             ) : (
               <span className="text-stone-400">
-                Le modifiche saranno sincronizzate con il server.
+                Le modifiche saranno sincronizzate con il server ·{' '}
+                <span className="font-mono text-stone-500">{formatAppVersionLabel()}</span>
               </span>
             )}
             <button

@@ -20,6 +20,7 @@ import savingsChallengesRoutes from './routes/savings-challenges';
 import { hasPathTraversalOrForbiddenRoute, stripDangerousKeys } from './utils/security';
 import { pruneExpiredGoogleSessions } from './services/google-auth';
 import { hasValidWebhookSecret, pruneExpiredDeveloperSessions } from './middleware/auth';
+import { formatServerVersionLabel, getAppVersionInfo } from './version';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -140,7 +141,15 @@ app.use('/api', (req, res, next) => {
   next();
 });
 app.get('/api/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', uptime: Math.round(process.uptime()) });
+  const versionInfo = getAppVersionInfo();
+  res.status(200).json({
+    status: 'ok',
+    name: versionInfo.name,
+    version: versionInfo.version,
+    buildSha: versionInfo.buildSha,
+    buildTime: versionInfo.buildTime,
+    uptime: Math.round(process.uptime()),
+  });
 });
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use(express.json({ limit: '15mb', strict: true }));
@@ -251,6 +260,8 @@ export async function startServer() {
 
   const listenHost = process.env.NODE_ENV === 'production' ? HOST : '127.0.0.1';
   app.listen(PORT, listenHost, () => {
-    console.log(`DuoSpend server running at http://${listenHost}:${PORT}`);
+    console.log(
+      `DuoSpend ${formatServerVersionLabel()} running at http://${listenHost}:${PORT}`
+    );
   });
 }
