@@ -373,7 +373,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-stone-100">
+          <div className="ds-stagger divide-y divide-stone-100">
             {filteredExpenses.map((exp) => {
               const isExpanded = expandedId === exp.id;
               const hasDetails = Boolean((exp.items && exp.items.length > 0) || exp.receiptUrl);
@@ -616,7 +616,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                     </div>
 
                     {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-stone-100 bg-stone-50/50 -mx-3.5 sm:-mx-4 -mb-3 sm:-mb-3.5 p-4 rounded-b-xl space-y-3">
+                      <div className="ds-expand-in mt-3 pt-3 border-t border-stone-100 bg-stone-50/50 -mx-3.5 sm:-mx-4 -mb-3 sm:-mb-3.5 p-4 rounded-b-xl space-y-3">
                       {exp.items && exp.items.length > 0 && (
                         <div>
                           <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-wide block mb-1">

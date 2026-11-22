@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, CheckCircle2, Scale, Users, Wallet } from 'lucide-react';
 import { formatCurrency } from '../../constants/categories';
+import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
 import type { CoupleProfile } from '../../types';
 import { StatCard } from '../ui/StatCard';
 
@@ -33,6 +34,11 @@ export const BalanceHeroCard: React.FC<BalanceHeroCardProps> = ({
   const totalPaid = userTotalPaid + partnerTotalPaid;
   const userPercent = totalPaid > 0 ? Math.round((userTotalPaid / totalPaid) * 100) : 50;
   const partnerPercent = totalPaid > 0 ? 100 - userPercent : 50;
+  const animatedBalanceAbs = useAnimatedNumber(balanceAbs);
+  const animatedUserPaid = useAnimatedNumber(userTotalPaid);
+  const animatedPartnerPaid = useAnimatedNumber(partnerTotalPaid);
+  const animatedTotalShared = useAnimatedNumber(totalSharedSpend);
+  const animatedFairShareEach = useAnimatedNumber(fairShareEach);
 
   return (
     <section className="ds-card p-5 sm:p-6">
@@ -61,14 +67,14 @@ export const BalanceHeroCard: React.FC<BalanceHeroCardProps> = ({
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 font-display">
                 {profile.partnerName} ti deve{' '}
                 <span className="font-mono text-emerald-600 tabular-nums">
-                  {formatCurrency(balanceAbs, profile.currency)}
+                  {formatCurrency(animatedBalanceAbs, profile.currency)}
                 </span>
               </h2>
             ) : (
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 font-display">
                 Devi a {profile.partnerName}{' '}
                 <span className="font-mono text-orange-600 tabular-nums">
-                  {formatCurrency(balanceAbs, profile.currency)}
+                  {formatCurrency(animatedBalanceAbs, profile.currency)}
                 </span>
               </h2>
             )}
@@ -154,14 +160,14 @@ export const BalanceHeroCard: React.FC<BalanceHeroCardProps> = ({
           <StatCard
             variant="subcard"
             label={`Pagato da ${profile.userName}`}
-            value={formatCurrency(userTotalPaid, profile.currency)}
+            value={formatCurrency(animatedUserPaid, profile.currency)}
             icon={Wallet}
             iconClassName="bg-orange-500/12 text-orange-600 border-orange-500/25"
             subtitle={
               variant === 'settlement'
                 ? userTotalPaid >= fairShareEach
-                  ? `+${formatCurrency(userTotalPaid - fairShareEach, profile.currency)} oltre la quota del 50%`
-                  : `-${formatCurrency(fairShareEach - userTotalPaid, profile.currency)} sotto la quota del 50%`
+                  ? `+${formatCurrency(Math.max(0, animatedUserPaid - animatedFairShareEach), profile.currency)} oltre la quota del 50%`
+                  : `-${formatCurrency(Math.max(0, animatedFairShareEach - animatedUserPaid), profile.currency)} sotto la quota del 50%`
                 : totalSharedSpend > 0
                   ? `${userPercent}% del totale coppia`
                   : 'Nessuna spesa'
@@ -171,14 +177,14 @@ export const BalanceHeroCard: React.FC<BalanceHeroCardProps> = ({
           <StatCard
             variant="subcard"
             label={`Pagato da ${profile.partnerName}`}
-            value={formatCurrency(partnerTotalPaid, profile.currency)}
+            value={formatCurrency(animatedPartnerPaid, profile.currency)}
             icon={Users}
             iconClassName="bg-emerald-500/12 text-emerald-600 border-emerald-500/25"
             subtitle={
               variant === 'settlement'
                 ? partnerTotalPaid >= fairShareEach
-                  ? `+${formatCurrency(partnerTotalPaid - fairShareEach, profile.currency)} oltre la quota del 50%`
-                  : `-${formatCurrency(fairShareEach - partnerTotalPaid, profile.currency)} sotto la quota del 50%`
+                  ? `+${formatCurrency(Math.max(0, animatedPartnerPaid - animatedFairShareEach), profile.currency)} oltre la quota del 50%`
+                  : `-${formatCurrency(Math.max(0, animatedFairShareEach - animatedPartnerPaid), profile.currency)} sotto la quota del 50%`
                 : totalSharedSpend > 0
                   ? `${partnerPercent}% del totale coppia`
                   : 'Nessuna spesa'
@@ -188,14 +194,14 @@ export const BalanceHeroCard: React.FC<BalanceHeroCardProps> = ({
           <StatCard
             variant="subcard"
             label="Totale Spese Condivise"
-            value={formatCurrency(totalSharedSpend, profile.currency)}
+            value={formatCurrency(animatedTotalShared, profile.currency)}
             valueClassName="text-orange-600"
             icon={Scale}
             iconClassName="bg-blue-500/12 text-blue-600 border-blue-500/25"
             subtitle={
               <>
                 <strong className="text-stone-700 font-mono">
-                  {formatCurrency(fairShareEach, profile.currency)}
+                  {formatCurrency(animatedFairShareEach, profile.currency)}
                 </strong>{' '}
                 quota equa a testa (50%)
               </>

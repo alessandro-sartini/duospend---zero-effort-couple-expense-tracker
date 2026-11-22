@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MoreVertical } from 'lucide-react';
+import { useOverlayBackHandler } from '../../hooks/useOverlayBackHandler';
 
 export interface RowActionMenuItem {
   id: string;
@@ -52,6 +53,8 @@ export const RowActionMenu: React.FC<RowActionMenuProps> = ({
     },
     [onOpenChange]
   );
+
+  useOverlayBackHandler(isOpen, () => setOpenState(false));
 
   const computePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -170,7 +173,9 @@ export const RowActionMenu: React.FC<RowActionMenuProps> = ({
                 bottom: coords.bottom,
                 right: coords.right,
               }}
-              className="ds-card fixed z-[51] min-w-48 rounded-2xl p-1.5 shadow-2xl"
+              className={`${
+                coords.bottom !== undefined ? 'ds-anim-pop' : 'ds-anim-pop-top'
+              } ds-card fixed z-[51] min-w-48 rounded-2xl p-1.5 shadow-2xl`}
             >
               {items.map((item) => (
                 <button

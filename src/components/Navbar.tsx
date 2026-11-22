@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CoupleProfile } from '../types';
 import type { Theme } from '../services/theme';
+import { useOverlayBackHandler } from '../hooks/useOverlayBackHandler';
 import { DuoSpendLogo } from './ui/DuoSpendLogo';
 import { SyncStatusBadge } from './ui/Loader';
 
@@ -77,6 +78,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     onTabChange(tab);
     setIsMoreOpen(false);
   };
+
+  useOverlayBackHandler(isMoreOpen, () => setIsMoreOpen(false));
 
   const quickActions: Array<{
     id: string;
@@ -251,7 +254,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   id="secondary-navigation"
                   role="menu"
                   aria-label="Altre sezioni"
-                  className="ds-card absolute right-0 top-full z-40 mt-2 min-w-52 p-1.5 shadow-xl"
+                  className="ds-anim-pop-top ds-card absolute right-0 top-full z-40 mt-2 min-w-52 p-1.5 shadow-xl"
                 >
                   {lgSecondaryItems.map((item) => {
                     const Icon = item.icon;
@@ -281,7 +284,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Zona 3: Toolbar Impostazioni Rapide */}
           <div className="flex shrink-0 items-center gap-2">
             {/* Toolbar Icone (Mobile & Desktop) */}
-            <div className="flex items-center gap-0.5 rounded-xl border border-stone-200/80 ds-nav-track p-1">
+            <div className="flex items-center gap-0.5 rounded-xl border border-stone-200/80 ds-nav-track p-0.5 sm:p-1">
               {quickActions.map((action) => {
                 const Icon = action.icon;
                 return (
@@ -292,9 +295,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                     title={action.label}
                     aria-label={action.ariaLabel || action.label}
                     aria-pressed={action.pressed}
-                    className="relative flex h-10 w-10 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-200/60 hover:text-stone-900 transition-colors cursor-pointer"
+                    className="relative flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-200/60 hover:text-stone-900 active:scale-95 transition-all duration-150 cursor-pointer"
                   >
-                    <Icon className={`h-4 w-4 ${action.iconClass}`} />
+                    <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${action.iconClass}`} />
                     {action.badgeDot && (
                       <span
                         className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-[var(--theme-nav-track)]"
@@ -314,7 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div
           aria-hidden="true"
           onClick={() => setIsMoreOpen(false)}
-          className="fixed inset-0 z-[46] bg-stone-950/20 backdrop-blur-[1px] lg:hidden"
+          className="ds-anim-backdrop fixed inset-0 z-[46] bg-stone-950/20 backdrop-blur-[1px] lg:hidden"
         />
       )}
 
@@ -342,11 +345,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
               >
                 <span
-                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-colors ${
-                    isActive ? 'bg-orange-500/14' : ''
+                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-all duration-200 ${
+                    isActive ? 'bg-orange-500/14 scale-100' : 'scale-95'
                   }`}
                 >
-                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  <Icon
+                    className={`h-[18px] w-[18px] shrink-0 transition-transform duration-200 ${
+                      isActive ? '-translate-y-px scale-105' : ''
+                    }`}
+                  />
                 </span>
                 <span className="text-[10px] font-semibold leading-none truncate max-w-full">
                   {item.mobileLabel}
@@ -374,11 +381,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-controls="mobile-secondary-navigation"
             >
               <span
-                className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-colors ${
-                  isMobileSecondaryActive || isMoreOpen ? 'bg-orange-500/14' : ''
+                className={`inline-flex items-center justify-center rounded-full px-3 py-1 transition-all duration-200 ${
+                  isMobileSecondaryActive || isMoreOpen ? 'bg-orange-500/14 scale-100' : 'scale-95'
                 }`}
               >
-                <MoreHorizontal className="h-[18px] w-[18px] shrink-0" />
+                <MoreHorizontal
+                  className={`h-[18px] w-[18px] shrink-0 transition-transform duration-200 ${
+                    isMobileSecondaryActive || isMoreOpen ? '-translate-y-px scale-105' : ''
+                  }`}
+                />
               </span>
               <span className="text-[10px] font-semibold leading-none truncate max-w-full">
                 Altro
@@ -389,7 +400,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 id="mobile-secondary-navigation"
                 role="menu"
                 aria-label="Altre sezioni"
-                className="ds-card absolute right-1 bottom-full z-40 mb-2.5 min-w-52 p-1.5 shadow-2xl"
+                className="ds-anim-pop ds-card absolute right-1 bottom-full z-40 mb-2.5 min-w-52 p-1.5 shadow-2xl"
               >
                 {mobileSecondaryItems.map((item) => {
                   const Icon = item.icon;

@@ -123,7 +123,7 @@ export const LoginGate: React.FC<LoginGateProps> = ({
         </div>
 
         {/* Hero centrale */}
-        <div className="my-auto py-8 sm:my-0 sm:pt-5 sm:pb-7 text-center flex flex-col items-center">
+        <div className="ds-anim-view my-auto py-8 sm:my-0 sm:pt-5 sm:pb-7 text-center flex flex-col items-center">
           <div className="relative inline-flex items-center justify-center">
             <div
               className="ds-login-logo-halo absolute -inset-5 rounded-full blur-lg pointer-events-none"

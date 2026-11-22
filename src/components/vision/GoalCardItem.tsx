@@ -74,14 +74,14 @@ export const GoalCardItem: React.FC<GoalCardItemProps> = ({
         if (!isEditing) onStartEdit(goal);
       }}
       title={!isEditing ? 'Doppio clic per modificare questo obiettivo' : undefined}
-      className="ds-subcard rounded-2xl overflow-hidden flex flex-col justify-between transition-colors"
+      className="group ds-subcard rounded-2xl overflow-hidden flex flex-col justify-between transition-colors"
     >
       {goal.imageUrl ? (
-        <div className="w-full h-40 bg-stone-900 relative">
+        <div className="w-full h-40 bg-stone-900 relative overflow-hidden">
           <img
             src={goal.imageUrl}
             alt={goal.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
           />
           {goal.imageResolution && (
             <span className="absolute top-2 right-2 font-mono text-[9px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded backdrop-blur-xs">

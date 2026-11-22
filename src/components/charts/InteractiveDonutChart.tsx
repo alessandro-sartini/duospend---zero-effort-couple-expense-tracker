@@ -148,7 +148,11 @@ export const InteractiveDonutChart: React.FC<InteractiveDonutChartProps> = ({
                     strokeDashoffset={dashOffset}
                     transform={`rotate(-90 ${cx} ${cy})`}
                     opacity={isDimmed ? 0.28 : 1}
-                    className={onSelectSlice ? 'cursor-pointer transition-all duration-150' : 'transition-all duration-150'}
+                    className={
+                      onSelectSlice
+                        ? 'cursor-pointer transition-all duration-300 ease-out'
+                        : 'transition-all duration-300 ease-out'
+                    }
                     onMouseEnter={() => setHoveredId(slice.id)}
                     onClick={() =>
                       onSelectSlice ? handleToggle(slice.id) : setHoveredId(slice.id)
@@ -240,7 +244,7 @@ export const InteractiveDonutChart: React.FC<InteractiveDonutChartProps> = ({
               <button
                 type="button"
                 onClick={() => onInspectSlice(selectedSlice.id)}
-                className="ds-btn-primary w-full min-h-10 px-4 py-2 text-xs"
+                className="ds-expand-in ds-btn-primary w-full min-h-10 px-4 py-2 text-xs"
               >
                 <span>{inspectLabel ?? `Vedi spese di ${selectedSlice.label}`}</span>
                 <ArrowRight className="w-3.5 h-3.5" />

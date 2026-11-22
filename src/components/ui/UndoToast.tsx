@@ -204,7 +204,7 @@ export const UndoToast: React.FC<UndoToastProps> = ({
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-3 right-20 lg:bottom-6 lg:left-6 lg:right-auto lg:max-w-md z-[44] pointer-events-none"
+      className="ds-anim-view fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-3 right-20 lg:bottom-6 lg:left-6 lg:right-auto lg:max-w-md z-[44] pointer-events-none"
     >
       <div
         ref={containerRef}

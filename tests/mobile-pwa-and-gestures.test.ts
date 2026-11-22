@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DashboardOverview } from '../src/components/DashboardOverview';
 import { ExpenseList } from '../src/components/ExpenseList';
 import { LoginGate } from '../src/components/LoginGate';
@@ -15,6 +15,13 @@ import { RowActionMenu } from '../src/components/ui/RowActionMenu';
 import { UndoToast } from '../src/components/ui/UndoToast';
 import { formatCompactSplitLabel, formatShortExpenseDate } from '../src/constants/categories';
 import type { CoupleProfile, Expense, Settlement } from '../src/types';
+import {
+  getOverlayHistorySnapshot,
+  pushAppRouteHistory,
+  registerOverlayHistory,
+  resetOverlayHistoryForTests,
+  unregisterOverlayHistory,
+} from '../src/utils/overlayHistory';
 import {
   computeHybridSwipeOffset,
   computeHybridSwipeVisual,
@@ -295,7 +302,7 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
 
     it('preserva regole sicurezza Service Worker, zoom in index.html, updateViaCache e header server', () => {
       const swSource = fs.readFileSync(path.resolve(process.cwd(), 'public/sw.js'), 'utf8');
-      expect(swSource).toContain("const CACHE_NAME = 'duospend-shell-v9'");
+      expect(swSource).toContain("const CACHE_NAME = 'duospend-shell-v10'");
       expect(swSource).toContain("url.pathname.startsWith('/api/')");
       expect(swSource).toContain("url.pathname === '/manifest.webmanifest'");
       expect(swSource).toContain('!url.search');
@@ -399,6 +406,7 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
         })
       );
       expect(dashboardHtml).toContain('Ultime Spese di Coppia');
+      expect(dashboardHtml).toContain('€32.25');
       expect(dashboardHtml).toContain('aria-label="Azioni per Esselunga Spesa"');
       expect(dashboardHtml).toContain('aria-label="Elimina Esselunga Spesa"');
       expect((dashboardHtml.match(/title="Spesa"/g) ?? []).length).toBe(1);
@@ -493,6 +501,197 @@ describe('Gesti swipe ibridi Android, menu ⋮, UndoToast e PWA', () => {
       );
       expect(devLoginHtml).toContain('aria-label="Password di sviluppo locale"');
       expect(devLoginHtml).toContain('Sviluppo locale');
+    });
+  });
+
+  describe('Stack overlay Android Back (overlayHistory) e animazioni GPU CSS', () => {
+    const originalWindow = (globalThis as { window?: unknown }).window;
+
+    function installMockWindowHistory(initialPath = '/spese') {
+      const entries: Array<{ state: unknown; url: string }> = [
+        { state: { tab: 'expenses' }, url: `https://duospend.local${initialPath}` },
+      ];
+      let index = 0;
+      const listeners = new Set<(event: PopStateEvent) => void>();
+      const pushSpy = vi.fn((state: unknown, _title: string, url?: string | URL | null) => {
+        entries.splice(index + 1);
+        const resolvedUrl =
+          typeof url === 'string'
+            ? url.startsWith('http')
+              ? url
+              : `https://duospend.local${url}`
+            : entries[index].url;
+        entries.push({ state, url: resolvedUrl });
+        index = entries.length - 1;
+      });
+      const replaceSpy = vi.fn((state: unknown, _title: string, url?: string | URL | null) => {
+        const resolvedUrl =
+          typeof url === 'string'
+            ? url.startsWith('http')
+              ? url
+              : `https://duospend.local${url}`
+            : entries[index].url;
+        entries[index] = { state, url: resolvedUrl };
+      });
+      const dispatchPopState = () => {
+        const current = entries[index];
+        const event = { state: current.state } as PopStateEvent;
+        for (const fn of listeners) {
+          fn(event);
+        }
+      };
+      const goSpy = vi.fn((delta: number) => {
+        const nextIndex = Math.max(0, Math.min(entries.length - 1, index + delta));
+        if (nextIndex === index) return;
+        index = nextIndex;
+        queueMicrotask(dispatchPopState);
+      });
+
+      const mockWindow = {
+        location: {
+          get href() {
+            return entries[index].url;
+          },
+        },
+        history: {
+          get state() {
+            return entries[index].state;
+          },
+          pushState: pushSpy,
+          replaceState: replaceSpy,
+          go: goSpy,
+        },
+        addEventListener: (type: string, fn: (event: PopStateEvent) => void) => {
+          if (type === 'popstate') listeners.add(fn);
+        },
+        removeEventListener: (type: string, fn: (event: PopStateEvent) => void) => {
+          if (type === 'popstate') listeners.delete(fn);
+        },
+        simulateHardwareBack: async () => {
+          index = Math.max(0, index - 1);
+          dispatchPopState();
+          await Promise.resolve();
+        },
+        get entriesCount() {
+          return entries.length;
+        },
+        get currentIndex() {
+          return index;
+        },
+      };
+
+      (globalThis as { window: unknown }).window = mockWindow;
+      return { mockWindow, pushSpy, replaceSpy, goSpy };
+    }
+
+    afterEach(() => {
+      resetOverlayHistoryForTests();
+      vi.useRealTimers();
+      if (originalWindow === undefined) {
+        delete (globalThis as { window?: unknown }).window;
+      } else {
+        (globalThis as { window?: unknown }).window = originalWindow;
+      }
+    });
+
+    it('chiude solo l’overlay in cima allo stack al tasto Indietro e riallinea la history', async () => {
+      vi.useFakeTimers();
+      const { mockWindow, pushSpy, goSpy } = installMockWindowHistory('/spese');
+
+      const onCloseModal = vi.fn();
+      const onCloseConfirm = vi.fn();
+
+      const modalId = registerOverlayHistory(onCloseModal);
+      vi.runAllTimers();
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 1, pushedDepth: 1 });
+
+      registerOverlayHistory(onCloseConfirm);
+      vi.runAllTimers();
+      expect(pushSpy).toHaveBeenCalledTimes(2);
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 2, pushedDepth: 2 });
+
+      // Primo Indietro: chiude solo ConfirmDialog, la modale sottostante resta aperta
+      await mockWindow.simulateHardwareBack();
+      expect(onCloseConfirm).toHaveBeenCalledTimes(1);
+      expect(onCloseModal).not.toHaveBeenCalled();
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 1, pushedDepth: 1 });
+
+      // Secondo Indietro: chiude la modale e riporta la history allo stato iniziale
+      await mockWindow.simulateHardwareBack();
+      expect(onCloseModal).toHaveBeenCalledTimes(1);
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 0, pushedDepth: 0 });
+      expect(goSpy).not.toHaveBeenCalled();
+      expect(mockWindow.currentIndex).toBe(0);
+
+      // Unregister tardivo di un id già chiuso via Back non esegue doppie navigazioni
+      unregisterOverlayHistory(modalId);
+      vi.runAllTimers();
+      expect(goSpy).not.toHaveBeenCalled();
+    });
+
+    it('gestisce chiusura manuale, transizione modale->modale nello stesso tick e cambio rotta da menu', async () => {
+      vi.useFakeTimers();
+      const { mockWindow, pushSpy, replaceSpy, goSpy } = installMockWindowHistory('/spese');
+
+      const onCloseFirst = vi.fn();
+      const onCloseSecond = vi.fn();
+
+      const id1 = registerOverlayHistory(onCloseFirst);
+      vi.runAllTimers();
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+
+      // Chiusura di modale A e apertura simultanea di modale B nello stesso commit:
+      // non deve chiamare history.go(-1) né creare race
+      unregisterOverlayHistory(id1);
+      const id2 = registerOverlayHistory(onCloseSecond);
+      vi.runAllTimers();
+      expect(goSpy).not.toHaveBeenCalled();
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 1, pushedDepth: 1 });
+
+      // Chiusura manuale di B: rimuove in silenzio la entry senza chiudere altri overlay
+      unregisterOverlayHistory(id2);
+      vi.runAllTimers();
+      expect(goSpy).toHaveBeenCalledWith(-1);
+      await Promise.resolve();
+      expect(onCloseFirst).not.toHaveBeenCalled();
+      expect(onCloseSecond).not.toHaveBeenCalled();
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 0, pushedDepth: 0 });
+
+      // Cambio tab da menu aperto: sostituisce lo slot overlay invece di lasciare voci morte
+      const onCloseMenu = vi.fn();
+      registerOverlayHistory(onCloseMenu);
+      vi.runAllTimers();
+      pushAppRouteHistory({ tab: 'advisor' }, '/advisor');
+      expect(replaceSpy).toHaveBeenCalledWith({ tab: 'advisor' }, '', '/advisor');
+      expect(mockWindow.location.href).toBe('https://duospend.local/advisor');
+      expect(getOverlayHistorySnapshot()).toEqual({ stackLength: 0, pushedDepth: 0 });
+    });
+
+    it('verifica classi CSS animazioni device-only e integrazione useOverlayBackHandler nei dialoghi', () => {
+      const css = fs.readFileSync(
+        path.resolve(process.cwd(), 'src/styles/components.css'),
+        'utf8'
+      );
+      expect(css).toContain('.ds-anim-backdrop');
+      expect(css).toContain('.ds-anim-dialog');
+      expect(css).toContain('.ds-anim-sheet');
+      expect(css).toContain('.ds-anim-view');
+      expect(css).toContain('.ds-anim-pop');
+      expect(css).toContain('.ds-anim-fab-stagger');
+      expect(css).toContain('.ds-stagger');
+      expect(css).toContain('.ds-expand-in');
+
+      const modalShell = fs.readFileSync(
+        path.resolve(process.cwd(), 'src/components/ui/ModalShell.tsx'),
+        'utf8'
+      );
+      const confirmDialog = fs.readFileSync(
+        path.resolve(process.cwd(), 'src/components/ui/ConfirmDialog.tsx'),
+        'utf8'
+      );
+      expect(modalShell).toContain('useOverlayBackHandler');
+      expect(confirmDialog).toContain('useOverlayBackHandler');
     });
   });
 });

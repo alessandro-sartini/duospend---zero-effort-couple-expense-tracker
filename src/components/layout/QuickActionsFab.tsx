@@ -10,6 +10,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { SwipeableNotificationPill } from '../ui/SwipeableNotificationPill';
+import { useOverlayBackHandler } from '../../hooks/useOverlayBackHandler';
 import {
   type DismissedBackgroundNotifications,
   type GmailBackgroundStatus,
@@ -55,6 +56,8 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
       setIsMenuOpen(false);
     }
   }, [isAnyModalOpen]);
+
+  useOverlayBackHandler(isMenuOpen && !isAnyModalOpen, () => setIsMenuOpen(false));
 
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -228,7 +231,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
         <div
           aria-hidden="true"
           onClick={() => setIsMenuOpen(false)}
-          className="fixed inset-0 z-40 bg-stone-950/25 backdrop-blur-[1px]"
+          className="ds-anim-backdrop fixed inset-0 z-40 bg-stone-950/25 backdrop-blur-[1px]"
         />
       )}
 
@@ -238,7 +241,7 @@ export const QuickActionsFab: React.FC<QuickActionsFabProps> = ({
             <div
               role="menu"
               aria-label="Azioni rapide DuoSpend"
-              className="flex flex-col items-end gap-2.5 mb-3"
+              className="ds-anim-fab-stagger flex flex-col items-end gap-2.5 mb-3"
             >
               <button
                 type="button"

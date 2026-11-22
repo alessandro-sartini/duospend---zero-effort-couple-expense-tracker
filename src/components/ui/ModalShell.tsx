@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useOverlayBackHandler } from '../../hooks/useOverlayBackHandler';
 import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface ModalShellProps {
@@ -45,6 +46,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   useScrollLock(isOpen);
   useFocusTrap(dialogRef, isOpen);
+  useOverlayBackHandler(isOpen, onClose);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -194,7 +196,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs ${
+      className={`ds-anim-backdrop fixed inset-0 z-50 flex justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs ${
         mobileBottomSheet ? 'items-end sm:items-center p-0 sm:p-4' : 'items-center p-3 sm:p-4'
       }`}
       role="dialog"
@@ -214,8 +216,8 @@ export const ModalShell: React.FC<ModalShellProps> = ({
         ref={dialogRef}
         className={`ds-card shadow-2xl ${MAX_WIDTH_MAP[maxWidth]} w-full overflow-hidden flex flex-col outline-none transition-[max-height,height] duration-200 ease-out ${
           mobileBottomSheet
-            ? mobileHeightClass
-            : 'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
+            ? `ds-anim-sheet ${mobileHeightClass}`
+            : 'ds-anim-dialog max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
         }`}
         style={
           mobileBottomSheet
@@ -223,7 +225,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
                 transform:
                   dragOffsetY !== 0
                     ? `translateY(${Math.max(-24, dragOffsetY)}px)`
-                    : 'translateY(0px)',
+                    : undefined,
                 transition: isDragging
                   ? 'none'
                   : 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), max-height 200ms ease-out, height 200ms ease-out',

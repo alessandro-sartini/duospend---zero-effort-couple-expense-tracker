@@ -11,6 +11,7 @@ import { loadGmailDraft, loadOcrDraft } from './services/storage';
 import { getAuthConfig } from './services/auth';
 import { FullScreenLoader } from './components/ui/Loader';
 import { useDuoSpendData } from './hooks/useDuoSpendData';
+import { pushAppRouteHistory } from './utils/overlayHistory';
 import {
   applyThemePreference,
   loadThemePreference,
@@ -352,7 +353,7 @@ export default function App() {
     setCurrentTab(tab);
     setCurrentPath(targetPath);
     if (normalizePath(window.location.pathname) !== targetPath) {
-      window.history.pushState({ tab }, '', targetPath);
+      pushAppRouteHistory({ tab }, targetPath);
     }
   }, []);
 
@@ -487,103 +488,105 @@ export default function App() {
           }}
         />
 
-        {currentTab === 'not_found' && (
-          <NotFoundView pathname={currentPath} onNavigate={navigateToTab} />
-        )}
-
-        {currentTab === 'dashboard' && (
-          <DashboardOverview
-            expenses={expenses}
-            profile={profile}
-            netBalance={balanceSummary.netBalance}
-            totalSharedSpend={balanceSummary.totalSharedSpend}
-            userTotalPaid={balanceSummary.userTotalPaid}
-            partnerTotalPaid={balanceSummary.partnerTotalPaid}
-            excludedBeforeStartCount={excludedBeforeStartCount}
-            activeTripSummary={activeTripSummary}
-            recurringCount={recurringExpenses.filter((r) => r.active).length}
-            recurringMonthlyTotal={recurringMonthlyTotal}
-            onOpenTrips={() => setIsTripsModalOpen(true)}
-            onOpenRecurring={() => setIsRecurringModalOpen(true)}
-            onOpenStartingPoint={() => setIsStartingPointOpen(true)}
-            onOpenSettlement={() => setIsSettlementOpen(true)}
-            onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
-            onNavigateTab={navigateToTab}
-            onSelectExpense={handleEditExpense}
-            onDeleteExpense={handleDeleteExpenseWithUndo}
-          />
-        )}
-
-        <Suspense
-          fallback={
-            <div className="ds-card p-8 text-center text-xs text-stone-500">
-              Caricamento sezione...
-            </div>
-          }
-        >
-          {currentTab === 'expenses' && (
-            <ExpenseList
-              expenses={expenses}
-              profile={profile}
-              goals={goals}
-              trips={trips}
-              onEditExpense={handleEditExpense}
-              onDeleteExpense={handleDeleteExpenseWithUndo}
-              onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
-              onlyZeroAmount={onlyZeroAmountFilter && zeroAmountExpenses.length > 0}
-              onClearZeroAmountFilter={() => setOnlyZeroAmountFilter(false)}
-            />
+        <div key={currentTab} className="ds-anim-view">
+          {currentTab === 'not_found' && (
+            <NotFoundView pathname={currentPath} onNavigate={navigateToTab} />
           )}
 
-          {currentTab === 'analytics' && (
-            <CategoryAnalytics
+          {currentTab === 'dashboard' && (
+            <DashboardOverview
               expenses={expenses}
-              profile={profile}
-              goals={goals}
-              onUpdateProfile={handleUpdateProfile}
-              onSelectExpense={handleEditExpense}
-              onNavigateTab={navigateToTab}
-            />
-          )}
-
-          {currentTab === 'settlement' && (
-            <SettlementView
-              expenses={expenses}
-              settlements={settlements}
               profile={profile}
               netBalance={balanceSummary.netBalance}
               totalSharedSpend={balanceSummary.totalSharedSpend}
               userTotalPaid={balanceSummary.userTotalPaid}
               partnerTotalPaid={balanceSummary.partnerTotalPaid}
+              excludedBeforeStartCount={excludedBeforeStartCount}
+              activeTripSummary={activeTripSummary}
+              recurringCount={recurringExpenses.filter((r) => r.active).length}
+              recurringMonthlyTotal={recurringMonthlyTotal}
+              onOpenTrips={() => setIsTripsModalOpen(true)}
+              onOpenRecurring={() => setIsRecurringModalOpen(true)}
+              onOpenStartingPoint={() => setIsStartingPointOpen(true)}
               onOpenSettlement={() => setIsSettlementOpen(true)}
-              onDeleteSettlement={handleDeleteSettlementWithUndo}
+              onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
+              onNavigateTab={navigateToTab}
               onSelectExpense={handleEditExpense}
+              onDeleteExpense={handleDeleteExpenseWithUndo}
             />
           )}
 
-          {currentTab === 'advisor' && (
-            <AiAdvisorChat
-              expenses={expenses}
-              profile={profile}
-              netBalance={balanceSummary.netBalance}
-              totalSharedSpend={balanceSummary.totalSharedSpend}
-            />
-          )}
+          <Suspense
+            fallback={
+              <div className="ds-card p-8 text-center text-xs text-stone-500">
+                Caricamento sezione...
+              </div>
+            }
+          >
+            {currentTab === 'expenses' && (
+              <ExpenseList
+                expenses={expenses}
+                profile={profile}
+                goals={goals}
+                trips={trips}
+                onEditExpense={handleEditExpense}
+                onDeleteExpense={handleDeleteExpenseWithUndo}
+                onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
+                onlyZeroAmount={onlyZeroAmountFilter && zeroAmountExpenses.length > 0}
+                onClearZeroAmountFilter={() => setOnlyZeroAmountFilter(false)}
+              />
+            )}
 
-          {currentTab === 'vision' && (
-            <VisionBoard
-              goals={goals}
-              expenses={expenses}
-              profile={profile}
-              onUpdateGoalImage={handleUpdateGoalImage}
-              onAddGoal={handleAddGoal}
-              onUpdateGoal={handleUpdateGoal}
-              onDeleteGoal={handleDeleteGoal}
-              onSyncGoalFromServer={handleSyncGoalFromServer}
-              onSyncGoalsFromServer={handleSyncGoalsFromServer}
-            />
-          )}
-        </Suspense>
+            {currentTab === 'analytics' && (
+              <CategoryAnalytics
+                expenses={expenses}
+                profile={profile}
+                goals={goals}
+                onUpdateProfile={handleUpdateProfile}
+                onSelectExpense={handleEditExpense}
+                onNavigateTab={navigateToTab}
+              />
+            )}
+
+            {currentTab === 'settlement' && (
+              <SettlementView
+                expenses={expenses}
+                settlements={settlements}
+                profile={profile}
+                netBalance={balanceSummary.netBalance}
+                totalSharedSpend={balanceSummary.totalSharedSpend}
+                userTotalPaid={balanceSummary.userTotalPaid}
+                partnerTotalPaid={balanceSummary.partnerTotalPaid}
+                onOpenSettlement={() => setIsSettlementOpen(true)}
+                onDeleteSettlement={handleDeleteSettlementWithUndo}
+                onSelectExpense={handleEditExpense}
+              />
+            )}
+
+            {currentTab === 'advisor' && (
+              <AiAdvisorChat
+                expenses={expenses}
+                profile={profile}
+                netBalance={balanceSummary.netBalance}
+                totalSharedSpend={balanceSummary.totalSharedSpend}
+              />
+            )}
+
+            {currentTab === 'vision' && (
+              <VisionBoard
+                goals={goals}
+                expenses={expenses}
+                profile={profile}
+                onUpdateGoalImage={handleUpdateGoalImage}
+                onAddGoal={handleAddGoal}
+                onUpdateGoal={handleUpdateGoal}
+                onDeleteGoal={handleDeleteGoal}
+                onSyncGoalFromServer={handleSyncGoalFromServer}
+                onSyncGoalsFromServer={handleSyncGoalsFromServer}
+              />
+            )}
+          </Suspense>
+        </div>
       </main>
 
       <Suspense fallback={null}>

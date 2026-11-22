@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useOverlayBackHandler } from '../../hooks/useOverlayBackHandler';
 import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface ConfirmDialogProps {
@@ -29,6 +30,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   useScrollLock(isOpen);
   useFocusTrap(dialogRef, isOpen);
+  useOverlayBackHandler(isOpen, onCancel);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -54,11 +56,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
+      className="ds-anim-backdrop fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
     >
       <div
         ref={dialogRef}
-        className="ds-card w-full max-w-sm space-y-4 p-5 shadow-2xl outline-none"
+        className="ds-anim-dialog ds-card w-full max-w-sm space-y-4 p-5 shadow-2xl outline-none"
       >
         <div className="flex items-start gap-3">
           <div

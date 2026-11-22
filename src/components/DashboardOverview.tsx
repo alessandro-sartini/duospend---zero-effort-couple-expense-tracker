@@ -285,7 +285,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="ds-stagger space-y-5 sm:space-y-6">
       <BalanceHeroCard
         profile={profile}
         netBalance={netBalance}

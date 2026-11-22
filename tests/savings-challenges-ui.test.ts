@@ -388,7 +388,7 @@ describe('UI, accessibilità, PWA offline e riconnessione Sfide di Risparmio', (
     const swPath = path.resolve(process.cwd(), 'public/sw.js');
     const swSource = fs.readFileSync(swPath, 'utf8');
     expect(swSource).toContain("url.pathname.startsWith('/api/')");
-    expect(swSource).toContain('duospend-shell-v9');
+    expect(swSource).toContain('duospend-shell-v10');
 
     const baseCssPath = path.resolve(process.cwd(), 'src/styles/base.css');
     const baseCss = fs.readFileSync(baseCssPath, 'utf8');

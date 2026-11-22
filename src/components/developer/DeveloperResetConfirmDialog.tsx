@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { AlertTriangle, Check, Download } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useOverlayBackHandler } from '../../hooks/useOverlayBackHandler';
 import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface DeveloperResetConfirmDialogProps {
@@ -41,6 +42,7 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
   const dialogRef = useRef<HTMLFormElement>(null);
   useScrollLock(isOpen);
   useFocusTrap(dialogRef, isOpen);
+  useOverlayBackHandler(isOpen, onCancel);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -66,12 +68,12 @@ export const DeveloperResetConfirmDialog: React.FC<DeveloperResetConfirmDialogPr
       aria-modal="true"
       aria-labelledby={resetDialogTitleId}
       aria-describedby={resetDialogDescriptionId}
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
+      className="ds-anim-backdrop fixed inset-0 z-[60] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 backdrop-blur-xs p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
     >
       <form
         ref={dialogRef}
         onSubmit={onConfirm}
-        className="ds-card w-full max-w-md space-y-4 p-5 shadow-2xl outline-none"
+        className="ds-anim-dialog ds-card w-full max-w-md space-y-4 p-5 shadow-2xl outline-none"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-rose-500/12 text-rose-600 border-rose-500/25">
