@@ -458,6 +458,14 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
         'partner'
       );
       expect(parsedBancaImola.date).toBe('2026-11-24');
+
+      const parsedYouAppTime = parseNotificationHeuristically(
+        "Notifica movimento carta - E' stato richiesta una spesa di EUR 1,50 alle ore 12:48 del giorno 24/11/2026",
+        'YouApp',
+        'user'
+      );
+      expect(parsedYouAppTime.amount).toBe(1.5);
+      expect(parsedYouAppTime.title).toBe('YouApp');
     });
 
     it('unisce automaticamente 3 notifiche ripetute Banca Imola da €287 oltre i 5 minuti e migliora titolo "P"', async () => {
@@ -504,6 +512,7 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(second.persisted).toBe(true);
       expect(second.deduplicated).toBe(true);
       expect(second.reconciled).toBe(true);
+      expect(second.expense?.title).toBe('Movimento Banca Imola');
       expect(notificationInMemoryDb.expenses).toHaveLength(1);
 
       // Terza notifica il giorno dopo
@@ -518,6 +527,7 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       });
 
       expect(third.deduplicated).toBe(true);
+      expect(third.expense?.title).toBe('Movimento Banca Imola');
       expect(notificationInMemoryDb.expenses).toHaveLength(1);
     });
 
@@ -578,6 +588,31 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(coffee2.expense?.reconciliationStatus).toBe('possible_duplicate');
       expect(coffee2.expense?.duplicateCandidateId).toBe(coffee1.expense?.id);
       expect(notificationInMemoryDb.expenses).toHaveLength(2);
+
+      // 2b) Terzo caffè da 1.50€ punta sempre alla spesa radice confermata (coffee1) e non a catena su coffee2
+      resetNotificationIdempotencyCacheForTests();
+      nowSpy.mockReturnValue(Date.parse('2026-11-26T15:00:00Z'));
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: true,
+            ignoreReason: '',
+            merchant: 'YouApp',
+            amount: 1.5,
+            currency: 'EUR',
+            category: 'Ristoranti e Bar',
+          }),
+        },
+      });
+      const coffee3 = await ingestNotification({
+        notificationText: 'Notifica movimento carta - Terzo addebito di 1,50 EUR',
+        appName: 'YouApp',
+        payer: 'user',
+        shouldPersist: true,
+      });
+      expect(coffee3.possibleDuplicate).toBe(true);
+      expect(coffee3.expense?.duplicateCandidateId).toBe(coffee1.expense?.id);
 
       // 3) Due spese da 4.50€ con esercenti reali diversi nello stesso giorno -> scelta utente
       generateContentWithFallbackMock.mockResolvedValueOnce({

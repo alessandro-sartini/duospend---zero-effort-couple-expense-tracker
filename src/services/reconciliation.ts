@@ -161,7 +161,7 @@ const KNOWN_APP_OR_BANK_LABELS = new Set([
 ]);
 
 const WEAK_MERCHANT_PREFIX_PATTERN =
-  /^(?:un['’]?autorizzazione\b|autorizzazione\b|richiesta\b|pagamento\b|operazione\b|movimento\b|addebito\b|fallback locale\b|notifica\b)/i;
+  /^(?:un['’]?autorizzazione\b|autorizzazione\b|richiesta\b|pagamento\b|operazione\b|movimento\b|addebito\b|fallback locale\b|notifica\b|tramite\b|via\b|mediante\b)/i;
 
 export function isWeakOrGenericMerchant(rawTitle: string, appName?: string): boolean {
   const clean = (rawTitle || '').trim();

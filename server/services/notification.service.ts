@@ -5,7 +5,9 @@ import {
   applyMatchedCyclesToRecurring,
   computeExpenseMatchScore,
   daysBetweenIsoDates,
+  isDateInsideTrip,
   isWeakOrGenericMerchant,
+  matchesRecurringRule,
   mergeReconciledExpenses,
   normalizeMerchantKey,
   reconcileIncomingExpenses,
@@ -253,10 +255,14 @@ function findNotificationDuplicateAction(
   const isAccountingOrRepostSignal = ACCOUNTING_OR_REPOST_NOTIFICATION_PATTERN.test(originalText);
 
   let possibleDuplicateCandidateId: string | null = null;
+  let possibleDuplicateCandidateIsConfirmed = false;
 
   for (let i = 0; i < existingList.length; i += 1) {
     const existing = existingList[i]!;
-    if (existing.reconciliationStatus === 'zero_quarantine') {
+    if (
+      existing.reconciliationStatus === 'zero_quarantine' ||
+      existing.reconciliationStatus === 'pending_recurring'
+    ) {
       continue;
     }
 
@@ -332,8 +338,12 @@ function findNotificationDuplicateAction(
 
       // Caso indeciso: stesso importo e payer entro ±2 giorni (es. due caffè da €1.50 senza esercente certo,
       // oppure due esercenti diversi/incerti con stesso importo €4.50 nello stesso giorno) -> scelta all'utente
-      if (!possibleDuplicateCandidateId && deltaDays <= 2) {
-        possibleDuplicateCandidateId = existing.id;
+      if (deltaDays <= 2) {
+        const existingIsConfirmed = existing.reconciliationStatus !== 'possible_duplicate';
+        if (!possibleDuplicateCandidateId || (!possibleDuplicateCandidateIsConfirmed && existingIsConfirmed)) {
+          possibleDuplicateCandidateId = existing.id;
+          possibleDuplicateCandidateIsConfirmed = existingIsConfirmed;
+        }
       }
     }
   }
@@ -408,12 +418,34 @@ async function persistIngestedExpenseIfNeeded(
     }
 
     if (decision.kind === 'flag_possible_duplicate') {
+      let enriched: Expense = { ...sanitized };
+      if (!enriched.tripId && activeTrip && isDateInsideTrip(enriched.date, activeTrip)) {
+        enriched = { ...enriched, tripId: activeTrip.id };
+      }
+      if (!enriched.recurringRuleId && recurringList.length > 0) {
+        const matchedRule = recurringList.find(
+          (rule) => rule.active && rule.autoMatchNotifications && matchesRecurringRule(enriched, rule)
+        );
+        if (matchedRule) {
+          enriched = { ...enriched, recurringRuleId: matchedRule.id };
+        }
+      }
       const flagged: Expense = {
-        ...sanitized,
+        ...enriched,
         reconciliationStatus: 'possible_duplicate',
         duplicateCandidateId: decision.candidateId,
+        linkedSources: enriched.linkedSources?.length ? enriched.linkedSources : [enriched.source],
       };
       insertExpenseRecord(flagged);
+      if (flagged.recurringRuleId) {
+        const updatedRecurring = applyMatchedCyclesToRecurring(recurringList, [
+          {
+            ruleId: flagged.recurringRuleId,
+            cycle: flagged.date.slice(0, 7),
+          },
+        ]);
+        writeDatabase({ recurringExpenses: updatedRecurring });
+      }
       return {
         expense: flagged,
         persisted: true,

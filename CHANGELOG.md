@@ -2,6 +2,17 @@
 
 Tutte le modifiche rilevanti a **DuoSpend** sono documentate in questo file secondo il formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/) e il [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.2.0] - 2026-11-26
+
+### Added
+- Deduplicazione notifiche bancarie multi-livello su finestra estesa (72 ore / ±3 giorni) con serializzazione concorrente per `payer` (`withNotificationPersistLock`) e distinzione automatica tra duplicati certi (stesso testo/hash, stesso esercente normalizzato, re-notifiche/contabilizzazioni bancarie oltre 15 €) e casi ambigui.
+- Stato di riconciliazione `possible_duplicate` con riferimento `duplicateCandidateId` (colonna SQLite `duplicate_candidate_id` con migrazione automatica retrocompatibile) per lasciare la scelta all’utente su piccoli pagamenti ripetuti senza esercente certo (≤ 15 €) o importi identici con esercenti diversi/incerti nello stesso giorno.
+- Banner di revisione inline e voci nel menu mobile `⋮` in `ExpenseList` (**Unisci** / **Mantieni separate**), compatibili con tema chiaro/scuro, Modalità Viaggio e regole ricorrenti, con pulizia automatica del riferimento se il movimento gemello viene eliminato o modificato.
+
+### Fixed
+- Corretto il parser euristico locale delle notifiche (`extractNotificationMerchant` e `extractDateFromText`) con word-boundary sulle preposizioni, priorità a `c/o` / `presso` / `esercente`, stop-word bancarie (`tramite`, `alle ore`, `sulla carta`, `sul conto`) e supporto date italiane con anno a 2 cifre (`GG/MM/AA`).
+- Evitata la generazione o conservazione di titoli esercente composti da una singola lettera (es. `"P"`) sia nel prompt/normalizzatore Gemini sia in `chooseRicherTitle` durante il merge dei movimenti.
+
 ## [1.1.0] - 2026-11-22
 
 ### Added

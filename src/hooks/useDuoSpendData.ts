@@ -469,13 +469,14 @@ export function useDuoSpendData() {
     (newExpData: Omit<Expense, 'id'>, editingId?: string) => {
       if (editingId) {
         setExpenses((current) => {
+          const { duplicateCandidateId: _removedCandidate, ...cleanExpData } = newExpData;
           const updated = current.map((e) =>
             e.id === editingId
               ? {
-                  ...newExpData,
+                  ...cleanExpData,
                   id: editingId,
                   reconciliationStatus:
-                    newExpData.amount > 0 ? ('confirmed' as const) : ('zero_quarantine' as const),
+                    cleanExpData.amount > 0 ? ('confirmed' as const) : ('zero_quarantine' as const),
                 }
               : e
           );
@@ -512,7 +513,16 @@ export function useDuoSpendData() {
 
   const handleDeleteExpense = useCallback((id: string) => {
     setExpenses((current) => {
-      const updated = current.filter((e) => e.id !== id);
+      const updated = current
+        .filter((e) => e.id !== id)
+        .map((e) => {
+          if (e.duplicateCandidateId !== id) return e;
+          const { duplicateCandidateId: _cleared, ...rest } = e;
+          return {
+            ...rest,
+            reconciliationStatus: (e.amount > 0 ? 'confirmed' : 'zero_quarantine') as Expense['reconciliationStatus'],
+          };
+        });
       saveExpenses(updated);
       return updated;
     });
@@ -597,7 +607,13 @@ export function useDuoSpendData() {
         const merged = mergeReconciledExpenses(candidateExp, dupExp);
         const updated = current
           .filter((e) => e.id !== duplicateExpenseId)
-          .map((e) => (e.id === candidateExpenseId ? merged : e));
+          .map((e) => {
+            if (e.id === candidateExpenseId) return merged;
+            if (e.duplicateCandidateId === duplicateExpenseId) {
+              return { ...e, duplicateCandidateId: candidateExpenseId };
+            }
+            return e;
+          });
         saveExpenses(updated);
         setReconciliationNotice(
           `Movimenti uniti in "${merged.title}" (${merged.currency} ${merged.amount.toFixed(2)}).`

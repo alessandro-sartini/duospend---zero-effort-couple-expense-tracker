@@ -403,6 +403,10 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               const isExpanded = expandedId === exp.id;
               const hasDetails = Boolean((exp.items && exp.items.length > 0) || exp.receiptUrl);
               const payerName = exp.payer === 'user' ? profile.userName : profile.partnerName;
+              const duplicateCandidate =
+                exp.reconciliationStatus === 'possible_duplicate' && exp.duplicateCandidateId
+                  ? expenseById.get(exp.duplicateCandidateId)
+                  : undefined;
               const mobileMenuItems: RowActionMenuItem[] = [
                 ...(hasDetails
                   ? [
@@ -411,6 +415,30 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                         label: isExpanded ? 'Nascondi dettagli' : 'Vedi dettagli scontrino',
                         icon: <ChevronDown className={`w-4 h-4 ${isExpanded ? 'rotate-180' : ''}`} />,
                         onSelect: () => setExpandedId(isExpanded ? null : exp.id),
+                      },
+                    ]
+                  : []),
+                ...(exp.reconciliationStatus === 'possible_duplicate' &&
+                duplicateCandidate &&
+                onMergeDuplicateExpense
+                  ? [
+                      {
+                        id: 'merge-duplicate',
+                        label: `Unisci con “${duplicateCandidate.title}”`,
+                        icon: <GitMerge className="w-4 h-4 text-amber-600" />,
+                        onSelect: () => onMergeDuplicateExpense(exp.id, duplicateCandidate.id),
+                      },
+                    ]
+                  : []),
+                ...(exp.reconciliationStatus === 'possible_duplicate' && onDismissDuplicateExpense
+                  ? [
+                      {
+                        id: 'dismiss-duplicate',
+                        label: duplicateCandidate
+                          ? 'Mantieni separate (non è doppia)'
+                          : 'Conferma spesa',
+                        icon: <Check className="w-4 h-4 text-emerald-600" />,
+                        onSelect: () => onDismissDuplicateExpense(exp.id),
                       },
                     ]
                   : []),
@@ -438,10 +466,6 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 exp.reconciliationStatus === 'zero_quarantine' ||
                 exp.reconciliationStatus === 'possible_duplicate';
               const hasAnyTags = hasSecondaryBadges || hasDetails;
-              const duplicateCandidate =
-                exp.reconciliationStatus === 'possible_duplicate' && exp.duplicateCandidateId
-                  ? expenseById.get(exp.duplicateCandidateId)
-                  : undefined;
 
               return (
                 <SwipeableActionRow
@@ -474,7 +498,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 >
                   <div
                     onDoubleClick={(e) => {
-                      if (!(e.target as HTMLElement).closest('button')) {
+                      const target = e.target as HTMLElement;
+                      if (!target.closest('button') && !target.closest('[data-no-swipe="true"]')) {
                         onEditExpense(exp);
                       }
                     }}
@@ -483,9 +508,11 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                     <div
                       className="flex items-start gap-3 cursor-pointer sm:cursor-auto"
                       onClick={(e) => {
+                        const target = e.target as HTMLElement;
                         if (
                           window.innerWidth < 640 &&
-                          !(e.target as HTMLElement).closest('button')
+                          !target.closest('button') &&
+                          !target.closest('[data-no-swipe="true"]')
                         ) {
                           onEditExpense(exp);
                         }
@@ -669,7 +696,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                                       e.stopPropagation();
                                       onMergeDuplicateExpense(exp.id, duplicateCandidate.id);
                                     }}
-                                    className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 transition-colors cursor-pointer"
+                                    className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 transition-colors cursor-pointer"
                                   >
                                     <GitMerge className="h-3 w-3" />
                                     Unisci
@@ -682,7 +709,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                                       e.stopPropagation();
                                       onDismissDuplicateExpense(exp.id);
                                     }}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-amber-500/35 bg-white/80 px-2 py-1 text-[11px] font-semibold text-amber-900 hover:bg-white transition-colors cursor-pointer"
+                                    className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-500/35 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-500/25 transition-colors cursor-pointer"
                                   >
                                     <Check className="h-3 w-3" />
                                     {duplicateCandidate ? 'Mantieni separate' : 'Conferma'}

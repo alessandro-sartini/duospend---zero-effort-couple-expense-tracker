@@ -296,15 +296,21 @@ export function extractReceiptsHeuristically(
   return { receipts, reviewCandidates, suppressedLowConfidenceCount };
 }
 
-function isPlausibleExtractedMerchant(candidate: string): boolean {
+const MERCHANT_STOP_LOOKAHEAD =
+  '(?=\\s+(?:il|alle|ore|con|tramite|via|mediante|sulla|sul|su\\s+(?:carta|conto)|per|autorizzat|contabilizzat|registrat|del|\\d{1,2}[/:])|[.,;\\n]|$)';
+
+function isPlausibleExtractedMerchant(candidate: string, fallback?: string): boolean {
   const clean = candidate.trim();
   if (clean.length < 2) return false;
   if (/^\d+(?:[.,]\d+)?$/.test(clean)) return false;
   if (
-    /^(?:un['’]?autorizzazione\b|autorizzazione\b|richiesta\b|pagamento\b|operazione\b|movimento\b|carta\b|conto\b|spesa\b|importo\b|giorno\b|ore\b|del\b|di\b)/i.test(
+    /^(?:un['’]?autorizzazione\b|autorizzazione\b|richiesta\b|pagamento\b|operazione\b|movimento\b|carta\b|conto\b|spesa\b|importo\b|giorno\b|alle\b|ore\b|del\b|di\b|il\b|tramite\b|via\b|mediante\b|con\b|sulla\b|sul\b|presso\b|c\/o\b|[èe]['’]?\b|stato\b|stata\b)/i.test(
       clean
     )
   ) {
+    return false;
+  }
+  if (fallback && clean.toLowerCase() === fallback.trim().toLowerCase()) {
     return false;
   }
   return true;
@@ -312,31 +318,40 @@ function isPlausibleExtractedMerchant(candidate: string): boolean {
 
 function extractNotificationMerchant(text: string, fallback: string): string {
   const explicitPrepositionMatch = text.match(
-    /\b(?:c\/o\s+presso|c\/o|presso|esercente)\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,45}?)(?=\s+(?:il|alle|con|per|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+    new RegExp(
+      `\\b(?:c\\/o\\s+presso|c\\/o|presso|esercente)\\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,45}?)${MERCHANT_STOP_LOOKAHEAD}`,
+      'i'
+    )
   );
   if (explicitPrepositionMatch?.[1]) {
     const candidate = sanitizePlainText(explicitPrepositionMatch[1], 80, '');
-    if (isPlausibleExtractedMerchant(candidate)) {
+    if (isPlausibleExtractedMerchant(candidate, fallback)) {
       return candidate;
     }
   }
 
   const patternMatch = text.match(
-    /\b(?:da|a|su|per)\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|per|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+    new RegExp(
+      `\\b(?:da|a|su|per)\\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)${MERCHANT_STOP_LOOKAHEAD}`,
+      'i'
+    )
   );
   if (patternMatch?.[1]) {
     const candidate = sanitizePlainText(patternMatch[1], 80, '');
-    if (isPlausibleExtractedMerchant(candidate)) {
+    if (isPlausibleExtractedMerchant(candidate, fallback)) {
       return candidate;
     }
   }
 
   const afterAmountMatch = text.match(
-    /(?:\d[\d.,]{0,12}\s*(?:€|\$|£|euro?|euri|usd|dollar[oi]|gbp|sterlin[ae])\b|(?:€|\$|£|euro?|usd|gbp)\s*\d[\d.,]{0,12})\s+(?:c\/o\s+presso|c\/o|presso|da|a|su|per|in|al|alla|allo)?\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+    new RegExp(
+      `(?:\\d[\\d.,]{0,12}\\s*(?:€|\\$|£|euro?|euri|usd|dollar[oi]|gbp|sterlin[ae])\\b|(?:€|\\$|£|euro?|usd|gbp)\\s*\\d[\\d.,]{0,12})\\s+(?:(?:c\\/o\\s+presso|c\\/o|presso|da|a|su|per|in|al|alla|allo)\\b\\s+)?([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)${MERCHANT_STOP_LOOKAHEAD}`,
+      'i'
+    )
   );
   if (afterAmountMatch?.[1]) {
     const candidate = sanitizePlainText(afterAmountMatch[1], 80, '');
-    if (isPlausibleExtractedMerchant(candidate)) {
+    if (isPlausibleExtractedMerchant(candidate, fallback)) {
       return candidate;
     }
   }
@@ -344,7 +359,7 @@ function extractNotificationMerchant(text: string, fallback: string): string {
   const providerPrefix = text.match(/^([A-Za-zÀ-ÿ0-9 /._-]{2,25}):/);
   if (providerPrefix?.[1]) {
     const candidate = sanitizePlainText(providerPrefix[1], 60, '');
-    if (isPlausibleExtractedMerchant(candidate)) {
+    if (isPlausibleExtractedMerchant(candidate, fallback)) {
       return candidate;
     }
   }
