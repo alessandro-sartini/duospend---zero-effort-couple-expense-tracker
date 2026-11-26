@@ -548,6 +548,7 @@ function initializeSchema(db: DatabaseSync): void {
       trip_id TEXT,
       recurring_rule_id TEXT,
       reconciliation_status TEXT,
+      duplicate_candidate_id TEXT,
       linked_sources_json TEXT,
       linked_references_json TEXT
     );
@@ -763,6 +764,9 @@ function initializeSchema(db: DatabaseSync): void {
   if (!expenseColNames.has('reconciliation_status')) {
     db.exec('ALTER TABLE expenses ADD COLUMN reconciliation_status TEXT');
   }
+  if (!expenseColNames.has('duplicate_candidate_id')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN duplicate_candidate_id TEXT');
+  }
   if (!expenseColNames.has('linked_sources_json')) {
     db.exec('ALTER TABLE expenses ADD COLUMN linked_sources_json TEXT');
   }
@@ -807,8 +811,8 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       id, title, amount, currency, date, category, payer, split_type,
       custom_split_ratio, source, source_reference, notes, receipt_url,
       items_json, tax, position, trip_id, recurring_rule_id,
-      reconciliation_status, linked_sources_json, linked_references_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      reconciliation_status, duplicate_candidate_id, linked_sources_json, linked_references_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       amount = excluded.amount,
@@ -828,6 +832,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
       trip_id = excluded.trip_id,
       recurring_rule_id = excluded.recurring_rule_id,
       reconciliation_status = excluded.reconciliation_status,
+      duplicate_candidate_id = excluded.duplicate_candidate_id,
       linked_sources_json = excluded.linked_sources_json,
       linked_references_json = excluded.linked_references_json
   `);
@@ -954,6 +959,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         expense.tripId ?? null,
         expense.recurringRuleId ?? null,
         expense.reconciliationStatus ?? null,
+        expense.duplicateCandidateId ?? null,
         expense.linkedSources && expense.linkedSources.length > 0
           ? JSON.stringify(expense.linkedSources)
           : null,
@@ -1416,6 +1422,9 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
           ...(row.reconciliation_status
             ? { reconciliationStatus: row.reconciliation_status as Expense['reconciliationStatus'] }
             : {}),
+          ...(row.duplicate_candidate_id
+            ? { duplicateCandidateId: String(row.duplicate_candidate_id) }
+            : {}),
           ...(Array.isArray(linkedSources) && linkedSources.length > 0
             ? { linkedSources }
             : {}),
@@ -1587,6 +1596,7 @@ export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): Sqlit
         expense.tripId ?? null,
         expense.recurringRuleId ?? null,
         expense.reconciliationStatus ?? null,
+        expense.duplicateCandidateId ?? null,
         expense.linkedSources && expense.linkedSources.length > 0
           ? JSON.stringify(expense.linkedSources)
           : null,

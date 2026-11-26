@@ -205,6 +205,8 @@ export default function App() {
     handleRestoreExpense,
     handleImportGmailExpenses,
     handleMergeZeroExpense,
+    handleMergeDuplicateExpense,
+    handleDismissDuplicateExpense,
     handleSaveTrip,
     handleToggleTripActive,
     handleDeleteTrip,
@@ -632,6 +634,8 @@ export default function App() {
                 trips={trips}
                 onEditExpense={handleEditExpense}
                 onDeleteExpense={handleDeleteExpenseWithUndo}
+                onMergeDuplicateExpense={handleMergeDuplicateExpense}
+                onDismissDuplicateExpense={handleDismissDuplicateExpense}
                 onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
                 onlyZeroAmount={onlyZeroAmountFilter && zeroAmountExpenses.length > 0}
                 onClearZeroAmountFilter={() => setOnlyZeroAmountFilter(false)}

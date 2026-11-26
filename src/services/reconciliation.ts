@@ -122,7 +122,84 @@ const MERCHANT_CANONICAL_ALIASES: Array<[RegExp, string]> = [
   [/\bbooking\b/i, 'booking'],
 ];
 
-const GENERIC_MERCHANT_TOKENS = new Set(['spesa', 'acquisto', 'pagamento', 'transazione', 'altro']);
+const GENERIC_MERCHANT_TOKENS = new Set([
+  'spesa',
+  'acquisto',
+  'pagamento',
+  'transazione',
+  'operazione',
+  'movimento',
+  'autorizzazione',
+  'altro',
+  'esercente',
+]);
+
+const KNOWN_APP_OR_BANK_LABELS = new Set([
+  'app bancaria',
+  'app bancaria sms',
+  'banca sms',
+  'banca',
+  'sms',
+  'messages',
+  'messaggi',
+  'nexi',
+  'nexipay',
+  'youapp',
+  'banca imola',
+  'intesa',
+  'intesa sanpaolo',
+  'unicredit',
+  'postepay',
+  'revolut',
+  'satispay',
+  'google pay',
+  'google wallet',
+  'apple pay',
+  'paypal',
+  'macrodroid',
+  'cronologia android sms',
+]);
+
+const WEAK_MERCHANT_PREFIX_PATTERN =
+  /^(?:un['’]?autorizzazione\b|autorizzazione\b|richiesta\b|pagamento\b|operazione\b|movimento\b|addebito\b|fallback locale\b|notifica\b)/i;
+
+export function isWeakOrGenericMerchant(rawTitle: string, appName?: string): boolean {
+  const clean = (rawTitle || '').trim();
+  if (!clean || clean.length < 2) return true;
+  if (/^[\d.,€$£\s:/-]+$/.test(clean)) return true;
+  if (WEAK_MERCHANT_PREFIX_PATTERN.test(clean)) return true;
+
+  const normalizedPlain = clean
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalizedPlain || normalizedPlain.length < 2) return true;
+  if (GENERIC_MERCHANT_TOKENS.has(normalizedPlain) || KNOWN_APP_OR_BANK_LABELS.has(normalizedPlain)) {
+    return true;
+  }
+
+  if (appName) {
+    const normalizedApp = appName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (normalizedApp && normalizedPlain === normalizedApp) {
+      return true;
+    }
+  }
+
+  const key = normalizeMerchantKey(clean);
+  if (!key || GENERIC_MERCHANT_TOKENS.has(key)) return true;
+
+  return false;
+}
 
 export function extractMerchantTokens(rawTitle: string): string[] {
   const normalized = (rawTitle || '')
@@ -409,10 +486,10 @@ function chooseRicherTitle(titleA: string, titleB: string): string {
   const cleanB = (titleB || '').trim();
   if (!cleanA) return cleanB || 'Spesa';
   if (!cleanB) return cleanA;
-  const keyA = normalizeMerchantKey(cleanA);
-  const keyB = normalizeMerchantKey(cleanB);
-  if (GENERIC_MERCHANT_TOKENS.has(keyA) && !GENERIC_MERCHANT_TOKENS.has(keyB)) return cleanB;
-  if (GENERIC_MERCHANT_TOKENS.has(keyB) && !GENERIC_MERCHANT_TOKENS.has(keyA)) return cleanA;
+  const weakA = isWeakOrGenericMerchant(cleanA);
+  const weakB = isWeakOrGenericMerchant(cleanB);
+  if (weakA && !weakB) return cleanB;
+  if (weakB && !weakA) return cleanA;
   return cleanB.length > cleanA.length && cleanB.length <= 80 ? cleanB : cleanA;
 }
 
@@ -456,8 +533,10 @@ export function mergeReconciledExpenses(
     .join(' · ')
     .slice(0, 1000);
 
+  const { duplicateCandidateId: _ignoredCandidateId, ...existingWithoutDupCandidate } = existing;
+
   return {
-    ...existing,
+    ...existingWithoutDupCandidate,
     title: chooseRicherTitle(existing.title, incoming.title),
     amount: Math.round(finalAmount * 100) / 100,
     date: finalDate,

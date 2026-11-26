@@ -442,6 +442,190 @@ describe('Parser locali di fallback (Notifiche, Gmail, OCR)', () => {
       expect(notificationInMemoryDb.expenses).toHaveLength(1);
     });
 
+    it('estrae correttamente "Amazon Prime" dal testo NexiPay nel fallback locale e gestisce data a 2 cifre', () => {
+      const parsedNexi = parseNotificationHeuristically(
+        "Movimenti - è stata richiesta un'autorizzazione di pagamento di 4,99 € sulla carta 4480 c/o presso Amazon Prime il 24/11/2026 alle 18:14.",
+        'NexiPay',
+        'partner'
+      );
+      expect(parsedNexi.amount).toBe(4.99);
+      expect(parsedNexi.title).toBe('Amazon Prime');
+      expect(parsedNexi.date).toBe('2026-11-24');
+
+      const parsedBancaImola = parseNotificationHeuristically(
+        'Movimento conto - Sul conto **7557 il giorno 24/11/26 è stata registrata una operazione di Pagamento',
+        'Banca Imola',
+        'partner'
+      );
+      expect(parsedBancaImola.date).toBe('2026-11-24');
+    });
+
+    it('unisce automaticamente 3 notifiche ripetute Banca Imola da €287 oltre i 5 minuti e migliora titolo "P"', async () => {
+      const nowSpy = vi.spyOn(Date, 'now');
+      nowSpy.mockReturnValue(Date.parse('2026-11-24T10:00:00Z'));
+
+      generateContentWithFallbackMock.mockResolvedValue({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: true,
+            ignoreReason: '',
+            merchant: 'P',
+            amount: 287,
+            currency: 'EUR',
+            category: 'Altro',
+            notes: 'Movimento conto tramite Banca Imola',
+          }),
+        },
+      });
+
+      const first = await ingestNotification({
+        notificationText: 'Movimento conto - Sul conto **7557 il giorno 24/11/26 è stata registrata una operazione di Pagamento 287,00 EUR',
+        appName: 'Banca Imola',
+        payer: 'partner',
+        shouldPersist: true,
+      });
+
+      expect(first.persisted).toBe(true);
+      expect(first.expense?.title).toBe('Movimento Banca Imola');
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
+
+      // Seconda notifica 2 ore dopo (fuori dal vecchio TTL di 5 min) e cache azzerata
+      resetNotificationIdempotencyCacheForTests();
+      nowSpy.mockReturnValue(Date.parse('2026-11-24T12:30:00Z'));
+
+      const second = await ingestNotification({
+        notificationText: 'Pagamento con carta 287,00 EUR tramite Banca Imola',
+        appName: 'Banca Imola',
+        payer: 'partner',
+        shouldPersist: true,
+      });
+
+      expect(second.persisted).toBe(true);
+      expect(second.deduplicated).toBe(true);
+      expect(second.reconciled).toBe(true);
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
+
+      // Terza notifica il giorno dopo
+      resetNotificationIdempotencyCacheForTests();
+      nowSpy.mockReturnValue(Date.parse('2026-11-25T09:15:00Z'));
+
+      const third = await ingestNotification({
+        notificationText: 'Movimento conto - Sul conto **7557 il giorno 24/11/26 è stata registrata una operazione di Pagamento 287,00 EUR',
+        appName: 'Banca Imola',
+        payer: 'partner',
+        shouldPersist: true,
+      });
+
+      expect(third.deduplicated).toBe(true);
+      expect(notificationInMemoryDb.expenses).toHaveLength(1);
+    });
+
+    it('marca come possible_duplicate per scelta utente piccoli importi ripetuti senza esercente certo o esercenti diversi stesso importo', async () => {
+      const nowSpy = vi.spyOn(Date, 'now');
+      nowSpy.mockReturnValue(Date.parse('2026-11-26T09:00:00Z'));
+
+      // 1) Primo caffè da 1.50€ senza esercente certo
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: true,
+            ignoreReason: '',
+            merchant: 'YouApp',
+            amount: 1.5,
+            currency: 'EUR',
+            category: 'Ristoranti e Bar',
+            notes: 'Pagamento con carta tramite YouApp',
+          }),
+        },
+      });
+      const coffee1 = await ingestNotification({
+        notificationText: 'Notifica movimento carta - Spesa di 1,50 EUR',
+        appName: 'YouApp',
+        payer: 'user',
+        shouldPersist: true,
+      });
+      expect(coffee1.persisted).toBe(true);
+      expect(coffee1.possibleDuplicate).toBe(false);
+
+      // 2) Secondo caffè da 1.50€ due ore dopo -> deve chiedere conferma all'utente (non auto-unire!)
+      resetNotificationIdempotencyCacheForTests();
+      nowSpy.mockReturnValue(Date.parse('2026-11-26T11:30:00Z'));
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: true,
+            ignoreReason: '',
+            merchant: 'YouApp',
+            amount: 1.5,
+            currency: 'EUR',
+            category: 'Ristoranti e Bar',
+            notes: 'Pagamento con carta tramite YouApp',
+          }),
+        },
+      });
+      const coffee2 = await ingestNotification({
+        notificationText: 'Notifica movimento carta - Altro addebito di 1,50 EUR',
+        appName: 'YouApp',
+        payer: 'user',
+        shouldPersist: true,
+      });
+      expect(coffee2.persisted).toBe(true);
+      expect(coffee2.deduplicated).toBe(false);
+      expect(coffee2.possibleDuplicate).toBe(true);
+      expect(coffee2.expense?.reconciliationStatus).toBe('possible_duplicate');
+      expect(coffee2.expense?.duplicateCandidateId).toBe(coffee1.expense?.id);
+      expect(notificationInMemoryDb.expenses).toHaveLength(2);
+
+      // 3) Due spese da 4.50€ con esercenti reali diversi nello stesso giorno -> scelta utente
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: true,
+            ignoreReason: '',
+            merchant: 'Bar Centrale',
+            amount: 4.5,
+            currency: 'EUR',
+            category: 'Ristoranti e Bar',
+          }),
+        },
+      });
+      const bar = await ingestNotification({
+        notificationText: 'Pagamento di 4,50 EUR presso Bar Centrale',
+        appName: 'Google Wallet',
+        payer: 'partner',
+        shouldPersist: true,
+      });
+
+      generateContentWithFallbackMock.mockResolvedValueOnce({
+        modelUsed: 'gemini-3.5-flash-lite',
+        response: {
+          text: JSON.stringify({
+            isExpense: true,
+            ignoreReason: '',
+            merchant: 'Edicola Stazione',
+            amount: 4.5,
+            currency: 'EUR',
+            category: 'Shopping',
+          }),
+        },
+      });
+      const edicola = await ingestNotification({
+        notificationText: 'Pagamento di 4,50 EUR presso Edicola Stazione',
+        appName: 'Google Wallet',
+        payer: 'partner',
+        shouldPersist: true,
+      });
+
+      expect(edicola.persisted).toBe(true);
+      expect(edicola.possibleDuplicate).toBe(true);
+      expect(edicola.expense?.reconciliationStatus).toBe('possible_duplicate');
+      expect(edicola.expense?.duplicateCandidateId).toBe(bar.expense?.id);
+    });
+
     it('deduplica una doppia chiamata concorrente e sequenziale a ingestNotification con lo stesso testo producendo una sola riga in SQLite', async () => {
       generateContentWithFallbackMock.mockImplementation(async () => {
         await new Promise((resolve) => setTimeout(resolve, 25));

@@ -43,6 +43,8 @@ interface ExpenseListProps {
   trips?: TripProject[];
   onEditExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
+  onMergeDuplicateExpense?: (duplicateExpenseId: string, candidateExpenseId: string) => void;
+  onDismissDuplicateExpense?: (expenseId: string) => void;
   onOpenScanReceipt: () => void;
   onlyZeroAmount?: boolean;
   onClearZeroAmountFilter?: () => void;
@@ -70,11 +72,17 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   trips = [],
   onEditExpense,
   onDeleteExpense,
+  onMergeDuplicateExpense,
+  onDismissDuplicateExpense,
   onOpenScanReceipt,
   onlyZeroAmount = false,
   onClearZeroAmountFilter,
 }) => {
   const currentYear = new Date().getFullYear();
+  const expenseById = React.useMemo(
+    () => new Map(expenses.map((item) => [item.id, item])),
+    [expenses]
+  );
   const tripNameById = React.useMemo(
     () => new Map(trips.map((trip) => [trip.id, trip.name])),
     [trips]
@@ -427,8 +435,13 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 Boolean(exp.recurringRuleId) ||
                 Boolean(exp.tripId && tripNameById.get(exp.tripId)) ||
                 exp.amount <= 0 ||
-                exp.reconciliationStatus === 'zero_quarantine';
+                exp.reconciliationStatus === 'zero_quarantine' ||
+                exp.reconciliationStatus === 'possible_duplicate';
               const hasAnyTags = hasSecondaryBadges || hasDetails;
+              const duplicateCandidate =
+                exp.reconciliationStatus === 'possible_duplicate' && exp.duplicateCandidateId
+                  ? expenseById.get(exp.duplicateCandidateId)
+                  : undefined;
 
               return (
                 <SwipeableActionRow
@@ -601,6 +614,12 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                                   Quarantena 0 €
                                 </span>
                               )}
+                              {exp.reconciliationStatus === 'possible_duplicate' && (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Possibile doppione
+                                </span>
+                              )}
                               {hasDetails && (
                                 <button
                                   type="button"
@@ -629,6 +648,49 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                             {exp.notes}
                           </p>
                         )}
+
+                        {exp.reconciliationStatus === 'possible_duplicate' &&
+                          (onMergeDuplicateExpense || onDismissDuplicateExpense) && (
+                            <div
+                              data-no-swipe="true"
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-900"
+                            >
+                              <span className="min-w-0 flex-1">
+                                {duplicateCandidate
+                                  ? `Simile a “${duplicateCandidate.title}” (${duplicateCandidate.date}). È lo stesso pagamento?`
+                                  : 'Possibile movimento duplicato da notifica.'}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {duplicateCandidate && onMergeDuplicateExpense && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onMergeDuplicateExpense(exp.id, duplicateCandidate.id);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 transition-colors cursor-pointer"
+                                  >
+                                    <GitMerge className="h-3 w-3" />
+                                    Unisci
+                                  </button>
+                                )}
+                                {onDismissDuplicateExpense && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDismissDuplicateExpense(exp.id);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-amber-500/35 bg-white/80 px-2 py-1 text-[11px] font-semibold text-amber-900 hover:bg-white transition-colors cursor-pointer"
+                                  >
+                                    <Check className="h-3 w-3" />
+                                    {duplicateCandidate ? 'Mantieni separate' : 'Conferma'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                       </div>
                     </div>
 

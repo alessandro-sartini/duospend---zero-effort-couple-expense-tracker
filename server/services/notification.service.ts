@@ -4,6 +4,8 @@ import { Expense, Payer } from '../../src/types';
 import {
   applyMatchedCyclesToRecurring,
   computeExpenseMatchScore,
+  daysBetweenIsoDates,
+  isWeakOrGenericMerchant,
   mergeReconciledExpenses,
   normalizeMerchantKey,
   reconcileIncomingExpenses,
@@ -14,6 +16,7 @@ import { HttpError } from '../utils/http-error';
 import {
   classifyNonExpenseNotification,
   EXPLICIT_OUTGOING_PAYMENT_NOTIFICATION_PATTERN,
+  extractDateFromText,
   inferCategoryFromText,
   parseNotificationHeuristically,
   parseNotificationHistoryHeuristically,
@@ -24,6 +27,8 @@ import {
 } from '../utils/security';
 
 export const NOTIFICATION_IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
+export const NOTIFICATION_SEMANTIC_DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;
+export const NOTIFICATION_SMALL_REPEAT_AMOUNT_THRESHOLD = 15;
 export const NOTIFICATION_GEMINI_TIMEOUT_MS = 8_000;
 const MAX_NOTIFICATION_IDEMPOTENCY_CACHE_ENTRIES = 500;
 
@@ -36,6 +41,7 @@ export interface IngestNotificationResult {
   expense?: Expense;
   reconciled?: boolean;
   deduplicated?: boolean;
+  possibleDuplicate?: boolean;
   modelUsed: string;
   fallbackUsed: boolean;
 }
@@ -45,6 +51,26 @@ const completedNotificationIngests = new Map<
   string,
   { expiresAt: number; result: IngestNotificationResult }
 >();
+const persistQueueByPayer = new Map<Payer, Promise<void>>();
+
+async function withNotificationPersistLock<T>(payer: Payer, action: () => Promise<T> | T): Promise<T> {
+  const prev = persistQueueByPayer.get(payer) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const chained = prev.then(() => current);
+  persistQueueByPayer.set(payer, chained);
+  await prev;
+  try {
+    return await action();
+  } finally {
+    release();
+    if (persistQueueByPayer.get(payer) === chained) {
+      persistQueueByPayer.delete(payer);
+    }
+  }
+}
 
 const UNEXPANDED_MACRODROID_PLACEHOLDER_PATTERN =
   /^(?:\{[a-z0-9_]+\}|%[a-z0-9_]+%|\[(?:lv=|v=)?[a-z0-9_]+\])$/i;
@@ -62,7 +88,7 @@ function logNotificationIngestOutcome(params: {
 }): void {
   const { status, shouldPersist, result, appName, textPreview } = params;
   console.info(
-    `[notifications/ingest] status=${status} persisted=${result.persisted} isExpense=${result.isExpense} ignored=${Boolean(result.ignored)} deduplicated=${Boolean(result.deduplicated)} reconciled=${Boolean(result.reconciled)} shouldPersist=${shouldPersist} amount=${result.expense?.amount ?? 0} title="${result.expense?.title ?? ''}" app="${appName}" model=${result.modelUsed}${result.reason ? ` reason="${result.reason}"` : ''} text="${textPreview}"`
+    `[notifications/ingest] status=${status} persisted=${result.persisted} isExpense=${result.isExpense} ignored=${Boolean(result.ignored)} deduplicated=${Boolean(result.deduplicated)} reconciled=${Boolean(result.reconciled)} possibleDuplicate=${Boolean(result.possibleDuplicate)} shouldPersist=${shouldPersist} amount=${result.expense?.amount ?? 0} title="${result.expense?.title ?? ''}" app="${appName}" model=${result.modelUsed}${result.reason ? ` reason="${result.reason}"` : ''} text="${textPreview}"`
   );
 }
 export function resetNotificationIdempotencyCacheForTests(): void {
@@ -123,6 +149,29 @@ export function buildNotificationSourceReference(params: {
   return `notif:${hash16}:${bucket5min}`;
 }
 
+const EXPLICIT_DATE_IN_TEXT_PATTERN =
+  /\b(?:20\d{2}-\d{2}-\d{2}|\d{1,2}[/.-]\d{1,2}(?:[/.-](?:20\d{2}|\d{2}))?)\b/;
+const ACCOUNTING_OR_REPOST_NOTIFICATION_PATTERN =
+  /\b(?:movimento\s+conto|operazione\s+registrata|contabilizzat[ao]|estratto\s+conto|autorizzazione|notifica\s+movimento)\b/i;
+
+function getTodayRomeIso(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function resolveNotificationDate(originalText: string): string {
+  const todayRome = getTodayRomeIso();
+  if (!EXPLICIT_DATE_IN_TEXT_PATTERN.test(originalText)) {
+    return todayRome;
+  }
+  const extracted = extractDateFromText(originalText);
+  const delta = daysBetweenIsoDates(extracted, todayRome);
+  return Number.isFinite(delta) && delta <= 7 ? extracted : todayRome;
+}
+
 export function normalizeNotificationExpense(
   raw: Record<string, unknown>,
   originalText: string,
@@ -132,7 +181,13 @@ export function normalizeNotificationExpense(
   sourceReference?: string
 ) {
   const heuristic = parseNotificationHeuristically(originalText, safeAppName, payer);
-  const title = sanitizePlainText(raw.merchant, 100, heuristic.title);
+  const rawMerchant = sanitizePlainText(raw.merchant, 100, '');
+  const title =
+    rawMerchant.length >= 2
+      ? rawMerchant
+      : !isWeakOrGenericMerchant(heuristic.title, safeAppName)
+        ? heuristic.title
+        : `Movimento ${safeAppName}`;
   const numericAmount = Number(raw.amount);
   const hasExplicitZeroOrNegativeAmount =
     raw.amount !== undefined &&
@@ -148,7 +203,7 @@ export function normalizeNotificationExpense(
         : heuristic.amount;
   const currencyRaw = typeof raw.currency === 'string' ? raw.currency.trim().toUpperCase() : '';
   const currency = /^[A-Z]{3}$/.test(currencyRaw) ? currencyRaw : heuristic.currency;
-  const date = new Date().toISOString().slice(0, 10);
+  const date = resolveNotificationDate(originalText);
   const category = sanitizeExpenseCategory(
     raw.category,
     inferCategoryFromText(`${title} ${originalText}`)
@@ -176,67 +231,126 @@ function extractNotificationIngestionTimestampMs(expense: Pick<Expense, 'id'>): 
   return Number.isFinite(ts) && ts > 0 ? ts : null;
 }
 
-function findRecentSemanticNotificationDuplicateIndex(
+type NotificationDuplicateDecision =
+  | { kind: 'merge'; index: number }
+  | { kind: 'flag_possible_duplicate'; candidateId: string }
+  | { kind: 'none' };
+
+function findNotificationDuplicateAction(
   existingList: Expense[],
   incoming: Expense,
   nowMs: number,
+  safeAppName: string,
+  originalText: string,
   recurringExpenses?: ReturnType<typeof readDatabase>['recurringExpenses']
-): number {
+): NotificationDuplicateDecision {
   const incomingMerchantKey = normalizeMerchantKey(incoming.title);
+  const incomingWeak = isWeakOrGenericMerchant(incoming.title, safeAppName);
   const incomingHashPrefix =
     incoming.sourceReference && /^notif:[a-f0-9]{16}:\d+$/.test(incoming.sourceReference)
       ? incoming.sourceReference.slice(0, 'notif:'.length + 16 + 1)
       : null;
+  const isAccountingOrRepostSignal = ACCOUNTING_OR_REPOST_NOTIFICATION_PATTERN.test(originalText);
+
+  let possibleDuplicateCandidateId: string | null = null;
 
   for (let i = 0; i < existingList.length; i += 1) {
     const existing = existingList[i]!;
-    if (existing.source !== 'notification' && !(existing.linkedSources ?? []).includes('notification')) {
+    if (existing.reconciliationStatus === 'zero_quarantine') {
       continue;
     }
 
     const existingTs = extractNotificationIngestionTimestampMs(existing);
-    const isWithinSlidingWindow =
-      existingTs !== null && Math.abs(nowMs - existingTs) <= NOTIFICATION_IDEMPOTENCY_TTL_MS;
+    const deltaDays = daysBetweenIsoDates(incoming.date, existing.date);
+    const isWithinSemanticWindow =
+      (existingTs !== null && Math.abs(nowMs - existingTs) <= NOTIFICATION_SEMANTIC_DEDUP_WINDOW_MS) ||
+      (Number.isFinite(deltaDays) && deltaDays <= 3);
 
-    if (!isWithinSlidingWindow) {
+    if (!isWithinSemanticWindow) {
       continue;
     }
 
-    // 1) Stesso hash testo/app/payer a cavallo del confine tra due bucket da 5 minuti
-    if (incomingHashPrefix) {
+    const isExistingNotification =
+      existing.source === 'notification' || (existing.linkedSources ?? []).includes('notification');
+
+    // 1) Stesso hash testo/app/payer anche oltre i 5 minuti (es. re-notifica Android o bucket diverso)
+    if (isExistingNotification && incomingHashPrefix && deltaDays <= 3) {
       const allRefs = [existing.sourceReference, ...(existing.linkedReferences ?? [])].filter(
         (ref): ref is string => Boolean(ref)
       );
       if (allRefs.some((ref) => ref.includes(incomingHashPrefix))) {
-        return i;
+        return { kind: 'merge', index: i };
       }
     }
 
-    // 2) Notifica doppia multi-app per lo stesso pagamento (es. Google Wallet + SMS Banca entro 5 min)
+    // 2) Confronto semantico su stesso pagatore, stesso importo e stessa valuta
     if (
       existing.payer === incoming.payer &&
-      existing.date === incoming.date &&
+      existing.currency === incoming.currency &&
+      existing.amount > 0 &&
       Math.abs(existing.amount - incoming.amount) < 0.01
     ) {
+      const existingWeak = isWeakOrGenericMerchant(existing.title);
       const existingMerchantKey = normalizeMerchantKey(existing.title);
       const sameNormalizedMerchant =
         Boolean(incomingMerchantKey) &&
         Boolean(existingMerchantKey) &&
         incomingMerchantKey === existingMerchantKey;
       const matchScore = computeExpenseMatchScore(incoming, existing, recurringExpenses);
-      if (sameNormalizedMerchant || (matchScore.kind === 'possible_duplicate' && matchScore.score >= 75)) {
-        return i;
+      const isSameStrongMerchant =
+        !incomingWeak &&
+        !existingWeak &&
+        (sameNormalizedMerchant || matchScore.score >= 75);
+
+      if (isExistingNotification && isSameStrongMerchant && deltaDays <= 3) {
+        return { kind: 'merge', index: i };
+      }
+
+      const isWithinTightWindow =
+        existingTs !== null && Math.abs(nowMs - existingTs) <= NOTIFICATION_IDEMPOTENCY_TTL_MS;
+
+      if (isExistingNotification && (incomingWeak || existingWeak)) {
+        // Entro 5 minuti (es. fallback + Gemini sullo stesso pagamento) -> auto-merge sicuro
+        if (isWithinTightWindow && deltaDays <= 1) {
+          return { kind: 'merge', index: i };
+        }
+        // Importi > 15€ senza esercente certo o contabilizzazione/re-notifica della stessa app (es. 3x €287 Banca Imola) -> auto-merge
+        const sameAppInNotes =
+          Boolean(safeAppName) &&
+          (existing.notes || '').toLowerCase().includes(safeAppName.toLowerCase());
+        const bothWeakAndSameTitle =
+          incomingWeak &&
+          existingWeak &&
+          incoming.title.trim().toLowerCase() === existing.title.trim().toLowerCase();
+        if (
+          incoming.amount > NOTIFICATION_SMALL_REPEAT_AMOUNT_THRESHOLD &&
+          (isAccountingOrRepostSignal || sameAppInNotes || bothWeakAndSameTitle)
+        ) {
+          return { kind: 'merge', index: i };
+        }
+      }
+
+      // Caso indeciso: stesso importo e payer entro ±2 giorni (es. due caffè da €1.50 senza esercente certo,
+      // oppure due esercenti diversi/incerti con stesso importo €4.50 nello stesso giorno) -> scelta all'utente
+      if (!possibleDuplicateCandidateId && deltaDays <= 2) {
+        possibleDuplicateCandidateId = existing.id;
       }
     }
   }
 
-  return -1;
+  if (possibleDuplicateCandidateId) {
+    return { kind: 'flag_possible_duplicate', candidateId: possibleDuplicateCandidateId };
+  }
+
+  return { kind: 'none' };
 }
 
-function persistIngestedExpenseIfNeeded(
+async function persistIngestedExpenseIfNeeded(
   rawExpense: ReturnType<typeof parseNotificationHeuristically> & { sourceReference?: string },
   shouldPersist: boolean,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  safeAppName = 'App Bancaria / SMS',
+  originalText = ''
 ) {
   const candidate: Expense = {
     id: `exp-notif-${nowMs}-${Math.random().toString(36).slice(2, 6)}`,
@@ -244,70 +358,111 @@ function persistIngestedExpenseIfNeeded(
   };
 
   if (!shouldPersist || !(candidate.amount > 0)) {
-    return { expense: candidate, persisted: false, reconciled: false, deduplicated: false };
+    return {
+      expense: candidate,
+      persisted: false,
+      reconciled: false,
+      deduplicated: false,
+      possibleDuplicate: false,
+    };
   }
 
   const sanitized = sanitizeExpenseRecord(candidate);
   if (!sanitized) {
-    return { expense: candidate, persisted: false, reconciled: false, deduplicated: false };
-  }
-
-  const db = readDatabase();
-  const existingList = db.expenses ?? [];
-  const activeTrip = (db.trips ?? []).find((t) => t.isActive) ?? null;
-  const recurringList = db.recurringExpenses ?? [];
-
-  const recentDupIdx = findRecentSemanticNotificationDuplicateIndex(
-    existingList,
-    sanitized,
-    nowMs,
-    recurringList
-  );
-  if (recentDupIdx >= 0) {
-    const merged = mergeReconciledExpenses(existingList[recentDupIdx]!, sanitized);
-    const updatedExpenses = [...existingList];
-    updatedExpenses[recentDupIdx] = merged;
-    writeDatabase({ expenses: updatedExpenses });
     return {
-      expense: merged,
-      persisted: true,
-      reconciled: true,
-      deduplicated: true,
+      expense: candidate,
+      persisted: false,
+      reconciled: false,
+      deduplicated: false,
+      possibleDuplicate: false,
     };
   }
 
-  const result = reconcileIncomingExpenses(existingList, [sanitized], {
-    activeTrip,
-    recurringExpenses: recurringList,
-    idPrefix: 'exp-notif',
-  });
+  return withNotificationPersistLock(sanitized.payer, () => {
+    const db = readDatabase();
+    const existingList = db.expenses ?? [];
+    const activeTrip = (db.trips ?? []).find((t) => t.isActive) ?? null;
+    const recurringList = db.recurringExpenses ?? [];
 
-  if (result.mergedCount > 0 || result.matchedRecurringCycles.length > 0) {
-    const updatedRecurring = applyMatchedCyclesToRecurring(
-      recurringList,
-      result.matchedRecurringCycles
+    const decision = findNotificationDuplicateAction(
+      existingList,
+      sanitized,
+      nowMs,
+      safeAppName,
+      originalText,
+      recurringList
     );
-    writeDatabase({
-      expenses: result.expenses,
-      ...(result.matchedRecurringCycles.length > 0
-        ? { recurringExpenses: updatedRecurring }
-        : {}),
-    });
-    const touched =
-      result.expenses.find((exp, idx) => exp !== existingList[idx]) ??
-      result.expenses[0] ??
-      sanitized;
-    return {
-      expense: touched,
-      persisted: true,
-      reconciled: result.mergedCount > 0,
-      deduplicated: result.mergedCount > 0 && result.addedCount === 0,
-    };
-  }
 
-  const created = result.expenses[0] ?? sanitized;
-  insertExpenseRecord(created);
-  return { expense: created, persisted: true, reconciled: false, deduplicated: false };
+    if (decision.kind === 'merge') {
+      const merged = mergeReconciledExpenses(existingList[decision.index]!, sanitized);
+      const updatedExpenses = [...existingList];
+      updatedExpenses[decision.index] = merged;
+      writeDatabase({ expenses: updatedExpenses });
+      return {
+        expense: merged,
+        persisted: true,
+        reconciled: true,
+        deduplicated: true,
+        possibleDuplicate: false,
+      };
+    }
+
+    if (decision.kind === 'flag_possible_duplicate') {
+      const flagged: Expense = {
+        ...sanitized,
+        reconciliationStatus: 'possible_duplicate',
+        duplicateCandidateId: decision.candidateId,
+      };
+      insertExpenseRecord(flagged);
+      return {
+        expense: flagged,
+        persisted: true,
+        reconciled: false,
+        deduplicated: false,
+        possibleDuplicate: true,
+      };
+    }
+
+    const result = reconcileIncomingExpenses(existingList, [sanitized], {
+      activeTrip,
+      recurringExpenses: recurringList,
+      idPrefix: 'exp-notif',
+    });
+
+    if (result.mergedCount > 0 || result.matchedRecurringCycles.length > 0) {
+      const updatedRecurring = applyMatchedCyclesToRecurring(
+        recurringList,
+        result.matchedRecurringCycles
+      );
+      writeDatabase({
+        expenses: result.expenses,
+        ...(result.matchedRecurringCycles.length > 0
+          ? { recurringExpenses: updatedRecurring }
+          : {}),
+      });
+      const touched =
+        result.expenses.find((exp, idx) => exp !== existingList[idx]) ??
+        result.expenses[0] ??
+        sanitized;
+      return {
+        expense: touched,
+        persisted: true,
+        reconciled: result.mergedCount > 0,
+        deduplicated: result.mergedCount > 0 && result.addedCount === 0,
+        possibleDuplicate: false,
+      };
+    }
+
+    const created = result.expenses[0] ?? sanitized;
+    insertExpenseRecord(created);
+    return {
+      expense: created,
+      persisted: true,
+      reconciled: false,
+      deduplicated: false,
+      possibleDuplicate: false,
+    };
+  });
 }
 
 export async function ingestNotification(params: {
@@ -445,11 +600,14 @@ export async function ingestNotification(params: {
           deduplicated: false,
         };
       }
-      const { expense, persisted, reconciled, deduplicated } = persistIngestedExpenseIfNeeded(
-        { ...parsedFallback, sourceReference },
-        shouldPersist,
-        nowMs
-      );
+      const { expense, persisted, reconciled, deduplicated, possibleDuplicate } =
+        await persistIngestedExpenseIfNeeded(
+          { ...parsedFallback, sourceReference },
+          shouldPersist,
+          nowMs,
+          safeAppName,
+          notificationText
+        );
       return {
         success: true,
         isExpense: true,
@@ -457,6 +615,7 @@ export async function ingestNotification(params: {
         expense,
         persisted,
         reconciled,
+        possibleDuplicate,
         modelUsed: 'fallback-euristico-locale',
         fallbackUsed: true,
         deduplicated,
@@ -473,7 +632,7 @@ ${safePromptText}
 Stabilisci prima di tutto se la notifica rappresenta una SPESA REALE in uscita:
 - isExpense: true per pagamenti effettuati (inclusi testi brevi o sintetici come "pagamento 12 euro bar roma"), addebiti carta/POS/SDD, acquisti o invii di denaro in uscita. Imposta OBBLIGATORIAMENTE false per: promozioni, pubblicità, coupon o sconti (es. "10€ di sconto..."), codici OTP o di verifica, avvisi di sicurezza o login, accrediti o bonifici in entrata, rimborsi ricevuti o comunicazioni informative di saldo.
 - ignoreReason: se isExpense è false, indica brevemente il motivo (es. "Promozione/sconto", "Codice OTP", "Accredito in entrata", "Rimborso", "Avviso di sicurezza/saldo"); se isExpense è true restituisci "".
-- merchant: nome dell'esercente, negozio, bar, supermercato o servizio (es. "Esselunga", "Bar Roma", "Amazon", "Pizzeria Da Mario"); se isExpense è false restituisci "".
+- merchant: nome dell'esercente, negozio, bar, supermercato o servizio (es. "Esselunga", "Bar Roma", "Amazon", "Pizzeria Da Mario"). Non restituire mai singole lettere (es. "P") o parole troncate: se la notifica è un movimento generico senza esercente (es. "Movimento conto - operazione registrata"), usa "Movimento ${safeAppName}"; se isExpense è false restituisci "".
 - amount: importo numerico pagato (se espresso con virgola es. "14,50" converti in 14.50); se isExpense è false restituisci 0.
 - currency: valuta (di default "EUR")
 - category: categorizza rigorosamente in una di queste: "Spesa", "Ristoranti e Bar", "Casa e Affitto", "Bollette e Utenze", "Trasporti", "Shopping", "Svago e Intrattenimento", "Salute e Benessere", "Viaggi", "Altro"
@@ -575,11 +734,14 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         };
       }
 
-      const { expense, persisted, reconciled, deduplicated } = persistIngestedExpenseIfNeeded(
-        normalized,
-        shouldPersist,
-        nowMs
-      );
+      const { expense, persisted, reconciled, deduplicated, possibleDuplicate } =
+        await persistIngestedExpenseIfNeeded(
+          normalized,
+          shouldPersist,
+          nowMs,
+          safeAppName,
+          notificationText
+        );
       return {
         success: true,
         isExpense: true,
@@ -587,6 +749,7 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         expense,
         persisted,
         reconciled,
+        possibleDuplicate,
         modelUsed,
         fallbackUsed: false,
         deduplicated,
@@ -608,11 +771,14 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
           deduplicated: false,
         };
       }
-      const { expense, persisted, reconciled, deduplicated } = persistIngestedExpenseIfNeeded(
-        { ...parsedFallback, sourceReference },
-        shouldPersist,
-        nowMs
-      );
+      const { expense, persisted, reconciled, deduplicated, possibleDuplicate } =
+        await persistIngestedExpenseIfNeeded(
+          { ...parsedFallback, sourceReference },
+          shouldPersist,
+          nowMs,
+          safeAppName,
+          notificationText
+        );
       return {
         success: true,
         isExpense: true,
@@ -620,6 +786,7 @@ Restituisci esclusivamente JSON valido conforme allo schema.`;
         expense,
         persisted,
         reconciled,
+        possibleDuplicate,
         modelUsed: 'fallback-euristico-locale',
         fallbackUsed: true,
         deduplicated,

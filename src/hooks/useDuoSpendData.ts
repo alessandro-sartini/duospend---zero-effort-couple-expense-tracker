@@ -587,6 +587,42 @@ export function useDuoSpendData() {
     []
   );
 
+  const handleMergeDuplicateExpense = useCallback(
+    (duplicateExpenseId: string, candidateExpenseId: string) => {
+      setExpenses((current) => {
+        const dupExp = current.find((e) => e.id === duplicateExpenseId);
+        const candidateExp = current.find((e) => e.id === candidateExpenseId);
+        if (!dupExp || !candidateExp || dupExp.id === candidateExp.id) return current;
+
+        const merged = mergeReconciledExpenses(candidateExp, dupExp);
+        const updated = current
+          .filter((e) => e.id !== duplicateExpenseId)
+          .map((e) => (e.id === candidateExpenseId ? merged : e));
+        saveExpenses(updated);
+        setReconciliationNotice(
+          `Movimenti uniti in "${merged.title}" (${merged.currency} ${merged.amount.toFixed(2)}).`
+        );
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleDismissDuplicateExpense = useCallback((expenseId: string) => {
+    setExpenses((current) => {
+      const updated = current.map((e) => {
+        if (e.id !== expenseId) return e;
+        const { duplicateCandidateId: _removed, ...rest } = e;
+        return {
+          ...rest,
+          reconciliationStatus: (e.amount > 0 ? 'confirmed' : 'zero_quarantine') as Expense['reconciliationStatus'],
+        };
+      });
+      saveExpenses(updated);
+      return updated;
+    });
+  }, []);
+
   const handleSaveTrip = useCallback((trip: TripProject) => {
     setTrips((current) => {
       const normalized = trip.isActive
@@ -826,6 +862,8 @@ export function useDuoSpendData() {
     handleRestoreExpense,
     handleImportGmailExpenses,
     handleMergeZeroExpense,
+    handleMergeDuplicateExpense,
+    handleDismissDuplicateExpense,
     handleSaveTrip,
     handleToggleTripActive,
     handleDeleteTrip,

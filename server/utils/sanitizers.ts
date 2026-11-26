@@ -57,6 +57,7 @@ const ALLOWED_RECONCILIATION_STATUSES = new Set<ReconciliationStatus>([
   'confirmed',
   'zero_quarantine',
   'pending_recurring',
+  'possible_duplicate',
 ]);
 const ALLOWED_FREQUENCIES = new Set<RecurringExpenseItem['frequency']>([
   'monthly',
@@ -721,6 +722,7 @@ export function sanitizeExpenseRecord(
   )
     ? (record.reconciliationStatus as ReconciliationStatus)
     : undefined;
+  const duplicateCandidateId = sanitizePlainText(record.duplicateCandidateId, 120);
   const linkedSources = Array.isArray(record.linkedSources)
     ? Array.from(
         new Set(
@@ -761,6 +763,7 @@ export function sanitizeExpenseRecord(
     ...(tripId ? { tripId } : {}),
     ...(recurringRuleId ? { recurringRuleId } : {}),
     ...(reconciliationStatus ? { reconciliationStatus } : {}),
+    ...(duplicateCandidateId ? { duplicateCandidateId } : {}),
     ...(linkedSources && linkedSources.length > 0 ? { linkedSources } : {}),
     ...(linkedReferences && linkedReferences.length > 0 ? { linkedReferences } : {}),
   };

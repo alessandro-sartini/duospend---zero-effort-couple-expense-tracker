@@ -91,11 +91,12 @@ export function extractDateFromText(text: string): string {
   const isoMatch = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
   if (isoMatch) return sanitizeIsoDate(isoMatch[1]);
 
-  const itMatch = text.match(/\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](20\d{2}))?\b/);
+  const itMatch = text.match(/\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](20\d{2}|\d{2}))?\b/);
   if (itMatch) {
     const day = Number(itMatch[1]);
     const month = Number(itMatch[2]);
-    const year = itMatch[3] ? Number(itMatch[3]) : new Date().getFullYear();
+    const rawYear = itMatch[3] ? Number(itMatch[3]) : new Date().getFullYear();
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       const candidate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       return sanitizeIsoDate(candidate);
@@ -295,22 +296,57 @@ export function extractReceiptsHeuristically(
   return { receipts, reviewCandidates, suppressedLowConfidenceCount };
 }
 
+function isPlausibleExtractedMerchant(candidate: string): boolean {
+  const clean = candidate.trim();
+  if (clean.length < 2) return false;
+  if (/^\d+(?:[.,]\d+)?$/.test(clean)) return false;
+  if (
+    /^(?:un['’]?autorizzazione\b|autorizzazione\b|richiesta\b|pagamento\b|operazione\b|movimento\b|carta\b|conto\b|spesa\b|importo\b|giorno\b|ore\b|del\b|di\b)/i.test(
+      clean
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function extractNotificationMerchant(text: string, fallback: string): string {
+  const explicitPrepositionMatch = text.match(
+    /\b(?:c\/o\s+presso|c\/o|presso|esercente)\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,45}?)(?=\s+(?:il|alle|con|per|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+  );
+  if (explicitPrepositionMatch?.[1]) {
+    const candidate = sanitizePlainText(explicitPrepositionMatch[1], 80, '');
+    if (isPlausibleExtractedMerchant(candidate)) {
+      return candidate;
+    }
+  }
+
   const patternMatch = text.match(
-    /(?:presso|da|a|su|per)\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|per|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+    /\b(?:da|a|su|per)\s+([A-Z0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|per|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
   );
   if (patternMatch?.[1]) {
-    return sanitizePlainText(patternMatch[1], 80, fallback);
+    const candidate = sanitizePlainText(patternMatch[1], 80, '');
+    if (isPlausibleExtractedMerchant(candidate)) {
+      return candidate;
+    }
   }
+
   const afterAmountMatch = text.match(
-    /(?:\d[\d.,]{0,12}\s*(?:€|\$|£|euro?|euri|usd|dollar[oi]|gbp|sterlin[ae])\b|(?:€|\$|£|euro?|usd|gbp)\s*\d[\d.,]{0,12})\s+(?:presso|da|a|su|per|in|al|alla|allo)?\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
+    /(?:\d[\d.,]{0,12}\s*(?:€|\$|£|euro?|euri|usd|dollar[oi]|gbp|sterlin[ae])\b|(?:€|\$|£|euro?|usd|gbp)\s*\d[\d.,]{0,12})\s+(?:c\/o\s+presso|c\/o|presso|da|a|su|per|in|al|alla|allo)?\s*([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 &'._-]{1,40}?)(?=\s+(?:il|alle|con|autorizzat|del|\d{1,2}[/:])|[.,;\n]|$)/i
   );
   if (afterAmountMatch?.[1]) {
-    return sanitizePlainText(afterAmountMatch[1], 80, fallback);
+    const candidate = sanitizePlainText(afterAmountMatch[1], 80, '');
+    if (isPlausibleExtractedMerchant(candidate)) {
+      return candidate;
+    }
   }
+
   const providerPrefix = text.match(/^([A-Za-zÀ-ÿ0-9 /._-]{2,25}):/);
   if (providerPrefix?.[1]) {
-    return sanitizePlainText(providerPrefix[1], 60, fallback);
+    const candidate = sanitizePlainText(providerPrefix[1], 60, '');
+    if (isPlausibleExtractedMerchant(candidate)) {
+      return candidate;
+    }
   }
   return fallback;
 }

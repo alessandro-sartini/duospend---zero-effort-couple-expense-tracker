@@ -29,7 +29,11 @@ export type ExpenseCategory = string;
 
 export type ExpenseSource = 'gmail' | 'camera' | 'manual' | 'notification' | 'recurring';
 
-export type ReconciliationStatus = 'confirmed' | 'zero_quarantine' | 'pending_recurring';
+export type ReconciliationStatus =
+  | 'confirmed'
+  | 'zero_quarantine'
+  | 'pending_recurring'
+  | 'possible_duplicate';
 
 export interface ExpenseItem {
   name: string;
@@ -55,6 +59,7 @@ export interface Expense {
   tripId?: string;
   recurringRuleId?: string;
   reconciliationStatus?: ReconciliationStatus;
+  duplicateCandidateId?: string;
   linkedSources?: ExpenseSource[];
   linkedReferences?: string[];
 }
